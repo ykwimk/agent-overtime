@@ -326,7 +326,9 @@ struct OfficeRenderer {
         let context: CGContext
         let height: Int
         let art: ArtStore
-        var marks: [(Mark, Int, Int)] = []
+        /// Bubbles go on last, over everything: symbol, top-left corner, tail.
+        var marks: [(Mark, Int, Int, Tail)] = []
+        enum Tail { case down, left, right }
         /// Centres of the night light: a pool at every seat someone works at, a bulb in each lamp, a laptop's glow.
         var pools: [(x: Int, y: Int)] = []
         var bulbs: [(x: Int, y: Int)] = []
@@ -447,7 +449,7 @@ struct OfficeRenderer {
             }
             for walker in walkers { self.walker(walker) }
             night(scene, glass: plan.glass)
-            for (mark, x, top) in marks { bubble(mark, x, top) }
+            for (mark, x, y, tail) in marks { bubble(mark, x, y, tail) }
         }
 
         private func walker(_ walker: Walker) {
@@ -573,15 +575,19 @@ struct OfficeRenderer {
 
             // Everyone stays seated; the bubble tells the states apart. The "!" hops while waiting; with Reduce
             // Motion the frame stays 0, so it holds still. Across the desks the bubble sits beside the head, so
-            // the name tag above it stays clear.
+            // the name tag above it stays clear. With the back to the room it sits at shoulder height beside the
+            // chair, on the island's outer side, pointing in: above the head it floated right under the face
+            // across the desk and read as that person's.
             for seat in 0..<Island.size {
                 guard let person = here[seat] else { continue }
                 let hop = person.state == .waiting && scene.frame % 2 == 1 ? 2 : 0
                 let cx = x0 + RoomLayout.personX(seat)
                 if RoomLayout.isAcross(seat) {
-                    marks.append((Mark(person.state), cx + 15, far - 11 - hop))
+                    marks.append((Mark(person.state), cx + 9, far - 25 - hop, .down))
+                } else if seat == 0 {
+                    marks.append((Mark(person.state), cx - 27, near + 25 - hop, .right))
                 } else {
-                    marks.append((Mark(person.state), cx, near + 8 - hop))
+                    marks.append((Mark(person.state), cx + 14, near + 25 - hop, .left))
                 }
             }
         }
@@ -756,18 +762,26 @@ struct OfficeRenderer {
             line(Double(cx), Double(cy), Double(cx) + sin(hr) * 2.6, Double(cy) - cos(hr) * 2.6, 0xC24A3A)
         }
 
-        /// A pixel speech bubble (13 × 10) with a symbol, its tail pointing at the head below.
-        private func bubble(_ mark: Mark, _ cx: Int, _ top: Int) {
+        /// A pixel speech bubble (13 × 10) with a symbol, its top-left corner at `x`, `y`, its tail pointing at
+        /// the person: down at a head below, or sideways at a shoulder.
+        private func bubble(_ mark: Mark, _ x: Int, _ y: Int, _ tail: Tail) {
             let w = 13
             let h = 10
-            let x = cx - w / 2
-            let y = top - h - 4
-            fill(x, y + 1, w, h - 2, 0x2B2233)
-            fill(x + 1, y, w - 2, h, 0x2B2233)
-            fill(x + 1, y + 1, w - 2, h - 2, mark == .bang ? 0xFFD23F : 0xFFFFFF)
-            fill(x + 5, y + h, 3, 1, 0x2B2233)
-            fill(x + 6, y + h + 1, 1, 1, 0x2B2233)
             let ink: UInt32 = 0x2B2233
+            fill(x, y + 1, w, h - 2, ink)
+            fill(x + 1, y, w - 2, h, ink)
+            fill(x + 1, y + 1, w - 2, h - 2, mark == .bang ? 0xFFD23F : 0xFFFFFF)
+            switch tail {
+            case .down:
+                fill(x + 5, y + h, 3, 1, ink)
+                fill(x + 6, y + h + 1, 1, 1, ink)
+            case .left:
+                fill(x - 1, y + 4, 1, 3, ink)
+                fill(x - 2, y + 5, 1, 1, ink)
+            case .right:
+                fill(x + w, y + 4, 1, 3, ink)
+                fill(x + w + 1, y + 5, 1, 1, ink)
+            }
             switch mark {
             case .dots:
                 for dx in [3, 6, 9] { fill(x + dx, y + 5, 1, 1, ink) }
