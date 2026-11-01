@@ -20,6 +20,7 @@
 		AC000000000000000000010B /* Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010B /* Style.swift */; };
 		AC000000000000000000010C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010C /* Localizable.xcstrings */; };
 		AC000000000000000000010D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010D /* Assets.xcassets */; };
+		AC000000000000000000010E /* Art in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010E /* Art */; };
 		AC0000000000000000000201 /* EventSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000201 /* EventSocket.swift */; };
 		AC0000000000000000000202 /* FakeScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000202 /* FakeScenario.swift */; };
 		AC0000000000000000000203 /* HookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000203 /* HookEvent.swift */; };
@@ -79,6 +80,7 @@
 		AB000000000000000000010B /* Style.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Style.swift; sourceTree = "<group>"; };
 		AB000000000000000000010C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		AB000000000000000000010D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB000000000000000000010E /* Art */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Art; sourceTree = "<group>"; };
 		AB0000000000000000000201 /* EventSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSocket.swift; sourceTree = "<group>"; };
 		AB0000000000000000000202 /* FakeScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeScenario.swift; sourceTree = "<group>"; };
 		AB0000000000000000000203 /* HookEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEvent.swift; sourceTree = "<group>"; };
@@ -154,6 +156,7 @@
 				AB000000000000000000010B /* Style.swift */,
 				AB000000000000000000010C /* Localizable.xcstrings */,
 				AB000000000000000000010D /* Assets.xcassets */,
+				AB000000000000000000010E /* Art */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -294,6 +297,7 @@
 			files = (
 				AC000000000000000000010C /* Localizable.xcstrings in Resources */,
 				AC000000000000000000010D /* Assets.xcassets in Resources */,
+				AC000000000000000000010E /* Art in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

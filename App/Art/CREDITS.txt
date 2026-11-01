@@ -1,0 +1,267 @@
+Agent Overtime - Art credits
+
+The art in this folder is NOT under the MIT license that covers the code.
+See LICENSE.txt in this folder.
+
+The PNG files are unmodified copies from LPC Revised by Eliza Wyatt and
+contributors: https://github.com/ElizaWy/LPC (each folder there has a
+Credits.txt; the entries below are copied from them word for word).
+Licensed OGA-BY 3.0. The app crops these sheets, stacks the character
+layers, moves a head down one pixel for nodding, and darkens and tints the
+picture at night while it draws; the files themselves are not changed.
+
+
+================================================================
+LPC Revised: Structure/Floor/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Structure/Floor/Credits.txt
+================================================================
+
+-- Used here: Structure/Floor/Wood Floor A.png
+Wood Floor A
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Edits and recolors by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Structure/Walls/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Structure/Walls/Credits.txt
+================================================================
+
+-- Used here: Structure/Walls/Painted Walls.png
+Painted Walls
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Furniture/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Furniture/Credits.txt
+================================================================
+
+-- Used here: Objects/Furniture/Cabinet.png
+Cabinet
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/Copy Machine.png
+Copy Machine
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/Desk, Office.png
+Desk, Office
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: 
+	Row 1: Desk made by Eliza Wyatt, using elements from Lanea Zimmerman's cabinets and countertops.
+	Row 2+: Original by Eliza Wyatt
+
+-- Used here: Objects/Furniture/Planter.png
+Planter
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolored by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/Water Cooler.png
+Water Cooler
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Furniture/Seating/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Furniture/Seating/Credits.txt
+================================================================
+
+-- Used here: Objects/Furniture/Seating/Chair, Office.png
+Chair, Office
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Small Items/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Small%20Items/Credits.txt
+================================================================
+
+-- Used here: Objects/Small Items/Laptop.png
+Laptop
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Lighting, Table.png
+Lighting, Tabletop
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: 
+	Top Row: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
+	Row 2+: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Characters/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Characters/Credits.txt
+================================================================
+
+-- Used here: Characters/Head/Head 01 - Feminine/*
+Adult Head - Feminine
+-------------------
+  ARTIST(S): Stephen Challener (Redshrike), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Stephen Challener. Edited to be smaller and recolored by Eliza Wyatt. Expressions by Eliza Wyatt.
+
+-- Used here: Characters/Head/Head 02 - Masculine/*
+Adult Head - Masculine
+-------------------
+  ARTIST(S): Stephen Challener (Redshrike), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Stephen Challener. Edited to be smaller and recolored by Eliza Wyatt. Expressions by Eliza Wyatt.
+
+-- Used here: Characters/Body/Body 01 - Feminine, Thin/*
+Body - Feminine, Thin
+-------------------
+  ARTIST(S): Stephen Challener (Redshrike), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original design by Stephen Challener. Edits and recolors by Eliza Wyatt.
+  NOTES:
+	Idle Animation - Original static idle by Stephen Challener. Animated idle by Eliza Wyatt.
+	Walking Animation - Original by Stephen Challener. Edited by Eliza Wyatt.
+	Running Animation - Original by Eliza Wyatt.
+	Jumping Animation - Original by Durrani. Edited and recolored by Eliza Wyatt and BenCreating.
+	Climbing Animation - Original by Eliza Wyatt.
+	Emote Frames - Original by Eliza Wyatt.
+	Sitting Frames - Original by Eliza Wyatt.
+	Combat 1h (Idle, Slash, Halfslash, Backslash) - Original by Eliza Wyatt.
+	Legacy Swing - Original by Stephen Challener. Edited by Eliza Wyatt.
+
+-- Used here: Characters/Body/Body 02 - Masculine, Thin/*
+Body - Masculine, Thin
+-------------------
+  ARTIST(S): Stephen Challener (Redshrike), Durrani, Eliza Wyatt (DeathsDarling), BenCreating
+  SOURCE: https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles
+  SOURCE: https://opengameart.org/content/lpc-jump-expanded
+  LICENSE: OGA-BY 3.0
+  DETAILS: Originally the Feminine, Thin body by Stephen Challener. Altered by Eliza Wyatt. Edits and recolors by Eliza Wyatt.
+  NOTES:
+	Idle Animation - Original static idle by Stephen Challener. Animated idle by Eliza Wyatt.
+	Walking Animation - Original by Stephen Challener. Edited by Eliza Wyatt.
+	Running Animation - Original by Eliza Wyatt.
+	Jumping Animation - Original by Durrani. Edited and recolored by Eliza Wyatt and BenCreating.
+	Climbing Animation - Original by Eliza Wyatt.
+	Emote Frames - Original by Eliza Wyatt
+	Sitting Frames - Original by Eliza Wyatt
+	Combat 1h (Idle, Slash, Halfslash, Backslash) - Original by Eliza Wyatt.
+	Legacy Swing - Original by Stephen Challener. Edited by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Characters/Clothing/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Characters/Clothing/Credits.txt
+================================================================
+
+All clothing is based on the original LPC body and animations, which were designed by Stephen Challener (Redshrike) and expanded by Eliza Wyatt (DeathsDarling), Durrani, and BenCreating.
+
+-- Used here: Characters/Clothing/*/Torso/Shirt 07 - Buttoned Longsleeve Shirt/*
+Shirt 07 - Buttoned Longsleeve Shirt
+--------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Characters/Clothing/*/Torso/Shirt 09 - Polo/*
+Shirt 09 - Polo
+--------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Characters/Clothing/*/Torso 2/Sweater 01 - Cardigan/*
+Sweater 01 - Cardigan
+--------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Characters/Clothing/*/Legs/Pants 03 - Pants/*
+Pants 03 - Pants
+--------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Characters/Clothing/*/Feet/Shoes 01 - Shoes/*
+Shoes 01 - Shoes
+--------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Characters/Hair/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Characters/Hair/Credits.txt
+================================================================
+
+All hair is based on the LPC body, by Stephen Challener (Redshrike).
+
+-- Used here: Characters/Hair/Medium 05 - Cornrows/*
+Medium 05 - Cornrows
+--------------
+  ARTIST(S): BlueCarrot16, Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-hair
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original CC0 by BlueCarrot16. Edited, animated, and recolored by Eliza Wyatt.
+
+-- Used here: Characters/Hair/Medium 07 - Bob, Side Part/*
+Medium 07 - Bob, Side Part
+--------------
+  ARTIST(S): BlueCarrot16, Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-hair
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original CC0 by Thecilekli. Touchups by BlueCarrot16. Edited, animated, and recolored by Eliza Wyatt.
+
+-- Used here: Characters/Hair/Short 02 - Parted/*
+Short 02 - Parted
+--------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+Drawn in code for this app (no image files)
+================================================================
+
+-- Office window (day and night views), office door (closed and open),
+   whiteboard, wall clock, speech bubbles above heads, text lines on the
+   laptop screens, lamp light and night shading
+NEW: Original by Agent Overtime contributors, 2026, drawn in the style
+     and colours of LPC Revised. Part of the app's code (App/OfficeArt.swift),
+     MIT License like the rest of the code.

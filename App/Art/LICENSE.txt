@@ -1,0 +1,15 @@
+Agent Overtime - Art license
+
+The image files in this folder (and its subfolders) come from LPC Revised
+by Eliza Wyatt and contributors (https://github.com/ElizaWy/LPC) and are
+licensed under the OpenGameArt.org Attribution 3.0 license (OGA-BY 3.0):
+
+  https://static.opengameart.org/OGA-BY-3.0.txt
+
+OGA-BY 3.0 is based on Creative Commons Attribution 3.0 (CC-BY 3.0):
+
+  https://creativecommons.org/licenses/by/3.0/legalcode
+
+Who made each file, and where it came from, is listed in CREDITS.txt in
+this folder. The MIT license in the repository's LICENSE file covers the
+code only, not these images.
