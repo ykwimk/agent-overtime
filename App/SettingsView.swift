@@ -10,6 +10,16 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     }
 
+    static let artLicenseURL = URL(string: "https://static.opengameart.org/OGA-BY-3.0.txt")!
+
+    /// Opens a text file from the app's Art folder in the default text app (nothing is written or sent).
+    static func openBundled(_ name: String) {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("Art").appendingPathComponent(name) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     var body: some View {
         Form {
             Section {
@@ -88,12 +98,41 @@ struct SettingsView: View {
                 } label: {
                     Text("Source")
                 }
-                Text("MIT License. Pixel art drawn in code for this app (MIT).").font(.callout).foregroundStyle(
-                    .secondary)
+                Text("Code: MIT License.").font(.callout).foregroundStyle(.secondary)
                 Text("Works with Claude Code. Not affiliated with Anthropic.").font(.callout).foregroundStyle(
                     .secondary)
             } header: {
                 Text("About")
+            }
+
+            Section {
+                LabeledContent {
+                    Text(verbatim: "LPC Revised")
+                } label: {
+                    Text("Art")
+                }
+                LabeledContent {
+                    Text(
+                        verbatim:
+                            "Eliza Wyatt, Lanea \"Sharm\" Zimmerman, Stephen \"Redshrike\" Challener, BlueCarrot16, Durrani, BenCreating, Thecilekli"
+                    )
+                    .multilineTextAlignment(.trailing)
+                } label: {
+                    Text("Artists")
+                }
+                LabeledContent {
+                    Link(destination: Self.artLicenseURL) { Text(verbatim: "OGA-BY 3.0") }
+                } label: {
+                    Text("License")
+                }
+                Text("Not MIT. Cropped and layered by this app; each file's artists are in the credits.")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Open Credits") { Self.openBundled("CREDITS.txt") }
+                    Link(destination: AppModel.creditsURL) { Text("Credits on GitHub") }
+                }
+            } header: {
+                Text("Art")
             }
         }
         .formStyle(.grouped)
