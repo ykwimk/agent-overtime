@@ -42,6 +42,25 @@ Painted Walls
   SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. Only the plain paint is used, repeated over the
+   wall; the rail and moulding are left out.
+
+
+================================================================
+LPC Revised: Structure/Wall Borders/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Structure/Wall%20Borders/Credits.txt
+================================================================
+
+-- Used here: Structure/Wall Borders/Plain Smooth Border.png
+Plain Smooth Border
+-------------------
+  ARTIST(S): Eliza Wyatt
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. Only the top edge of one frame is used, repeated
+   along the top of the back wall.
 
 
 ================================================================
@@ -136,6 +155,19 @@ Lighting, Tabletop
 
 
 ================================================================
+LPC Revised: Objects/Wall Items/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Wall%20Items/Credits.txt
+================================================================
+
+-- Used here: Objects/Wall Items/Paintings, Abstract.png
+Paintings, Abstract
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
 MetroCity Free Top Down Character Pack (the people)
 https://jik-a-4.itch.io/metrocity-free-topdown-character-pack
 ================================================================
@@ -167,8 +199,8 @@ Drawn in code for this app (no image files)
 ================================================================
 
 -- Office window (day and night views), office door (closed and open),
-   whiteboard, wall clock, speech bubbles above heads, text lines on the
-   laptop screens, lamp light and night shading
+   whiteboard, wall clock, skirting line, speech bubbles beside heads, text
+   lines on the laptop screens, lamp light and night shading
 NEW: Original by Agent Overtime contributors, 2026, drawn in the style
      and colours of LPC Revised. Part of the app's code (App/OfficeArt.swift),
      MIT License like the rest of the code.

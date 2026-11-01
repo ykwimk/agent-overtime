@@ -267,6 +267,8 @@ struct OfficeRenderer {
     private enum Sheet {
         static let floor = "Structure/Floor/Wood Floor A.png"
         static let wall = "Structure/Walls/Painted Walls.png"
+        static let border = "Structure/Wall Borders/Plain Smooth Border.png"
+        static let painting = "Objects/Wall Items/Paintings, Abstract.png"
         static let desk = "Objects/Furniture/Desk, Office.png"
         static let chair = "Objects/Furniture/Seating/Chair, Office.png"
         static let laptop = "Objects/Small Items/Laptop.png"
@@ -309,16 +311,19 @@ struct OfficeRenderer {
         return context.makeImage()
     }
 
-    /// The glass of each window on the back wall, and whether the bookcase still fits beside them.
-    private static func wallPlan(width: Int) -> (glass: [CGRect], shelf: Bool) {
+    /// The glass of each window on the back wall, whether the bookcase still fits beside them, and where the
+    /// painting hangs: between the last window and the right-hand column, when there is one.
+    private static func wallPlan(_ layout: RoomLayout) -> (glass: [CGRect], shelf: Bool, painting: Int?) {
+        let width = layout.width
         let shelf = width - 112 - 144 >= 76
+        let end = layout.pillar.map { $0 - 52 } ?? width - (shelf ? 112 : 44)
         var glass: [CGRect] = []
         var x = 144
-        while x + 76 <= width - (shelf ? 112 : 44) {
+        while x + 76 <= end {
             glass.append(CGRect(x: x + 2, y: 19, width: 72, height: 36))
             x += 92
         }
-        return (glass, shelf)
+        return (glass, shelf, layout.pillar.map { $0 - 63 })
     }
 
     /// Drawing helpers in top-left pixel coordinates, plus what has to wait for the night pass.
@@ -425,7 +430,7 @@ struct OfficeRenderer {
         mutating func draw(_ scene: OfficeScene) {
             let width = scene.layout.width
             let height = self.height
-            let plan = OfficeRenderer.wallPlan(width: width)
+            let plan = OfficeRenderer.wallPlan(scene.layout)
             let room = art.picture("room \(width)x\(height) open:\(scene.doorOpen)") { [art] in
                 OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
                     room in
@@ -466,12 +471,21 @@ struct OfficeRenderer {
             }
         }
 
-        private func wall(width: Int, plan: (glass: [CGRect], shelf: Bool)) {
+        /// A bright plain wall: the pack's paint without its rail and moulding, a thin top edge, and a pale
+        /// skirting line where it meets the floor.
+        private func wall(width: Int, plan: (glass: [CGRect], shelf: Bool, painting: Int?)) {
+            let top = 8
             for x in stride(from: 0, to: width, by: 32) {
-                sprite(Sheet.wall, 224, 128 - RoomLayout.wall, 32, RoomLayout.wall, x, 0)
+                sprite(Sheet.border, 48, 0, 32, top, x, 0)
+                for y in stride(from: top, to: RoomLayout.wall, by: 32) {
+                    sprite(Sheet.wall, 224, 16, 32, min(32, RoomLayout.wall - y), x, y)
+                }
             }
+            fill(0, RoomLayout.wall - 3, width, 1, 0xD9D9CF)
+            fill(0, RoomLayout.wall - 2, width, 2, 0xC2C1B4)
             whiteboard(50, 14)
             for glass in plan.glass { window(Int(glass.minX) - 2, 8, 76, 50) }
+            if let x = plan.painting { sprite(Sheet.painting, 136, 0, 48, 32, x - 5, 21) }
             if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
             sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
         }
