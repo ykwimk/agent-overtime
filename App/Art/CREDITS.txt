@@ -111,6 +111,13 @@ Planter
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Lanea Zimmerman. Recolored by Eliza Wyatt.
 
+-- Used here: Objects/Furniture/Shelf.png
+Shelf
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
 -- Used here: Objects/Furniture/TV, Widescreen.png and
    Objects/Furniture/TV, Widescreen - No Service.png
 Tv, Widescreen; Tv, Widescreen - No Service display
@@ -155,11 +162,27 @@ Chair, Office
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
 
+-- Used here: Objects/Furniture/Seating/Loveseat, Small - Casual Solid A.png
+Loveseat, Casual (all)
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), BlueCarrot16, Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-upholstery
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman and BlueCarrot16. Side and back views by Eliza Wyatt. Recolors by Eliza Wyatt.
+ALSO: the original page asks to link https://opengameart.org/content/lpc-interior-castle-tiles
+
 
 ================================================================
 LPC Revised: Objects/Small Items/Credits.txt
 https://github.com/ElizaWy/LPC/blob/main/Objects/Small%20Items/Credits.txt
 ================================================================
+
+-- Used here: Objects/Small Items/Coffee Maker.png
+Coffee Maker
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
 
 -- Used here: Objects/Small Items/Laptop.png
 Laptop
@@ -182,6 +205,15 @@ Lighting, Tabletop
   DETAILS: 
 	Top Row: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
 	Row 2+: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Pillows.png
+Pillows
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), BlueCarrot16
+  SOURCE: https://opengameart.org/content/lpc-upholstery
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman and BlueCarrot16. Recolored by Eliza Wyatt.
+ALSO: the original page asks to link https://opengameart.org/content/lpc-interior-castle-tiles
 
 
 ================================================================

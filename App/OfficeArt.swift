@@ -275,6 +275,10 @@ struct OfficeRenderer {
         static let tv = "Objects/Furniture/TV, Widescreen.png"
         static let noSignal = "Objects/Furniture/TV, Widescreen - No Service.png"
         static let rug = "Objects/Furniture/Rugs/Diamond Rug, tiling.png"
+        static let loveseat = "Objects/Furniture/Seating/Loveseat, Small - Casual Solid A.png"
+        static let pillows = "Objects/Small Items/Pillows.png"
+        static let coffee = "Objects/Small Items/Coffee Maker.png"
+        static let shelf = "Objects/Furniture/Shelf.png"
         static let desk = "Objects/Furniture/Desk, Office.png"
         static let chair = "Objects/Furniture/Seating/Chair, Office.png"
         static let laptop = "Objects/Small Items/Laptop.png"
@@ -447,6 +451,7 @@ struct OfficeRenderer {
                     room.door(open: scene.doorOpen)
                     if let meeting = scene.layout.meetingRoom {
                         room.meetingRoom(meeting, right: width, doorOpen: scene.meetingDoorOpen)
+                        room.lounge(meeting.left)
                     }
                 }
             }
@@ -521,6 +526,22 @@ struct OfficeRenderer {
             table(x0 + t.x, t.y, t.width, t.depth)
             for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 20) }
             glass(left: x0, right: right, doorOpen: doorOpen)
+        }
+
+        /// The lounge under the meeting room, nobody in it: two loveseats facing each other on a rug, a coffee
+        /// counter, the water cooler and a plant.
+        private func lounge(_ x0: Int) {
+            stretch(Sheet.rug, (0, 0, 96, 96), edges: (32, 32, 32, 32), x0 + 8, 214, 112, 96)
+            let sofa = x0 + 32
+            sprite(Sheet.loveseat, 0, 0, 64, 32, sofa, 214)
+            sprite(Sheet.pillows, 256, 224, 32, 32, sofa - 1, 211)
+            sprite(Sheet.pillows, 288, 224, 32, 32, sofa + 33, 211)
+            sprite(Sheet.loveseat, 0, 159, 64, 33, sofa, 272)
+            sprite(Sheet.shelf, 0, 40, 64, 24, x0 + 130, 238)
+            sprite(Sheet.coffee, 0, 0, 32, 32, x0 + 130, 220)
+            sprite(Sheet.coffee, 64, 0, 32, 32, x0 + 150, 233)
+            sprite(Sheet.planter, 128, 32, 32, 64, x0 + 128, 270)
+            sprite(Sheet.cooler, 32, 0, 32, 64, x0 + 160, 255)
         }
 
         /// The office desk's top stretched into a long table (its corners and edges as they are, its plain middle
