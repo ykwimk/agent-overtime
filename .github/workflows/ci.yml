@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Read-only token, no secrets: pull requests from forks run with nothing to leak.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # The standard free Apple silicon runner only (no -large / -xlarge).
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      # Pinned to a full commit hash, not a movable tag.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Format
+        run: swift format lint --strict --recursive App AppTests Helper Sources Tests tools Package.swift
+
+      - name: Core tests
+        run: swift test
+
+      # App tests open windows and measure CPU, so they stay on a Mac with a screen; the build runs here.
+      - name: Build the app
+        run: >-
+          xcodebuild -project AgentOvertime.xcodeproj -scheme AgentOvertime -configuration Release
+          -derivedDataPath build build
