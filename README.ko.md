@@ -15,7 +15,7 @@ Claude Code 와 함께 써요. Anthropic 과 관계없는 오픈소스 앱입니
 |---|---|---|
 | 일하는 중 | 답을 만드는 중 | 책상에 앉아 있고 노트북이 켜짐, `…` 말풍선 |
 | 답 기다림 · n분째 | 내가 허락하거나 답해야 다음으로 감 | 앉은 채 머리 위 `!` 말풍선이 통통 튐 |
-| 쉬는 중 | 할 일을 끝내고 다음 지시를 기다림 | 의자에 기대 졸음, `z` 말풍선 |
+| 쉬는 중 | 할 일을 끝내고 다음 지시를 기다림 | 의자에서 꾸벅꾸벅 졺, `z` 말풍선 |
 | 퇴근 | 세션이 꺼짐 | 문으로 나가고 빈 책상과 흐린 이름표가 남음 |
 
 - 세션마다 책상 네 개짜리 줄 하나, 이름표는 폴더 이름입니다. 같은 폴더의 두 번째 세션은 다음 줄 "이름 2" 에 앉습니다.
@@ -77,7 +77,7 @@ Claude Code 에서 `/plugin` 으로 `agent-overtime` 을 끄거나 지웁니다.
 
 | | 무엇을 보여 주나 | 어디서 도나 | 설치 | 상태를 어떻게 아나 | 네트워크 | 라이선스 |
 |---|---|---|---|---|---|---|
-| Agent Overtime | 이미 켠 Claude Code 세션·서브에이전트의 네 가지 상태, 메뉴바에 답 기다림 수 | 맥 앱 (사무실 창 + 메뉴바), macOS 13 이상 | Homebrew cask 또는 `.dmg`, 그리고 플러그인 두 줄 | 플러그인 훅이 내 맥 안 소켓으로 보냄 | 없음, 포트도 열지 않음 | MIT (그림: OGA-BY 3.0) |
+| Agent Overtime | 이미 켠 Claude Code 세션·서브에이전트의 네 가지 상태, 메뉴바에 답 기다림 수 | 맥 앱 (사무실 창 + 메뉴바), macOS 13 이상 | Homebrew cask 또는 `.dmg`, 그리고 플러그인 두 줄 | 플러그인 훅이 내 맥 안 소켓으로 보냄 | 없음, 포트도 열지 않음 | MIT (그림: OGA-BY 3.0, CC0) |
 | [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) | 터미널에서 도는 코딩 에이전트를 작은 사무실의 픽셀 캐릭터로. 서브에이전트·팀원도 따로, 입력·권한을 기다리면 말풍선. 사무실에서 Claude Code 를 켬 | VS Code 확장, 또는 단독 CLI 가 사무실을 브라우저로 띄움. Windows·Linux·macOS | VS Code 마켓·Open VSX, 또는 `npx pixel-agents` (Node.js 20 이상) | 훅. 훅이 안 되면, 그리고 이벤트에 없는 내용은 세션 기록 파일을 읽음. 밖에서 켠 세션도 잡음 | 단독 CLI: 빈 로컬 포트에 서버, 기본 `127.0.0.1` | MIT |
 | [Outworked](https://github.com/outworked/outworked) | Claude 를 "AI 직원 팀" 으로: 에이전트를 고용하고 목표를 쓰면, 코드·웹·메시지·예약 작업을 하는 모습을 사무실에서 봄 | 데스크톱 앱 (Electron), macOS 가 주 플랫폼, 릴리스는 Apple 칩용 | 자체 Homebrew tap 또는 `.dmg`, Claude Code 설치·로그인 필요 | Claude Code SDK 로 자기 에이전트를 직접 돌림. 밖에서 켠 세션 보기: — | 자동 업데이트, 터널 (첫 사용 때 cloudflared 내려받음), 웹훅 트리거, 내장 브라우저, Slack·iMessage | GPL-3.0 |
 
@@ -144,4 +144,6 @@ swift run fake-events   # 켜 둔 앱에 가짜 소식 보내기 (Claude Code �
 ## 라이선스
 
 - 코드: MIT ([LICENSE](LICENSE)).
-- 그림 (`App/Art/`): MIT 가 아닙니다. LPC Revised by Eliza Wyatt and contributors (Lanea "Sharm" Zimmerman, Stephen "Redshrike" Challener 외), OGA-BY 3.0. Agent Overtime contributors 가 잘라 겹쳐 씁니다. 전체 출처: [`App/Art/CREDITS.txt`](App/Art/CREDITS.txt).
+- 그림 (`App/Art/`): MIT 가 아닙니다. 전체 출처: [`App/Art/CREDITS.txt`](App/Art/CREDITS.txt).
+  - 방·가구: LPC Revised by Eliza Wyatt and contributors (Lanea "Sharm" Zimmerman 외), OGA-BY 3.0. Agent Overtime contributors 가 잘라 씁니다.
+  - 사람 (`App/Art/MetroCity/`): MetroCity Free Top Down Character Pack by JIK-A-4, CC0 1.0 (출처 표시 의무는 없지만 적습니다). Agent Overtime contributors 가 그릴 때 겹치고 자르고 색을 조금 맞춥니다.
