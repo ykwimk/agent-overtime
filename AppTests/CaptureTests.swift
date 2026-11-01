@@ -24,7 +24,7 @@ final class CaptureTests: XCTestCase {
         while model.office.desks.count < 4 || model.office.liveSessionCount < 4, Date() < deadline {
             RunLoop.main.run(until: Date() + 0.05)
         }
-        XCTAssertEqual(model.office.desks.map(\.name), ["web-shop", "agent-overtime", "blog", "prototype"])
+        XCTAssertEqual(model.office.desks.map(\.name), ["my-project", "web-app", "blog", "prototype"])
         XCTAssertEqual(model.office.count(.working), 1)
         XCTAssertEqual(model.office.count(.waiting), 2)
         XCTAssertEqual(model.office.count(.resting), 1)
@@ -33,17 +33,149 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(model.everConnected)
 
         let later = Date() + 200  // so "Waiting · 3 min" shows
-        try capture(
-            "office-default", size: OfficeView.defaultSize, OfficeView(fixedNow: later).environmentObject(model))
-        try capture("office-min", size: OfficeView.minSize, OfficeView(fixedNow: later).environmentObject(model))
         try capture("menu", MenuContent(fixedNow: later).environmentObject(model))
         try capture("menubar-icon", MenuBarLabel(model: model).padding(6))
         try capture(
             "start-register",
             StartSheet(
-                sheet: .register, initial: StartCommand(folder: FakeScenario.root + "/web-shop", run: ["claude"])
+                sheet: .register, initial: StartCommand(folder: FakeScenario.root + "/my-project", run: ["claude"])
             )
             .environmentObject(model))
+    }
+
+    // MARK: the office
+
+    /// Today at this hour on this Mac's clock.
+    private func today(_ hour: Int) -> Date {
+        Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: Date())!
+    }
+
+    /// The fake scenario as of `now`, with the blog's helper still walking in from the door (unless `still`).
+    private func scenario(at now: Date, still: Bool = false) -> (AppModel, Stage) {
+        let model = makeModel(connected: true)
+        let stage = Stage()
+        let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
+        let events = FakeScenario.events
+        let helper = events.firstIndex { $0.kind == .subagentStart && $0.agentID == "demo-h" }!
+        for event in events[..<helper] { model.receive(event, at: now - 200) }
+        _ = stage.sync(model.office, width: width, now: now - 2, animate: !still)
+        for event in events[helper...] { model.receive(event, at: now - 200) }
+        _ = stage.sync(model.office, width: width, now: now - 0.9, animate: !still)
+        return (model, stage)
+    }
+
+    func testCaptureOffice() throws {
+        for (time, hour) in [("day", 14), ("night", 22)] {
+            let now = today(hour)
+            let (model, stage) = scenario(at: now)
+            try capture(
+                "office-\(time)", size: OfficeView.defaultSize,
+                OfficeView(fixedNow: now, stage: stage).environmentObject(model))
+            let (small, smallStage) = scenario(at: now, still: true)
+            try capture(
+                "office-min-\(time)", size: OfficeView.minSize,
+                OfficeView(fixedNow: now, stage: smallStage).environmentObject(small))
+        }
+        // Reduce Motion takes the same path as animate: false: people appear at their desks at once.
+        let (still, stillStage) = scenario(at: today(22), still: true)
+        try capture(
+            "office-reduce-motion", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: today(22), stage: stillStage).environmentObject(still))
+
+        let empty = makeModel(connected: true)
+        try capture(
+            "office-empty", size: OfficeView.defaultSize, OfficeView(fixedNow: today(22)).environmentObject(empty))
+
+        let crowd = makeModel(connected: true)
+        for i in 0..<9 {
+            let folder = FakeScenario.root + "/project-\(i + 1)"
+            crowd.receive(HookEvent(kind: .userPromptSubmit, session: "crowd-\(i)", cwd: folder), at: today(14) - 300)
+            if i % 3 == 1 {
+                crowd.receive(
+                    HookEvent(kind: .permissionRequest, session: "crowd-\(i)", cwd: folder), at: today(14) - 300)
+            }
+            for k in 0..<(i % 4) {
+                crowd.receive(
+                    HookEvent(
+                        kind: .subagentStart, session: "crowd-\(i)", cwd: folder, agentID: "crowd-\(i)-\(k)",
+                        agentType: ["Explore", "Plan", "code-reviewer"][k % 3]), at: today(14) - 300)
+            }
+        }
+        try capture(
+            "office-many", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(crowd))
+    }
+
+    /// Four pods fit the default window under the real top bar, with no scrolling.
+    func testDefaultWindowHoldsFourPods() {
+        let model = makeModel(connected: true)
+        let bar = NSHostingView(rootView: OfficeBar().environmentObject(model)).fittingSize.height + 1  // + divider
+        let room = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
+        XCTAssertEqual(room.columns, 2)
+        XCTAssertLessThanOrEqual(
+            bar + CGFloat(room.contentHeight * RoomLayout.pointsPerPixel), OfficeView.defaultSize.height)
+        let smallest = RoomLayout(points: OfficeView.minSize.width, podCount: 1)
+        XCTAssertLessThanOrEqual(
+            bar + CGFloat(smallest.contentHeight * RoomLayout.pointsPerPixel), OfficeView.minSize.height)
+    }
+
+    /// The art's credits and license travel inside the app, and every picture the office draws is there.
+    func testArtCreditsAndPicturesAreInTheBundle() throws {
+        let art = try XCTUnwrap(Bundle.main.resourceURL?.appendingPathComponent("Art"))
+        for name in ["CREDITS.txt", "LICENSE.txt"] {
+            let text = try String(contentsOf: art.appendingPathComponent(name), encoding: .utf8)
+            XCTAssertTrue(text.contains("OGA-BY 3.0"), name)
+        }
+        let store = ArtStore()
+        for look in Look.all {
+            for animation in ["Sitting", "Walk", "Emotes"] {
+                for layer in look.layers(animation) {
+                    XCTAssertNotNil(store.cell(layer.path, 0, 0, 64, 64), layer.path)
+                }
+            }
+        }
+        let image = OfficeRenderer().render(
+            OfficeScene(
+                layout: RoomLayout(width: 540, podCount: 0), height: 300, pods: [], darkness: 1, frame: 0, now: Date()))
+        XCTAssertEqual(image?.width, 540)
+    }
+
+    /// Four pods, every desk working, the window on screen and ticking: how much CPU the office takes.
+    func testCPUWithFourPodsWorking() throws {
+        let model = makeModel(connected: true)
+        for i in 0..<4 {
+            let folder = FakeScenario.root + "/cpu-\(i)"
+            model.receive(HookEvent(kind: .userPromptSubmit, session: "cpu-\(i)", cwd: folder))
+            for k in 0..<3 {
+                model.receive(
+                    HookEvent(
+                        kind: .subagentStart, session: "cpu-\(i)", cwd: folder, agentID: "cpu-\(i)-\(k)",
+                        agentType: "Explore"))
+            }
+        }
+        let window = NSWindow(
+            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled], backing: .buffered,
+            defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: OfficeView().environmentObject(model))
+        window.orderFrontRegardless()
+        defer { window.close() }
+        RunLoop.main.run(until: Date() + 3)
+
+        func cpuSeconds() -> Double {
+            var usage = rusage()
+            getrusage(RUSAGE_SELF, &usage)
+            return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec)
+                + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
+        }
+        let cpu = cpuSeconds()
+        let start = Date()
+        RunLoop.main.run(until: Date() + 10)
+        let percent = (cpuSeconds() - cpu) / Date().timeIntervalSince(start) * 100
+        let visible = window.occlusionState.contains(.visible)
+        let line = String(format: "CPU, 4 pods x 4 desks working, window visible=%@: %.2f%%\n", "\(visible)", percent)
+        print(line)
+        try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
+        XCTAssertLessThan(percent, 5)
     }
 
     func testCaptureOtherScreens() throws {
@@ -57,12 +189,12 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: Date()).environmentObject(makeModel(connected: true)))
 
         let project = FakeScenario.root + "/my-project"
-        let configured = makeModel(connected: true, start: StartCommand(folder: project, run: ["./start.sh"]))
+        let configured = makeModel(connected: true, start: StartCommand(folder: project, run: ["claude"]))
         try capture("settings", SettingsView().environmentObject(configured))
         // A pasted config with a zero-width space: the confirmation shows it.
         try capture(
             "start-confirm",
-            StartSheet(sheet: .confirm(StartCommand(folder: project, run: ["./start.sh", "--watch\u{200B}"])))
+            StartSheet(sheet: .confirm(StartCommand(folder: project, run: ["claude", "--continue\u{200B}"])))
                 .environmentObject(configured))
     }
 
