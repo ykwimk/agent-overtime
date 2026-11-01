@@ -48,6 +48,9 @@ public struct Session: Equatable, Identifiable {
         if let first = waits.min() { return (.waiting, first) }
         return (state, since)
     }
+
+    /// The session itself does not wait, but a teammate does (the summary and menu count it as waiting).
+    public var teammateWaiting: Bool { state != .waiting && shown.state == .waiting }
 }
 
 /// A folder sessions ran in. Running sessions are kept here; the folders themselves are remembered (up to
@@ -252,8 +255,8 @@ public struct OfficeState: Equatable {
 
     // MARK: islands
 
-    /// Every island's seats with the people at them, in the order of `islands`.
-    public var seating: [[Seat?]] {
+    /// Every island with the people at its seats, nearest the door first.
+    public var pods: [Pod] {
         var sessions: [String: Session] = [:]
         var mates: [String: (Teammate, Session)] = [:]
         for session in desks.flatMap(\.sessions) {
@@ -263,7 +266,7 @@ public struct OfficeState: Equatable {
         var seated: Set<String> = []
         for case .teammate(let id)? in islands.flatMap(\.seats) { seated.insert(id) }
         return islands.map { island in
-            island.seats.map { occupant -> Seat? in
+            let seats = island.seats.map { occupant -> Seat? in
                 switch occupant {
                 case .session(let id)?:
                     return sessions[id].map {
@@ -277,6 +280,7 @@ public struct OfficeState: Equatable {
                     return nil
                 }
             }
+            return Pod(slot: island.slot, seats: seats)
         }
     }
 

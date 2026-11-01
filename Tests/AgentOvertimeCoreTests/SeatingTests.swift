@@ -97,7 +97,7 @@ final class SeatingTests: XCTestCase {
         office.apply(event(.sessionEnd, "s1"), now: t0)
         office.apply(event(.sessionEnd, "s2"), now: t0)
         XCTAssertEqual(plan(office), ["0: ~shop, ~shop 2, w1, -"])
-        XCTAssertEqual(office.seating[0][0], .off(name: "shop", folder: "/Users/me/shop"))
+        XCTAssertEqual(office.pods[0].seats[0], .off(name: "shop", folder: "/Users/me/shop"))
 
         office.apply(event(.sessionStart, "w2", cwd: "/x/web"), now: t0)
         XCTAssertEqual(plan(office), ["0: ~shop, ~shop 2, w1, w2"], "an empty seat first")
@@ -134,32 +134,33 @@ final class SeatingTests: XCTestCase {
         var office = OfficeState()
         office.apply(event(.userPromptSubmit, "s1"), now: t0)
         office.apply(event(.subagentStart, "s1", agent: "a1", type: "Plan"), now: t0)
-        guard case .session(let session, let unseated)? = office.seating[0][0],
-            case .teammate(let mate, let of)? = office.seating[0][1]
-        else { return XCTFail("\(office.seating)") }
+        let seats = office.pods[0].seats
+        guard case .session(let session, let unseated)? = seats[0], case .teammate(let mate, let of)? = seats[1]
+        else { return XCTFail("\(seats)") }
         XCTAssertEqual(session.id, "s1")
         XCTAssertEqual(unseated, 0)
         XCTAssertEqual(mate.name, "Plan")
         XCTAssertEqual(of.id, "s1")
-        XCTAssertNil(office.seating[0][2])
+        XCTAssertNil(seats[2])
     }
 
     /// Past the last island people are still counted, and the session's tag counts its unseated teammates.
     func testUnseatedTeammatesAreCounted() {
         var office = OfficeState()
         office.apply(event(.userPromptSubmit, "s1"), now: t0)
-        let seats = OfficeState.maxIslands * Island.size
-        for i in 0..<OfficeState.maxTeammates { office.apply(event(.subagentStart, "s1", agent: "a\(i)"), now: t0) }
-        for i in 2...60 {
-            office.apply(event(.userPromptSubmit, "s\(i)"), now: t0)
-            for k in 0..<2 { office.apply(event(.subagentStart, "s\(i)", agent: "b\(i)-\(k)"), now: t0) }
-        }
+        for i in 1..<64 { office.apply(event(.subagentStart, "s1", agent: "a\(i)"), now: t0) }
+        for i in 2...64 { office.apply(event(.userPromptSubmit, "s\(i)"), now: t0) }
+        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 127)
+        office.apply(event(.subagentStart, "s64", agent: "t1"), now: t0)
+        office.apply(event(.subagentStart, "s64", agent: "t2"), now: t0)
         XCTAssertEqual(office.islands.count, OfficeState.maxIslands)
-        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, seats)
-        guard case .session(_, let unseated)? = office.seating[0][0] else { return XCTFail() }
-        XCTAssertEqual(unseated, 0, "s1's 64 teammates came first and all found seats")
-        let last = office.islands.last!.seats.compactMap { $0 }
-        XCTAssertEqual(last.count, Island.size)
-        XCTAssertEqual(office.liveSessionCount, 60, "all counted")
+        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, OfficeState.maxIslands * Island.size)
+        let unseated = office.pods.flatMap(\.seats).compactMap { seat -> Int? in
+            if case .session(let session, let count)? = seat, session.id == "s64" { return count }
+            return nil
+        }
+        XCTAssertEqual(unseated, [1], "t2 found no seat: its session's tag shows +1")
+        XCTAssertEqual(office.liveSessionCount, 64, "all counted")
+        XCTAssertEqual(office.desks[0].teammates.count, 65)
     }
 }

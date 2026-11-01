@@ -275,11 +275,8 @@ final class OfficeStateTests: XCTestCase {
         for i in 1...9 { office.apply(event(.subagentStart, "s1", agent: "a\(i)"), now: t0) }
         office.apply(event(.permissionRequest, "s1", agent: "a9"), now: t0)
         XCTAssertEqual(office.count(.waiting), 2, "so does the 9th teammate's")
-        var plan = SeatPlan()
-        let pods = plan.pods(for: office)
-        XCTAssertEqual(pods.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
-        XCTAssertEqual(pods[0].extra, 6, "three at desks, six as +6")
-        XCTAssertTrue(pods[0].teammateWaiting)
+        XCTAssertEqual(office.desks[0].sessions.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
+        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 14, "everyone has a seat")
     }
 
     func testCounts() {

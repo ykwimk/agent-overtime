@@ -70,9 +70,13 @@ Desk, Office
   ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
   SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
   LICENSE: OGA-BY 3.0
-  DETAILS: 
+  DETAILS:
 	Row 1: Desk made by Eliza Wyatt, using elements from Lanea Zimmerman's cabinets and countertops.
 	Row 2+: Original by Eliza Wyatt
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. Four desks face each other: the two far desks
+   are the desk's top only, cut from the second row and drawn above the
+   two near desks.
 
 -- Used here: Objects/Furniture/Planter.png
 Planter
@@ -114,6 +118,10 @@ Laptop
   ARTIST(S): Eliza Wyatt (DeathsDarling)
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. The back of an open laptop, facing someone
+   across the desks, is the closed laptop's lid (last row) drawn standing
+   on the desk.
 
 -- Used here: Objects/Small Items/Lighting, Table.png
 Lighting, Tabletop
@@ -146,7 +154,9 @@ MetroCity/MetroCity 2.0/ come from its MetroCity 2.0 update.
 MODIFIED: by Agent Overtime contributors, 2026, while drawing; the files
    themselves are not changed. The app stacks a body, clothes and hair;
    seats people by cutting the back view under the shoulders and drawing a
-   chair's backrest over it; moves that cut down one pixel for nodding;
+   chair's backrest over it, or, facing the room, by cutting the first
+   front view at the chest and drawing a desk and laptop in front of it;
+   moves that cut down one pixel for nodding;
    draws each pixel 1.5 times the size of the room's pixels; and moves the
    colours a little toward the LPC Revised palette (near-black outlines one
    step lighter, slightly less saturation and contrast).

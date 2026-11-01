@@ -121,9 +121,9 @@ struct WelcomeView: View {
     }
 }
 
-/// A slice of the office with three example people: one working, a teammate waiting, a teammate resting, and a
-/// fourth on the way home, facing out, so the example shows a face too. Always by day, whatever the clock says:
-/// the example is there to be seen clearly.
+/// One island of the office with three example people: one working with its back to the room, a teammate across
+/// the desks waiting (a face), a teammate resting. Always by day, whatever the clock says: the example is there
+/// to be seen clearly.
 struct OfficeSlice: View {
     var now = Date()
 
@@ -145,18 +145,15 @@ struct OfficeSlice: View {
     }()
 
     var body: some View {
-        var plan = SeatPlan()
-        let pods = plan.pods(for: Self.office)
+        let pod = Self.office.pods[0]
         let scale = RoomLayout.pointsPerPixel
-        let top = 70
+        let top = RoomLayout.firstRow - 4
         let crop = CGRect(
-            x: RoomLayout.lane - 4, y: top, width: RoomLayout.podWidth + 8,
-            height: RoomLayout.firstRow + RoomLayout.podDepth - top)
-        let layout = RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1)
-        let leaving = layout.standPoint(pod: 0, desk: 3)
+            x: RoomLayout.lane - 8, y: top, width: RoomLayout.islandWidth + 16,
+            height: RoomLayout.firstRow + RoomLayout.islandDepth + 4 - top)
+        let layout = RoomLayout(width: RoomLayout.lane + RoomLayout.islandWidth + RoomLayout.margin, slots: 1)
         let scene = OfficeScene(
-            layout: layout, height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: 0, frame: 0,
-            now: now, walkers: [Walker(look: Look.all[1], x: leaving.x, y: leaving.y + 22, facing: .down, step: 1)])
+            layout: layout, height: Int(crop.maxY), pods: [pod], darkness: 0, frame: 0, now: now)
         let density = CGFloat(OfficeRenderer.density)
         let pixels = CGRect(
             x: crop.minX * density, y: crop.minY * density, width: crop.width * density, height: crop.height * density)
@@ -164,8 +161,13 @@ struct OfficeSlice: View {
             if let image = OfficeRenderer().render(scene)?.cropping(to: pixels) {
                 Image(decorative: image, scale: density / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)
             }
-            PodTags(pod: pods[0], now: now).offset(
-                x: CGFloat(4 * scale), y: CGFloat((RoomLayout.firstRow - top) * scale))
+            ForEach(0..<Island.size, id: \.self) { index in
+                if let seat = pod.seats[index] {
+                    SeatTag(seat: seat, across: RoomLayout.isAcross(index), now: now).offset(
+                        x: CGFloat((8 + RoomLayout.deskX(index)) * scale),
+                        y: CGFloat((RoomLayout.isAcross(index) ? 4 : 4 + RoomLayout.nearDesk) * scale))
+                }
+            }
         }
         .frame(width: crop.width * CGFloat(scale), height: crop.height * CGFloat(scale), alignment: .topLeading)
         .clipShape(RoundedRectangle(cornerRadius: 8))

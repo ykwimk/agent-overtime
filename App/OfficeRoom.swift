@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Who walks where: each time the office changes it seats the pods and times walks in through the door and out.
+/// Who walks where: each time the office changes it lays out the islands and times walks in through the door
+/// and out.
 final class Stage: ObservableObject {
     private struct Walk {
         let look: Look
@@ -14,25 +15,24 @@ final class Stage: ObservableObject {
 
     private struct Seated {
         let look: Look
-        let pod: Int
-        let desk: Int
+        let slot: Int
+        let seat: Int
         let arrived: Date?
     }
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
     private(set) var busyUntil = Date.distantPast
 
-    private var plan = SeatPlan()
     private var office: OfficeState?
-    private var layout = RoomLayout(width: 0, podCount: 0)
+    private var layout = RoomLayout(width: 0, slots: 0)
     private var pods: [Pod] = []
     private var present: [String: Seated] = [:]
     private var walks: [String: Walk] = [:]
     /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
     private var generation = 0
 
-    /// Pixels a second, the same on every route: about 5.9 s from the door to the far desk of the default window
-    /// (702 px), about 1.4 s to the nearest. The owner found 150 px/s a little fast.
+    /// Pixels a second, the same on every route: about 5 s from the door to the farthest seat of the default
+    /// window, about 1 s to the nearest. The owner found 150 px/s a little fast.
     static let speed = 120.0
     /// Pixels walked per frame of the six-frame walk, so the feet keep pace with the floor at any speed (10 frames
     /// a second at 120 px/s).
@@ -44,20 +44,20 @@ final class Stage: ObservableObject {
         let before = layout
         generation += 1
         self.office = office
-        pods = plan.pods(for: office)
-        layout = RoomLayout(width: width, podCount: pods.count)
+        pods = office.pods
+        layout = RoomLayout(width: width, slots: (pods.last?.slot ?? -1) + 1)
 
         var seated: [String: Seated] = [:]
-        for (index, pod) in pods.enumerated() {
-            if pod.session != nil {
-                seated[OfficeScene.mainID(pod)] = Seated(
-                    look: OfficeScene.mainLook(pod), pod: index, desk: 0, arrived: pod.session?.arrived)
-            }
-            for (slot, mate) in pod.mates.enumerated() {
-                guard let mate else { continue }
-                seated[OfficeScene.mateID(mate)] = Seated(
-                    look: OfficeScene.mateLook(mate, desk: slot + 1), pod: index, desk: slot + 1,
-                    arrived: mate.arrived)
+        for pod in pods {
+            for (index, seat) in pod.seats.enumerated() {
+                guard let seat, let id = OfficeScene.id(seat), let look = OfficeScene.look(seat) else { continue }
+                let arrived: Date? =
+                    switch seat {
+                    case .session(let session, _): session.arrived
+                    case .teammate(let mate, _): mate.arrived
+                    case .off: nil
+                    }
+                seated[id] = Seated(look: look, slot: pod.slot, seat: index, arrived: arrived)
             }
         }
         if animate {
@@ -65,10 +65,10 @@ final class Stage: ObservableObject {
             // still shows the walk, or the person seated once it would be over.
             for (id, person) in seated where present[id] == nil {
                 guard let arrived = person.arrived else { continue }
-                walks[id] = walk(person.look, layout.route(pod: person.pod, desk: person.desk), arrived, false)
+                walks[id] = walk(person.look, layout.route(slot: person.slot, seat: person.seat), arrived, false)
             }
             for (id, person) in present where seated[id] == nil {
-                walks[id] = walk(person.look, before.route(pod: person.pod, desk: person.desk), now, true)
+                walks[id] = walk(person.look, before.route(slot: person.slot, seat: person.seat), now, true)
             }
         }
         walks = walks.filter { now.timeIntervalSince($0.value.start) < $0.value.duration }
@@ -218,47 +218,51 @@ struct OfficeRoom: View {
 
     private func tagLayer(_ pods: [Pod], _ layout: RoomLayout, now: Date) -> some View {
         ZStack(alignment: .topLeading) {
-            ForEach(Array(pods.enumerated()), id: \.element.id) { index, pod in
-                let origin = layout.origin(of: index)
-                PodTags(pod: pod, now: now)
-                    .offset(
-                        x: CGFloat(origin.x * RoomLayout.pointsPerPixel),
-                        y: CGFloat(origin.y * RoomLayout.pointsPerPixel))
+            ForEach(pods) { pod in
+                let origin = layout.origin(of: pod.slot)
+                ForEach(0..<Island.size, id: \.self) { index in
+                    if let seat = pod.seats[index] {
+                        SeatTag(seat: seat, across: RoomLayout.isAcross(index), now: now)
+                            .offset(
+                                x: CGFloat((origin.x + RoomLayout.deskX(index)) * RoomLayout.pointsPerPixel),
+                                y: CGFloat(
+                                    (origin.y + (RoomLayout.isAcross(index) ? 0 : RoomLayout.nearDesk))
+                                        * RoomLayout.pointsPerPixel))
+                    }
+                }
             }
         }
     }
 }
 
-/// Name tags for one pod, and the pod as one VoiceOver element: "my-project, Waiting, 3 min, teammate Explore
-/// Working". Tab moves pod by pod in seat order.
-struct PodTags: View {
-    let pod: Pod
+/// One seat's name tag, and the seat as one VoiceOver element: "my-project, Waiting, 3 min" or "Explore 2,
+/// teammate of my-project, Working". Across the desks the tag sits above the head; with the back to the room,
+/// under the chair. Tab moves seat by seat, island by island from the door.
+struct SeatTag: View {
+    let seat: Seat
+    let across: Bool
     let now: Date
     @ObservedObject private var keyboard = KeyboardNavigation.shared
 
     static let deskPoints = CGFloat(RoomLayout.deskWidth * RoomLayout.pointsPerPixel)
+    private static let pixel = CGFloat(RoomLayout.pointsPerPixel)
+    /// Three lines of tag: the room the layout keeps above a far head.
+    static let farTagPoints = 23 * pixel
 
     var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            mainTag.frame(width: Self.deskPoints)
-            ForEach(0..<Pod.sideDesks, id: \.self) { index in
-                Group {
-                    if let mate = pod.mates[index] {
-                        Tag {
-                            mate.displayName.font(.subheadline.weight(.medium))
-                            mate.state.label(since: mate.since, now: now).font(.subheadline).foregroundStyle(
-                                mate.state.tagColor)
-                        }
-                    }
-                }
-                .frame(width: Self.deskPoints)
+        Group {
+            if across {
+                // Bottom-aligned, so a third line grows up and away from the head.
+                tag.frame(width: Self.deskPoints, height: Self.farTagPoints, alignment: .bottom)
+                    .frame(height: CGFloat(RoomLayout.farDesk) * Self.pixel, alignment: .top)
+            } else {
+                tag.frame(width: Self.deskPoints)
+                    .padding(.top, 62 * Self.pixel)
+                    .frame(
+                        height: CGFloat(RoomLayout.islandDepth - RoomLayout.nearDesk) * Self.pixel, alignment: .top)
             }
         }
-        .padding(.top, CGFloat(64 * RoomLayout.pointsPerPixel))
-        .frame(
-            width: CGFloat(RoomLayout.podWidth * RoomLayout.pointsPerPixel),
-            height: CGFloat(RoomLayout.podDepth * RoomLayout.pointsPerPixel), alignment: .topLeading
-        )
+        .frame(width: Self.deskPoints)
         .contentShape(Rectangle())
         .help(summary)
         .accessibilityElement(children: .ignore)
@@ -266,48 +270,63 @@ struct PodTags: View {
         .focusable(keyboard.active)
     }
 
-    @ViewBuilder private var mainTag: some View {
-        Tag {
-            HStack(spacing: 4) {
-                Text(verbatim: pod.name).font(.subheadline.weight(.semibold)).lineLimit(1).truncationMode(.middle)
-                    .foregroundStyle(pod.isOff ? Style.tagSecondary : Style.tagText)
-                if pod.extra > 0 {
-                    Text("+\(pod.extra)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
+    @ViewBuilder private var tag: some View {
+        switch seat {
+        case .session(let session, let unseated):
+            Tag {
+                HStack(spacing: 4) {
+                    Text(verbatim: session.name).font(.subheadline.weight(.semibold)).truncationMode(.middle)
+                        .foregroundStyle(Style.tagText)
+                    if unseated > 0 {
+                        Text("+\(unseated)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
+                    }
                 }
-            }
-            if let session = pod.session {
                 session.state.label(since: session.since, now: now).font(.subheadline).foregroundStyle(
                     session.state.tagColor)
-                if pod.teammateWaiting {
+                if session.teammateWaiting {
                     Text("Teammate waiting").font(.subheadline).foregroundStyle(Style.waiting)
                 }
-            } else {
+            }
+        case .teammate(let mate, _):
+            Tag {
+                mate.displayName.font(.subheadline.weight(.medium))
+                mate.state.label(since: mate.since, now: now).font(.subheadline).foregroundStyle(mate.state.tagColor)
+            }
+        case .off(let name, _):
+            // Faded: the name of someone who went home, while others still work at this island.
+            Tag {
+                Text(verbatim: name).font(.subheadline.weight(.semibold)).truncationMode(.middle)
+                    .foregroundStyle(Style.tagSecondary)
                 Text("Off duty").font(.subheadline).foregroundStyle(Style.tagSecondary)
             }
         }
     }
 
-    /// The same words as the tags, in reading order.
+    /// The same words as the tag, in reading order.
     private var summary: Text {
-        var text = Text(verbatim: pod.name)
-        guard let session = pod.session else { return text + Text(verbatim: ", ") + Text("Off duty") }
-        text = text + Text(verbatim: ", ") + session.state.word
-        let minutes = Int(now.timeIntervalSince(session.since) / 60)
-        if session.state == .waiting, minutes >= 1 { text = text + Text(verbatim: ", ") + Text("\(minutes) min") }
-        if pod.teammateWaiting { text = text + Text(verbatim: ", ") + Text("Teammate waiting") }
-        for mate in pod.mates.compactMap({ $0 }) {
-            text =
-                text + Text(verbatim: ", ") + Text("teammate") + Text(verbatim: " ") + mate.displayName
-                + Text(verbatim: " ") + mate.state.word
+        let comma = Text(verbatim: ", ")
+        switch seat {
+        case .session(let session, let unseated):
+            var text = Text(verbatim: session.name) + comma + session.state.word
+            let minutes = Int(now.timeIntervalSince(session.since) / 60)
+            if session.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
+            if session.teammateWaiting { text = text + comma + Text("Teammate waiting") }
+            if unseated > 0 { text = text + comma + Text("\(unseated) more teammates") }
+            return text
+        case .teammate(let mate, let session):
+            var text = mate.displayName + comma + Text("teammate of \(session.name)") + comma + mate.state.word
+            let minutes = Int(now.timeIntervalSince(mate.since) / 60)
+            if mate.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
+            return text
+        case .off(let name, _):
+            return Text(verbatim: name) + comma + Text("Off duty")
         }
-        if pod.extra > 0 { text = text + Text(verbatim: ", ") + Text("\(pod.extra) more teammates") }
-        return text
     }
 }
 
-/// Pods take keyboard focus only once Tab is pressed, and give it up on a click, so their focus ring shows for
-/// keyboard use only. Always focusable, the first pod took focus (and its ring) as the window opened, and macOS 13
-/// has no way to hide SwiftUI's ring. VoiceOver reads the pods either way.
+/// Seats take keyboard focus only once Tab is pressed, and give it up on a click, so their focus ring shows for
+/// keyboard use only. Always focusable, the first seat took focus (and its ring) as the window opened, and macOS 13
+/// has no way to hide SwiftUI's ring. VoiceOver reads the seats either way.
 final class KeyboardNavigation: ObservableObject {
     static let shared = KeyboardNavigation()
     @Published var active = false
@@ -341,7 +360,7 @@ private struct Tag<Content: View>: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 5).fill(Style.tagPlate))
-            .frame(maxWidth: PodTags.deskPoints - 4)
+            .frame(maxWidth: SeatTag.deskPoints - 4)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

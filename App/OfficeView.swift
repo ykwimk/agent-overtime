@@ -41,7 +41,7 @@ struct OfficeView: View {
             ) {
                 Button("Connect…") { openWindow(id: "welcome") }
             }
-        } else if model.office.desks.isEmpty {
+        } else if model.office.liveSessionCount == 0 {
             EmptyOffice(
                 title: "Nobody's at work yet",
                 detail:
@@ -110,11 +110,7 @@ struct OfficeBar: View {
                     Button("Check connection") { openWindow(id: "welcome") }.buttonStyle(.link)
                 }
             case .idle, .starting:
-                if model.everConnected && model.office.liveSessionCount == 0 && !model.office.desks.isEmpty {
-                    Text("Sessions opened before this app appear when they next move.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                EmptyView()
             }
         }
     }

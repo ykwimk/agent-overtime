@@ -65,37 +65,77 @@ final class CaptureTests: XCTestCase {
         return (model, stage)
     }
 
+    /// `sessions` sessions, each followed by its teammates (names from the list in turn), in a mix of states, all
+    /// seated before `now`.
+    private func team(sessions: Int, teammates: Int, at now: Date) -> AppModel {
+        let model = makeModel(connected: true)
+        let names = ["Explore", "Plan", "code-reviewer", nil, "general-purpose"]
+        let folders = ["my-project", "web-app", "blog", "api", "docs", "design"]
+        for i in 0..<sessions {
+            let folder = FakeScenario.root + "/" + folders[i % folders.count]
+            let session = "team-\(i)"
+            model.receive(HookEvent(kind: .userPromptSubmit, session: session, cwd: folder), at: now - 300)
+            if i % 3 == 1 { model.receive(HookEvent(kind: .stop, session: session, cwd: folder), at: now - 300) }
+            for k in 0..<teammates {
+                let agent = "\(session)-\(k)"
+                let name = names[(i + k) % names.count]
+                model.receive(
+                    HookEvent(kind: .subagentStart, session: session, cwd: folder, agentID: agent, agentType: name),
+                    at: now - 300)
+                if (i + k) % 4 == 1 {
+                    model.receive(
+                        HookEvent(
+                            kind: .permissionRequest, session: session, cwd: folder, agentID: agent, agentType: name),
+                        at: now - 200)
+                } else if (i + k) % 4 == 3 {
+                    model.receive(
+                        HookEvent(
+                            kind: .notification, session: session, cwd: folder, agentID: agent, agentType: name,
+                            notification: "idle_prompt"), at: now - 200)
+                }
+            }
+        }
+        return model
+    }
+
     func testCaptureOffice() throws {
+        // Four islands, 16 people: the default window holds them all.
         for (time, hour) in [("day", 14), ("night", 22)] {
-            let now = today(hour)
-            let (model, stage) = scenario(at: now)
+            let full = team(sessions: 4, teammates: 3, at: today(hour))
+            XCTAssertEqual(full.office.islands.map(\.slot), [0, 1, 2, 3])
+            try capture(
+                "office-16-\(time)", size: OfficeView.defaultSize,
+                OfficeView(fixedNow: today(hour)).environmentObject(full))
+
+            let (model, stage) = scenario(at: today(hour))
             try capture(
                 "office-\(time)", size: OfficeView.defaultSize,
-                OfficeView(fixedNow: now, stage: stage).environmentObject(model))
-            let (small, smallStage) = scenario(at: now, still: true)
+                OfficeView(fixedNow: today(hour), stage: stage).environmentObject(model))
+            let (small, smallStage) = scenario(at: today(hour), still: true)
             try capture(
                 "office-min-\(time)", size: OfficeView.minSize,
-                OfficeView(fixedNow: now, stage: smallStage).environmentObject(small))
+                OfficeView(fixedNow: today(hour), stage: smallStage).environmentObject(small))
         }
-        // The helper passing web-app on its way to blog: under the name tags, not over the seated heads.
+        // The helper on its way to blog's island: down the lane, along the aisle between the rows.
         let (passing, passingStage) = scenario(at: today(14), walked: 1.5)
         try capture(
             "office-passing", size: OfficeView.defaultSize,
             OfficeView(fixedNow: today(14), stage: passingStage).environmentObject(passing))
 
-        // Off duty: my-project's second session walks out; the door stands open as it gets there.
+        // Going home: my-project's session walks out; its teammates go with it and the island empties, while
+        // the next island keeps its place.
         let (leaving, leavingStage) = scenario(at: today(14), still: true)
-        let width = Int(OfficeView.minSize.width) / RoomLayout.pointsPerPixel
+        let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
         _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 3, animate: true)
         leaving.receive(
             HookEvent(kind: .sessionEnd, session: "demo-b1", cwd: FakeScenario.root + "/my-project"),
-            at: today(14) - 1.7)
-        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.7, animate: true)
+            at: today(14) - 1.2)
+        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.2, animate: true)
         try capture(
-            "office-leaving", size: OfficeView.minSize,
+            "office-leaving", size: OfficeView.defaultSize,
             OfficeView(fixedNow: today(14), stage: leavingStage).environmentObject(leaving))
 
-        // Reduce Motion takes the same path as animate: false: people appear at their desks at once.
+        // Reduce Motion takes the same path as animate: false: people appear at their seats at once.
         let (still, stillStage) = scenario(at: today(22), still: true)
         try capture(
             "office-reduce-motion", size: OfficeView.defaultSize,
@@ -105,46 +145,49 @@ final class CaptureTests: XCTestCase {
         try capture(
             "office-empty", size: OfficeView.defaultSize, OfficeView(fixedNow: today(22)).environmentObject(empty))
 
-        let crowd = makeModel(connected: true)
-        for i in 0..<9 {
-            let folder = FakeScenario.root + "/project-\(i + 1)"
-            crowd.receive(HookEvent(kind: .userPromptSubmit, session: "crowd-\(i)", cwd: folder), at: today(14) - 300)
-            if i % 3 == 1 {
-                crowd.receive(
-                    HookEvent(kind: .permissionRequest, session: "crowd-\(i)", cwd: folder), at: today(14) - 300)
-            }
-            for k in 0..<(i % 4) {
-                crowd.receive(
-                    HookEvent(
-                        kind: .subagentStart, session: "crowd-\(i)", cwd: folder, agentID: "crowd-\(i)-\(k)",
-                        agentType: ["Explore", "Plan", "code-reviewer"][k % 3]), at: today(14) - 300)
-            }
-        }
+        let one = team(sessions: 1, teammates: 0, at: today(14))
+        try capture("office-one", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(one))
+
+        // 20 people: five islands, the fifth below the fold (the room scrolls).
+        let crowd = team(sessions: 5, teammates: 3, at: today(14))
+        XCTAssertEqual(crowd.office.islands.count, 5)
         try capture(
             "office-many", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(crowd))
 
-        // Six desks went off duty, then a new folder: it takes the desk by the door. Five teammates, the fifth
-        // without a desk ("+2") and waiting, which the summary and the main tag still count.
-        let returning = makeModel(connected: true)
-        let old = (1...6).map { FakeScenario.root + "/old-\($0)" }
-        for kind in [HookEvent.Kind.sessionStart, .sessionEnd] {
-            for folder in old { returning.receive(HookEvent(kind: kind, session: folder, cwd: folder), at: today(13)) }
-        }
+        // Same names: a folder's second session, and two Plans at once.
+        let twins = makeModel(connected: true)
         let project = FakeScenario.root + "/my-project"
-        returning.receive(HookEvent(kind: .userPromptSubmit, session: "new", cwd: project), at: today(14) - 300)
-        for (k, type) in ["Explore", "Plan", "code-reviewer", "Explore", "Plan"].enumerated() {
-            returning.receive(
-                HookEvent(kind: .subagentStart, session: "new", cwd: project, agentID: "new-\(k)", agentType: type),
+        for session in ["twin-1", "twin-2"] {
+            twins.receive(HookEvent(kind: .userPromptSubmit, session: session, cwd: project), at: today(14) - 300)
+            twins.receive(
+                HookEvent(
+                    kind: .subagentStart, session: session, cwd: project, agentID: session + "-p", agentType: "Plan"),
                 at: today(14) - 300)
         }
-        returning.receive(
-            HookEvent(kind: .permissionRequest, session: "new", cwd: project, agentID: "new-4", agentType: "Plan"),
-            at: today(14) - 200)
-        XCTAssertEqual(returning.office.desks.first?.name, "my-project")
-        XCTAssertEqual(returning.office.count(.waiting), 1)
+        XCTAssertEqual(twins.office.desks[0].sessions.map(\.name), ["my-project", "my-project 2"])
+        XCTAssertEqual(twins.office.desks[0].teammates.map(\.number), [1, 2])
         try capture(
-            "office-new-session", size: OfficeView.defaultSize,
-            OfficeView(fixedNow: today(14)).environmentObject(returning))
+            "office-same-names", size: OfficeView.minSize, OfficeView(fixedNow: today(14)).environmentObject(twins))
+
+        // Went home: a faded name, a pushed-back chair and a closed laptop, across the desks and with the back to
+        // the room, while someone still works at the island.
+        let home = makeModel(connected: true)
+        for (session, folder) in [("h1", "my-project"), ("h2", "web-app"), ("h3", "blog"), ("h4", "api")] {
+            home.receive(
+                HookEvent(kind: .userPromptSubmit, session: session, cwd: FakeScenario.root + "/" + folder),
+                at: today(22) - 300)
+        }
+        for (session, folder) in [("h2", "web-app"), ("h3", "blog")] {
+            home.receive(
+                HookEvent(kind: .sessionEnd, session: session, cwd: FakeScenario.root + "/" + folder),
+                at: today(22) - 100)
+        }
+        XCTAssertEqual(home.office.pods[0].seats[1], .off(name: "web-app", folder: FakeScenario.root + "/web-app"))
+        for (time, hour) in [("day", 14), ("night", 22)] {
+            try capture(
+                "office-went-home-\(time)", size: OfficeView.minSize,
+                OfficeView(fixedNow: today(hour)).environmentObject(home))
+        }
     }
 
     /// The README picture (copied by hand to docs/images/): the window a little taller than the default so the
@@ -159,14 +202,18 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// One walking speed: the far desk of the default window is 5 to 7 seconds from the door.
-    func testFarDeskWalkTakesFiveToSevenSeconds() {
-        let room = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
-        let seconds = Stage.length(room.route(pod: 3, desk: 3)) / Stage.speed
-        XCTAssertTrue((5...7).contains(seconds), "\(seconds)")
+    /// One walking speed (v0.2's 120 px/s): the farthest seat of the default window is 4 to 6 seconds from the
+    /// door, the nearest about one.
+    func testFarSeatWalkTakesFourToSixSeconds() {
+        let room = RoomLayout(points: OfficeView.defaultSize.width, slots: 4)
+        let seconds = (0..<4).flatMap { slot in
+            (0..<Island.size).map { Stage.length(room.route(slot: slot, seat: $0)) / Stage.speed }
+        }
+        XCTAssertTrue((4...6).contains(seconds.max()!), "\(seconds.max()!)")
+        XCTAssertTrue((0.5...1.5).contains(seconds.min()!), "\(seconds.min()!)")
     }
 
-    /// Pods are not focusable (no focus ring) when the window opens, and Tab makes them so. A real, key window, as
+    /// Seats are not focusable (no focus ring) when the window opens, and Tab makes them so. A real, key window, as
     /// focus needs one. The ring itself can't be checked here: drawing the view into a bitmap leaves it out.
     func testTabTurnsOnKeyboardFocus() throws {
         let (model, stage) = scenario(at: today(22), still: true)
@@ -206,15 +253,26 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue(KeyboardNavigation.shared.active)
     }
 
-    /// Four pods fit the default window under the real top bar, with no scrolling.
-    func testDefaultWindowHoldsFourPods() {
+    /// Under the real top bar, with no scrolling: four islands (16 people) and the right-hand column in the
+    /// default window, one island and its name tags in the smallest. The bar measured in both languages.
+    func testDefaultWindowHoldsFourIslands() {
         let model = makeModel(connected: true)
-        let bar = NSHostingView(rootView: OfficeBar().environmentObject(model)).fittingSize.height + 1  // + divider
-        let room = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
+        let bar = ["en", "ko"].map { language in
+            NSHostingView(
+                rootView: OfficeBar().environmentObject(model).environment(\.locale, Locale(identifier: language))
+            ).fittingSize.height + 1  // + divider
+        }.max()!
+        let room = RoomLayout(points: OfficeView.defaultSize.width, slots: 4)
         XCTAssertEqual(room.columns, 2)
+        XCTAssertEqual(room.columns * room.rows, 4)
+        XCTAssertNotNil(room.pillar)
         XCTAssertLessThanOrEqual(
             bar + CGFloat(room.contentHeight * RoomLayout.pointsPerPixel), OfficeView.defaultSize.height)
-        let smallest = RoomLayout(points: OfficeView.minSize.width, podCount: 1)
+        XCTAssertGreaterThan(
+            bar + CGFloat(RoomLayout(points: OfficeView.defaultSize.width, slots: 5).contentHeight * 2),
+            OfficeView.defaultSize.height, "a fifth island scrolls")
+        let smallest = RoomLayout(points: OfficeView.minSize.width, slots: 1)
+        XCTAssertEqual(smallest.columns, 1)
         XCTAssertLessThanOrEqual(
             bar + CGFloat(smallest.contentHeight * RoomLayout.pointsPerPixel), OfficeView.minSize.height)
     }
@@ -261,18 +319,11 @@ final class CaptureTests: XCTestCase {
     }
 
     /// Everyone seated in the example office (captures, README pictures) has different hair, and so do Claude
-    /// Code's own agents side by side: one name at desks 1 to 3, or different names at the same desk.
+    /// Code's own agents side by side: one name numbered 1 to 3, or different names with the same number.
     func testExampleOfficeHasNoTwoSameHeads() {
         var office = OfficeState()
         for event in FakeScenario.events { office.apply(event, now: today(14)) }
-        var plan = SeatPlan()
-        var heads: [String] = []
-        for pod in plan.pods(for: office) where !pod.isOff {
-            heads.append("\(OfficeScene.mainLook(pod).hair)")
-            for (index, mate) in pod.mates.enumerated() {
-                if let mate { heads.append("\(OfficeScene.mateLook(mate, desk: index + 1).hair)") }
-            }
-        }
+        let heads = office.pods.flatMap(\.seats).compactMap { $0.flatMap(OfficeScene.look).map { "\($0.hair)" } }
         XCTAssertEqual(heads.count, 8)
         XCTAssertEqual(Set(heads).count, heads.count, "\(heads)")
 
@@ -288,7 +339,7 @@ final class CaptureTests: XCTestCase {
     /// The bitmap is twice as dense as the art, so the view shows one bitmap pixel per point: the room keeps
     /// its size on screen.
     func testOfficeBitmapIsOnePixelPerPoint() {
-        let layout = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
+        let layout = RoomLayout(points: OfficeView.defaultSize.width, slots: 4)
         let image = OfficeRenderer().render(
             OfficeScene(layout: layout, height: 300, pods: [], darkness: 1, frame: 0, now: Date()))
         XCTAssertEqual(layout.width * RoomLayout.pointsPerPixel, Int(OfficeView.defaultSize.width))
@@ -379,8 +430,8 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// Four pods, every desk working, the window on screen and ticking: how much CPU the office takes.
-    func testCPUWithFourPodsWorking() throws {
+    /// Four islands, all 16 people working, the window on screen and ticking: how much CPU the office takes.
+    func testCPUWithFourIslandsWorking() throws {
         let model = makeModel(connected: true)
         for i in 0..<4 {
             let folder = FakeScenario.root + "/cpu-\(i)"
@@ -418,7 +469,7 @@ final class CaptureTests: XCTestCase {
 
         let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
-        // The far desk's teammate leaves: 5.9 s of walking to the door, drawn 30 times a second.
+        // A teammate across the desks of the far island leaves: about 4 s of walking, drawn 30 times a second.
         model.receive(
             HookEvent(
                 kind: .subagentStop, session: "cpu-3", cwd: FakeScenario.root + "/cpu-3", agentID: "cpu-3-2",
@@ -455,10 +506,9 @@ final class CaptureTests: XCTestCase {
         let asleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
 
         // One picture on its own, to tell drawing from SwiftUI's share.
-        var plan = SeatPlan()
         let scene = OfficeScene(
-            layout: RoomLayout(points: OfficeView.defaultSize.width, podCount: 4), height: 320,
-            pods: plan.pods(for: model.office), darkness: 1, frame: 3, now: Date())
+            layout: RoomLayout(points: OfficeView.defaultSize.width, slots: 4), height: 350,
+            pods: model.office.pods, darkness: 1, frame: 3, now: Date())
         let renderStart = Date()
         for _ in 0..<50 { _ = OfficeRenderer().render(scene) }
         let renderMs = Date().timeIntervalSince(renderStart) / 50 * 1000
@@ -476,7 +526,7 @@ final class CaptureTests: XCTestCase {
         let office = total - idle
         let line = String(
             format:
-                "CPU, 4 pods x 4 desks working (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
+                "CPU, 4 islands x 4 seats (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
                 + "(process %.2f%% - idle %.2f%%); walking: office %.2f%%; reduce motion: office %.2f%%; "
                 + "one picture: night %.2f ms, day %.2f ms; one walker box: night %.2f ms\n",
             "\(visible)", "\(locked)", "\(asleep)", office, total, idle, walking, reduced, renderMs, dayMs, boxMs)
