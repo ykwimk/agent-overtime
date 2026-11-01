@@ -122,23 +122,27 @@ struct Look: Equatable {
         self.hair = Layer(sheet: hair.0, row: hair.1)
     }
 
+    /// Seated people show only the back of the head, so every look has its own hair: different shapes and colours
+    /// (black, dark brown, red, ginger, grey), only two of them blond. The hair band with a ponytail is left out:
+    /// from behind it reads as a striped cap.
     static let all: [Look] = [
         Look(0, (suit, 2), (hairs, 7)),
         Look(5, (suit, 2), (hairs, 0)),
         Look(3, (shirts, 0), (hairs, 6)),
         Look(2, (shirts, 2), (hair2, 0)),
         Look(4, ("MetroCity/Outfits/Outfit5.png", 0), (hairs, 3)),
-        Look(1, (shirts, 4), (hair2, 4)),
+        Look(1, (shirts, 4), (hairs, 5)),
         Look(5, ("MetroCity/Outfits/Outfit6.png", 0), (hairs, 1)),
-        Look(0, (shirts, 0), (hair2, 3)),
         Look(3, (shirts, 1), (hair2, 2)),
         Look(2, ("MetroCity/Outfits/Outfit1.png", 0), (hairs, 2)),
     ]
 
-    /// The same name always gets the same person (FNV-1a: stable across launches, unlike hashValue).
+    /// The same name always gets the same person (FNV-1a: stable across launches, unlike hashValue). The salt
+    /// is one that gives every seat of the example office, and Explore, Plan, general-purpose and the default
+    /// helper side by side, different hair.
     static func pick(_ seed: String) -> Look {
         var hash: UInt32 = 2_166_136_261
-        for byte in seed.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+        for byte in ("1135 " + seed).utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
         return all[Int(hash % UInt32(all.count))]
     }
 

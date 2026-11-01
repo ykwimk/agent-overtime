@@ -148,11 +148,11 @@ final class CaptureTests: XCTestCase {
     }
 
     /// The README picture (copied by hand to docs/images/): the window a little taller than the default so the
-    /// off-duty prototype desk shows too, and the helper still in the lane by the door, facing out. Light by
-    /// day, dark by night.
+    /// off-duty prototype desk shows too, and the helper already seated, so no name tag stands under an empty
+    /// chair. Light by day, dark by night.
     func testCaptureReadme() throws {
         for (time, hour) in [("day", 14), ("night", 22)] {
-            let (model, stage) = scenario(at: today(hour), walked: 0.8)
+            let (model, stage) = scenario(at: today(hour), still: true)
             try capture(
                 "readme-\(time)", size: CGSize(width: OfficeView.defaultSize.width, height: 860),
                 OfficeView(fixedNow: today(hour), stage: stage).environmentObject(model))
@@ -200,15 +200,42 @@ final class CaptureTests: XCTestCase {
         XCTAssertGreaterThan(orange.0, orange.1, "still orange")
     }
 
-    /// Ten different people, both suits among them, every skin tone of the pack, and a name keeps its person.
+    /// At least eight people with different hair (at most two blond, no hair band), both suits among them, every
+    /// skin tone of the pack, and a name keeps its person.
     func testLooks() {
-        XCTAssertEqual(Set(Look.all.map { "\($0.skin) \($0.clothes) \($0.hair)" }).count, Look.all.count)
+        XCTAssertEqual(Set(Look.all.map { "\($0.hair)" }).count, Look.all.count)
         XCTAssertGreaterThanOrEqual(Look.all.count, 8)
+        let blond = Look.all.filter { $0.hair.sheet.hasSuffix("MetroCity 2.0/Hair.png") && $0.hair.row != 1 }
+        XCTAssertLessThanOrEqual(blond.count, 2)
+        XCTAssertFalse(blond.contains { $0.hair.row == 4 }, "the hair band with a ponytail")
         XCTAssertGreaterThanOrEqual(Look.all.filter { $0.clothes.sheet.hasSuffix("/Suit.png") }.count, 2)
         XCTAssertEqual(Set(Look.all.map(\.skin)), Set(0..<6))
         XCTAssertEqual(Look.pick("my-project"), Look.pick("my-project"))
-        XCTAssertGreaterThan(
-            Set(["my-project", "web-app", "blog", "prototype", "Explore 1"].map { "\(Look.pick($0))" }).count, 2)
+    }
+
+    /// Everyone seated in the example office (captures, README pictures) has different hair, and so do Claude
+    /// Code's own agents side by side: one name at desks 1 to 3, or different names at the same desk.
+    func testExampleOfficeHasNoTwoSameHeads() {
+        var office = OfficeState()
+        for event in FakeScenario.events { office.apply(event, now: today(14)) }
+        var plan = SeatPlan()
+        var heads: [String] = []
+        for pod in plan.pods(for: office) where !pod.isOff {
+            heads.append("\(OfficeScene.mainLook(pod).hair)")
+            for (index, mate) in pod.mates.enumerated() {
+                if let mate { heads.append("\(OfficeScene.mateLook(mate, desk: index + 1).hair)") }
+            }
+        }
+        XCTAssertEqual(heads.count, 8)
+        XCTAssertEqual(Set(heads).count, heads.count, "\(heads)")
+
+        let names = ["Explore", "Plan", "general-purpose", "helper"]
+        let groups =
+            names.map { name in (1...3).map { "\(name) \($0)" } }
+            + (1...3).map { desk in names.map { "\($0) \(desk)" } }
+        for group in groups {
+            XCTAssertEqual(Set(group.map { "\(Look.pick($0).hair)" }).count, group.count, "\(group)")
+        }
     }
 
     /// The bitmap is twice as dense as the art, so the view shows one bitmap pixel per point: the room keeps
