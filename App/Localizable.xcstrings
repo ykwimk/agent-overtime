@@ -79,7 +79,7 @@
     "Welcome to Agent Overtime" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Agent Overtime 시작하기" } } } },
     "Working" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "일하는 중" } } } },
     "Working %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "일함 %lld" } } } },
-    "Works with Claude Code. Not affiliated with Anthropic." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 와 함께 써요. Anthropic 과 관계없는 앱입니다." } } } },
+    "Works with Claude Code. Not affiliated with Anthropic." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 와 함께 씁니다. Anthropic 과 관계없는 앱입니다." } } } },
     "You're already at work. Start one more?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미 출근했어요. 하나 더 켤까요?" } } } },
     "• Is agent-overtime turned on in Claude Code's /plugin list?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• Claude Code 의 /plugin 목록에서 agent-overtime 이 켜져 있나요?" } } } },
     "• Was the session already open? Type /reload-plugins in it once." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 미리 켜 둔 세션인가요? 그 세션에서 /reload-plugins 를 한 번 쳐 주세요." } } } },
