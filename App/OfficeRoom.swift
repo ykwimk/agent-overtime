@@ -31,10 +31,11 @@ final class Stage: ObservableObject {
     /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
     private var generation = 0
 
-    /// Pixels a second, the same on every route: about 4.7 s from the door to the far desk of the default window
-    /// (702 px), about 1.1 s to the nearest.
-    static let speed = 150.0
-    /// Pixels walked per frame of the six-frame walk, so the feet keep pace with the floor (12.5 frames a second).
+    /// Pixels a second, the same on every route: about 5.9 s from the door to the far desk of the default window
+    /// (702 px), about 1.4 s to the nearest. The owner found 150 px/s a little fast.
+    static let speed = 120.0
+    /// Pixels walked per frame of the six-frame walk, so the feet keep pace with the floor at any speed (10 frames
+    /// a second at 120 px/s).
     private static let stride = 12.0
 
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.

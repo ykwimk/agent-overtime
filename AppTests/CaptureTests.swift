@@ -159,11 +159,11 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// One walking speed: the far desk of the default window is 4 to 5 seconds from the door.
-    func testFarDeskWalkTakesFourToFiveSeconds() {
+    /// One walking speed: the far desk of the default window is 5 to 7 seconds from the door.
+    func testFarDeskWalkTakesFiveToSevenSeconds() {
         let room = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
         let seconds = Stage.length(room.route(pod: 3, desk: 3)) / Stage.speed
-        XCTAssertTrue((4...5).contains(seconds), "\(seconds)")
+        XCTAssertTrue((5...7).contains(seconds), "\(seconds)")
     }
 
     /// Pods are not focusable (no focus ring) when the window opens, and Tab makes them so. A real, key window, as
@@ -343,7 +343,7 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// At the walking frame rate a walker moves about 5 art pixels a frame and the six-picture walk advances at
+    /// At the walking frame rate a walker moves about 4 art pixels a frame and the six-picture walk advances at
     /// most one picture a frame, so the feet never skip a step.
     func testWalkAtItsFrameRateMovesInSmallSteps() throws {
         let now = today(14)
@@ -418,7 +418,7 @@ final class CaptureTests: XCTestCase {
 
         let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
-        // The far desk's teammate leaves: 4.7 s of walking to the door, drawn 30 times a second.
+        // The far desk's teammate leaves: 5.9 s of walking to the door, drawn 30 times a second.
         model.receive(
             HookEvent(
                 kind: .subagentStop, session: "cpu-3", cwd: FakeScenario.root + "/cpu-3", agentID: "cpu-3-2",
