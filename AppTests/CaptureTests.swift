@@ -76,6 +76,18 @@ final class CaptureTests: XCTestCase {
                 "office-min-\(time)", size: OfficeView.minSize,
                 OfficeView(fixedNow: now, stage: smallStage).environmentObject(small))
         }
+        // Off duty: my-project's second session walks out; the door stands open as it gets there.
+        let (leaving, leavingStage) = scenario(at: today(14), still: true)
+        let width = Int(OfficeView.minSize.width) / RoomLayout.pointsPerPixel
+        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 3, animate: true)
+        leaving.receive(
+            HookEvent(kind: .sessionEnd, session: "demo-b1", cwd: FakeScenario.root + "/my-project"),
+            at: today(14) - 1.1)
+        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.1, animate: true)
+        try capture(
+            "office-leaving", size: OfficeView.minSize,
+            OfficeView(fixedNow: today(14), stage: leavingStage).environmentObject(leaving))
+
         // Reduce Motion takes the same path as animate: false: people appear at their desks at once.
         let (still, stillStage) = scenario(at: today(22), still: true)
         try capture(
@@ -152,30 +164,59 @@ final class CaptureTests: XCTestCase {
                         agentType: "Explore"))
             }
         }
-        let window = NSWindow(
-            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled], backing: .buffered,
-            defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: OfficeView().environmentObject(model))
-        window.orderFrontRegardless()
-        defer { window.close() }
-        RunLoop.main.run(until: Date() + 3)
-
         func cpuSeconds() -> Double {
             var usage = rusage()
             getrusage(RUSAGE_SELF, &usage)
             return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec)
                 + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
         }
-        let cpu = cpuSeconds()
-        let start = Date()
-        RunLoop.main.run(until: Date() + 10)
-        let percent = (cpuSeconds() - cpu) / Date().timeIntervalSince(start) * 100
+        func percent(over seconds: TimeInterval) -> Double {
+            let cpu = cpuSeconds()
+            let start = Date()
+            RunLoop.main.run(until: Date() + seconds)
+            return (cpuSeconds() - cpu) / Date().timeIntervalSince(start) * 100
+        }
+        // The test app on its own (its own empty office, menu bar item, socket, test runner).
+        let idle = percent(over: 5)
+
+        let window = NSWindow(
+            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled], backing: .buffered,
+            defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: OfficeView(ticksWhileHidden: true).environmentObject(model))
+        window.orderFrontRegardless()
+        defer { window.close() }
+        RunLoop.main.run(until: Date() + 3)
+
+        let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
-        let line = String(format: "CPU, 4 pods x 4 desks working, window visible=%@: %.2f%%\n", "\(visible)", percent)
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
+        let asleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
+
+        // One picture on its own, to tell drawing from SwiftUI's share.
+        var plan = SeatPlan()
+        let scene = OfficeScene(
+            layout: RoomLayout(points: OfficeView.defaultSize.width, podCount: 4), height: 320,
+            pods: plan.pods(for: model.office), darkness: 1, frame: 3, now: Date())
+        let renderStart = Date()
+        for _ in 0..<50 { _ = OfficeRenderer().render(scene) }
+        let renderMs = Date().timeIntervalSince(renderStart) / 50 * 1000
+        var day = scene
+        day.darkness = 0
+        let dayStart = Date()
+        for _ in 0..<50 { _ = OfficeRenderer().render(day) }
+        let dayMs = Date().timeIntervalSince(dayStart) / 50 * 1000
+
+        let office = total - idle
+        let line = String(
+            format:
+                "CPU, 4 pods x 4 desks working (window visible=%@, locked=%@, display asleep=%@): office %.2f%% "
+                + "(process %.2f%% - idle %.2f%%); one picture: night %.2f ms, day %.2f ms\n",
+            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, renderMs, dayMs)
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
-        XCTAssertLessThan(percent, 5)
+        XCTAssertLessThan(office, 5)
     }
 
     func testCaptureOtherScreens() throws {
