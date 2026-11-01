@@ -58,6 +58,9 @@ Claude Code 에서 `/plugin` 으로 `agent-overtime` 을 끄거나 지웁니다.
 - 명령은 셸이 다시 읽지 않도록 인자마다 작은따옴표로 감싼 `.command` 파일 (0700, 실행하자마자 스스로 지움) 로 만들어 터미널이 엽니다. 앱은 명령에 옵션을 덧붙이지 않습니다.
 - 등록한 폴더 (또는 그 안) 에 이미 켜진 세션이 있으면 "이미 출근했어요. 하나 더 켤까요?" 를 묻습니다.
 
+### 알려진 한계
+- 권한을 허락한 뒤 다음 소식이 올 때까지 (긴 명령이면 몇 분) '답 기다림' 으로 보일 수 있어요. Claude Code 가 "허락됨" 소식을 따로 주지 않아서입니다.
+
 ### 직접 빌드
 Xcode 16 이상, macOS 13 이상.
 
@@ -121,6 +124,9 @@ Turn off or remove `agent-overtime` with `/plugin` in Claude Code. The app never
 - The setup sheet is the confirmation: folder and each argument on their own line, never truncated, hidden characters spelled out (e.g. `⟨U+200B⟩`).
 - The approved fingerprint lives outside the config file; if `config.json` changes outside the app, the next start shows the command again for confirmation.
 - The command is written as a single-quoted `.command` file (0700, deletes itself first) and opened by Terminal. The app never adds options to your command.
+
+### Known limitations
+- After you allow a permission, a session can keep showing "Waiting" until its next event (a few minutes for a long command), because Claude Code sends no separate "allowed" event.
 
 ### Build it yourself
 Xcode 16+, macOS 13+. See the commands in the Korean section above.
