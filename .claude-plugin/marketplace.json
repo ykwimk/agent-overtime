@@ -1,0 +1,12 @@
+{
+  "name": "agent-overtime",
+  "description": "Agent Overtime: a pixel office for your coding agent sessions",
+  "owner": { "name": "Agent Overtime contributors" },
+  "plugins": [
+    {
+      "name": "agent-overtime",
+      "source": "./plugin",
+      "description": "Tells the Agent Overtime Mac app when your sessions work, wait, rest or end. Local only."
+    }
+  ]
+}
