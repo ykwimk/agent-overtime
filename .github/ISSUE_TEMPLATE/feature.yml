@@ -1,0 +1,14 @@
+name: Feature idea
+description: Something you'd like the app to do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: English or Korean are both fine (한국어로 써도 돼요). The roadmap is at the end of the README.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to do?
+      description: The situation you're in, what you'd like the app to do, and what you do today instead.
+    validations:
+      required: true

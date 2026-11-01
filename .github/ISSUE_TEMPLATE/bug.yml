@@ -1,0 +1,48 @@
+name: Bug report
+description: Something doesn't work the way the README says
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        English or Korean are both fine (한국어로 써도 돼요). Please leave out prompts, file paths or anything else
+        you'd rather keep private. Security problems go to
+        [private vulnerability reporting](https://github.com/ykwimk/agent-overtime/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you saw instead. Screenshots help.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install the app?
+      options:
+        - Homebrew (brew install --cask)
+        - .dmg from Releases
+        - Built it myself
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: App version
+      description: Settings > About > Version
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu > About This Mac
+    validations:
+      required: true
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code version
+      description: The output of `claude --version`
+    validations:
+      required: true
