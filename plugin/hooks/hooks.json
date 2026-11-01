@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "PreToolUse": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "PermissionRequest": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "Notification": [
+      { "matcher": "permission_prompt|idle_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+        "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "SubagentStop": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "timeout": 1, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ]
+  }
+}
