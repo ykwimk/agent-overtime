@@ -30,9 +30,11 @@ final class Stage: ObservableObject {
     /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
     private var generation = 0
 
-    /// Pixels a second; long routes walk faster so nobody takes more than `longest` seconds.
-    private static let speed = 90.0
-    private static let longest = 2.5
+    /// Pixels a second, the same on every route: about 4.7 s from the door to the far desk of the default window
+    /// (702 px), about 1.1 s to the nearest.
+    static let speed = 150.0
+    /// Pixels walked per frame of the six-frame walk, so the feet keep pace with the floor (12.5 frames a second).
+    private static let stride = 12.0
 
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.
     func sync(_ office: OfficeState, width: Int, now: Date, animate: Bool) -> (pods: [Pod], layout: RoomLayout) {
@@ -71,13 +73,10 @@ final class Stage: ObservableObject {
     }
 
     private func walk(_ look: Look, _ route: [(x: Int, y: Int)], _ now: Date, _ leaving: Bool) -> Walk {
-        let length = Self.length(route)
-        return Walk(
-            look: look, route: route, start: now, duration: min(Self.longest, max(1, length / Self.speed)),
-            leaving: leaving)
+        Walk(look: look, route: route, start: now, duration: Self.length(route) / Self.speed, leaving: leaving)
     }
 
-    private static func length(_ route: [(x: Int, y: Int)]) -> Double {
+    static func length(_ route: [(x: Int, y: Int)]) -> Double {
         zip(route, route.dropFirst()).reduce(0) { $0 + hypot(Double($1.1.x - $1.0.x), Double($1.1.y - $1.0.y)) }
     }
 
@@ -113,7 +112,7 @@ final class Stage: ObservableObject {
             }
             let door = walk.route[0]
             if abs(point.x - door.x) + abs(point.y - door.y) < 30 { doorOpen = true }
-            let step = Int((max(0, elapsed) / walk.duration * total / 5).rounded(.down))
+            let step = Int((max(0, elapsed) / walk.duration * total / Self.stride).rounded(.down))
             walkers.append(Walker(look: walk.look, x: point.x, y: point.y, facing: facing, step: step))
         }
         return (walkers, away, doorOpen)
@@ -292,7 +291,8 @@ private struct Tag<Content: View>: View {
 
 /// The office picture at a whole-number scale, sharp: the GPU scales it with nearest-neighbour sampling.
 /// It keeps its own clock, so SwiftUI only touches it when the office changes. Between changes it redraws
-/// itself: about 12 times a second while someone walks, 2.5 times a second otherwise, every 30 s with Reduce
+/// itself: 60 times a second while someone walks (2.5 art pixels a frame), 2.5 times a
+/// second otherwise, every 30 s with Reduce
 /// Motion, and not at all while its window is hidden or minimized (the app stays open all day).
 struct OfficePicture: NSViewRepresentable {
     let stage: Stage
@@ -372,7 +372,7 @@ struct OfficePicture: NSViewRepresentable {
 
             let visible = window?.occlusionState.contains(.visible) ?? false
             guard settings.fixedNow == nil, window != nil, visible || settings.ticksWhileHidden else { return }
-            let interval = now < settings.stage.busyUntil ? 1.0 / 12 : (settings.reduceMotion ? 30 : 0.4)
+            let interval = now < settings.stage.busyUntil ? 1.0 / 60 : (settings.reduceMotion ? 30 : 0.4)
             let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in self?.refresh() }
             timer.tolerance = interval / 10
             // Common modes: keep moving while the room is scrolled.

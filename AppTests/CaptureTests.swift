@@ -89,8 +89,8 @@ final class CaptureTests: XCTestCase {
         _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 3, animate: true)
         leaving.receive(
             HookEvent(kind: .sessionEnd, session: "demo-b1", cwd: FakeScenario.root + "/my-project"),
-            at: today(14) - 1.1)
-        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.1, animate: true)
+            at: today(14) - 1.7)
+        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.7, animate: true)
         try capture(
             "office-leaving", size: OfficeView.minSize,
             OfficeView(fixedNow: today(14), stage: leavingStage).environmentObject(leaving))
@@ -157,6 +157,13 @@ final class CaptureTests: XCTestCase {
                 "readme-\(time)", size: CGSize(width: OfficeView.defaultSize.width, height: 860),
                 OfficeView(fixedNow: today(hour), stage: stage).environmentObject(model))
         }
+    }
+
+    /// One walking speed: the far desk of the default window is 4 to 5 seconds from the door.
+    func testFarDeskWalkTakesFourToFiveSeconds() {
+        let room = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
+        let seconds = Stage.length(room.route(pod: 3, desk: 3)) / Stage.speed
+        XCTAssertTrue((4...5).contains(seconds), "\(seconds)")
     }
 
     /// Four pods fit the default window under the real top bar, with no scrolling.
@@ -288,6 +295,12 @@ final class CaptureTests: XCTestCase {
 
         let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
+        // The far desk's teammate leaves: 4.7 s of walking to the door, drawn 60 times a second.
+        model.receive(
+            HookEvent(
+                kind: .subagentStop, session: "cpu-3", cwd: FakeScenario.root + "/cpu-3", agentID: "cpu-3-2",
+                agentType: "Explore"))
+        let walking = percent(over: 4) - idle
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
         let asleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
@@ -309,9 +322,9 @@ final class CaptureTests: XCTestCase {
         let office = total - idle
         let line = String(
             format:
-                "CPU, 4 pods x 4 desks working (window visible=%@, locked=%@, display asleep=%@): office %.2f%% "
-                + "(process %.2f%% - idle %.2f%%); one picture: night %.2f ms, day %.2f ms\n",
-            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, renderMs, dayMs)
+                "CPU, 4 pods x 4 desks working (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
+                + "(process %.2f%% - idle %.2f%%); walking: office %.2f%%; one picture: night %.2f ms, day %.2f ms\n",
+            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, walking, renderMs, dayMs)
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
         XCTAssertLessThan(office, 5)
