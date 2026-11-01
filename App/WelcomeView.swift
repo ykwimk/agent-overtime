@@ -154,9 +154,12 @@ struct OfficeSlice: View {
         let scene = OfficeScene(
             layout: RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1),
             height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: 0, frame: 0, now: now)
+        let density = CGFloat(OfficeRenderer.density)
+        let pixels = CGRect(
+            x: crop.minX * density, y: crop.minY * density, width: crop.width * density, height: crop.height * density)
         return ZStack(alignment: .topLeading) {
-            if let image = OfficeRenderer().render(scene)?.cropping(to: crop) {
-                Image(decorative: image, scale: 1 / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)
+            if let image = OfficeRenderer().render(scene)?.cropping(to: pixels) {
+                Image(decorative: image, scale: density / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)
             }
             PodTags(pod: pods[0], now: now).offset(
                 x: CGFloat(4 * scale), y: CGFloat((RoomLayout.firstRow - top) * scale))

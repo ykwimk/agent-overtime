@@ -13,11 +13,25 @@ final class ArtStore {
         folder = bundle.resourceURL?.appendingPathComponent("Art")
     }
 
-    func cell(_ path: String, _ x: Int, _ y: Int, _ width: Int, _ height: Int) -> CGImage? {
-        let key = "\(path)#\(x),\(y),\(width),\(height)"
+    /// A cell of a sheet, enlarged `scale` times without smoothing. The office keeps its cells at its own
+    /// density, so drawing one copies pixels one to one instead of scaling every frame.
+    func cell(_ path: String, _ x: Int, _ y: Int, _ width: Int, _ height: Int, scale: Int = 1) -> CGImage? {
+        let key = "\(path)#\(x),\(y),\(width),\(height)x\(scale)"
         if let cell = cells[key] { return cell }
-        guard let sheet = sheet(path), let cell = sheet.cropping(to: CGRect(x: x, y: y, width: width, height: height))
+        guard let sheet = sheet(path), var cell = sheet.cropping(to: CGRect(x: x, y: y, width: width, height: height))
         else { return nil }
+        if scale > 1 {
+            guard
+                let context = CGContext(
+                    data: nil, width: width * scale, height: height * scale, bitsPerComponent: 8, bytesPerRow: 0,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return nil }
+            context.interpolationQuality = .none
+            context.draw(cell, in: CGRect(x: 0, y: 0, width: width * scale, height: height * scale))
+            guard let large = context.makeImage() else { return nil }
+            cell = large
+        }
         cells[key] = cell
         return cell
     }
@@ -152,8 +166,12 @@ struct OfficeScene {
     static func mateLook(_ mate: Teammate, desk: Int) -> Look { Look.pick("\(mate.name ?? "helper") \(desk)") }
 }
 
-/// Draws the office into one bitmap at art resolution; the view shows it at exactly 2 points per pixel.
+/// Draws the office into one bitmap, in art-pixel coordinates at `density` bitmap pixels per art pixel, so
+/// the view shows one bitmap pixel per point. People are drawn at 1.5 art pixels per pixel, which still
+/// lands on whole bitmap pixels.
 struct OfficeRenderer {
+    static let density = RoomLayout.pointsPerPixel
+
     private enum Sheet {
         static let floor = "Structure/Floor/Wood Floor A.png"
         static let wall = "Structure/Walls/Painted Walls.png"
@@ -170,16 +188,22 @@ struct OfficeRenderer {
     private let art = ArtStore.shared
 
     func render(_ scene: OfficeScene) -> CGImage? {
-        Self.picture(width: scene.layout.width, height: scene.height, art: art) { $0.draw(scene) }
+        Self.picture(width: scene.layout.width, height: scene.height, density: Self.density, art: art) {
+            $0.draw(scene)
+        }
     }
 
-    /// A new bitmap at art resolution, painted in top-left pixel coordinates.
-    private static func picture(width: Int, height: Int, art: ArtStore, _ paint: (inout Canvas) -> Void) -> CGImage? {
+    /// A new bitmap `density` times the art size, painted in top-left art-pixel coordinates. Pictures reused
+    /// inside the office (the empty room, glows, night views) stay at 1 and are scaled up without smoothing.
+    private static func picture(
+        width: Int, height: Int, density: Int = 1, art: ArtStore, _ paint: (inout Canvas) -> Void
+    ) -> CGImage? {
         guard width > 0, height > 0,
             let context = CGContext(
-                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                data: nil, width: width * density, height: height * density, bitsPerComponent: 8, bytesPerRow: 0,
                 space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return nil }
+        context.scaleBy(x: CGFloat(density), y: CGFloat(density))
         context.interpolationQuality = .none
         context.setShouldAntialias(false)
         var canvas = Canvas(context: context, height: height, art: art)
@@ -227,8 +251,15 @@ struct OfficeRenderer {
         // MARK: primitives
 
         func image(_ image: CGImage?, _ x: Int, _ y: Int, mirrored: Bool = false) {
+            self.image(image, CGFloat(x), CGFloat(y), mirrored: mirrored)
+        }
+
+        /// `pixel` is how many art pixels one pixel of the image covers.
+        func image(_ image: CGImage?, _ x: CGFloat, _ y: CGFloat, pixel: CGFloat = 1, mirrored: Bool = false) {
             guard let image else { return }
-            let rect = CGRect(x: x, y: height - y - image.height, width: image.width, height: image.height)
+            let w = CGFloat(image.width) * pixel
+            let h = CGFloat(image.height) * pixel
+            let rect = CGRect(x: x, y: CGFloat(height) - y - h, width: w, height: h)
             guard mirrored else { return context.draw(image, in: rect) }
             context.saveGState()
             context.translateBy(x: rect.minX + rect.maxX, y: 0)
@@ -240,7 +271,10 @@ struct OfficeRenderer {
         func sprite(
             _ sheet: String, _ sx: Int, _ sy: Int, _ w: Int, _ h: Int, _ x: Int, _ y: Int, mirrored: Bool = false
         ) {
-            image(art.cell(sheet, sx, sy, w, h), x, y, mirrored: mirrored)
+            let density = OfficeRenderer.density
+            image(
+                art.cell(sheet, sx, sy, w, h, scale: density), CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(density),
+                mirrored: mirrored)
         }
 
         func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ hex: UInt32, _ alpha: CGFloat = 1) {
@@ -260,10 +294,17 @@ struct OfficeRenderer {
                 colors: [color(hex, alpha), color(hex, alpha * 0.35), color(hex, 0)] as CFArray, locations: [0, 0.4, 1])
         }
 
+        /// A picture kept at the office's own density, so stamping it copies pixels one to one.
+        func stamp(_ picture: CGImage?, _ x: Int, _ y: Int) {
+            image(picture, CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(OfficeRenderer.density))
+        }
+
         /// A soft round light, drawn once per colour and strength and then stamped where it shines.
         func glow(_ hex: UInt32, _ alpha: CGFloat, radius: Int) -> CGImage? {
             art.picture("glow \(hex) \(Int(alpha * 100)) \(radius)") { [art] in
-                OfficeRenderer.picture(width: radius * 2, height: radius * 2, art: art) { canvas in
+                OfficeRenderer.picture(
+                    width: radius * 2, height: radius * 2, density: OfficeRenderer.density, art: art
+                ) { canvas in
                     guard let gradient = Self.gradient(hex, alpha) else { return }
                     let center = CGPoint(x: radius, y: radius)
                     canvas.context.drawRadialGradient(
@@ -289,13 +330,14 @@ struct OfficeRenderer {
             let height = self.height
             let plan = OfficeRenderer.wallPlan(width: width)
             let room = art.picture("room \(width)x\(height) open:\(scene.doorOpen)") { [art] in
-                OfficeRenderer.picture(width: width, height: height, art: art) { room in
+                OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
+                    room in
                     room.floor(width: width)
                     room.wall(width: width, plan: plan)
                     room.door(open: scene.doorOpen)
                 }
             }
-            image(room, 0, 0)
+            stamp(room, 0, 0)
             clock(center: (123, 21), scene.now, scene.calendar)
             props(scene)
             for (index, pod) in scene.pods.enumerated() {
@@ -603,11 +645,13 @@ struct OfficeRenderer {
             context.setAlpha(d)
             for (index, pane) in glass.enumerated() {
                 let view = art.picture("night \(index)") { [art] in
-                    OfficeRenderer.picture(width: Int(pane.width), height: Int(pane.height), art: art) {
+                    OfficeRenderer.picture(
+                        width: Int(pane.width), height: Int(pane.height), density: OfficeRenderer.density, art: art
+                    ) {
                         $0.nightView(CGRect(origin: .zero, size: pane.size), seed: index)
                     }
                 }
-                image(view, Int(pane.minX), Int(pane.minY))
+                stamp(view, Int(pane.minX), Int(pane.minY))
             }
             context.setAlpha(1)
 
@@ -615,10 +659,10 @@ struct OfficeRenderer {
             let screenLight = glow(0x7FB2FF, 0.55 * d, radius: 22)
             let pool = glow(0xFFB15C, 0.5 * d, radius: 46)
             let bulb = glow(0xFFE2A8, 0.6 * d, radius: 12)
-            for screen in screens { image(screenLight, screen.x - 22, screen.y - 22) }
+            for screen in screens { stamp(screenLight, screen.x - 22, screen.y - 22) }
             for lamp in lamps {
-                image(pool, lamp.x + 10 - 46, lamp.y + 26 - 46)
-                image(bulb, lamp.x, lamp.y)
+                stamp(pool, lamp.x + 10 - 46, lamp.y + 26 - 46)
+                stamp(bulb, lamp.x, lamp.y)
             }
             context.setBlendMode(.normal)
             context.setAlpha(d)

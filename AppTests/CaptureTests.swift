@@ -175,10 +175,17 @@ final class CaptureTests: XCTestCase {
                 }
             }
         }
+    }
+
+    /// The bitmap is twice as dense as the art, so the view shows one bitmap pixel per point: the room keeps
+    /// its size on screen.
+    func testOfficeBitmapIsOnePixelPerPoint() {
+        let layout = RoomLayout(points: OfficeView.defaultSize.width, podCount: 4)
         let image = OfficeRenderer().render(
-            OfficeScene(
-                layout: RoomLayout(width: 540, podCount: 0), height: 300, pods: [], darkness: 1, frame: 0, now: Date()))
-        XCTAssertEqual(image?.width, 540)
+            OfficeScene(layout: layout, height: 300, pods: [], darkness: 1, frame: 0, now: Date()))
+        XCTAssertEqual(layout.width * RoomLayout.pointsPerPixel, Int(OfficeView.defaultSize.width))
+        XCTAssertEqual(image?.width, Int(OfficeView.defaultSize.width))
+        XCTAssertEqual(image?.height, 300 * RoomLayout.pointsPerPixel)
     }
 
     /// Four pods, every desk working, the window on screen and ticking: how much CPU the office takes.
