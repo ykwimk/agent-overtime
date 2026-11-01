@@ -157,6 +157,37 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertTrue(office.desks.isEmpty)
     }
 
+    /// The order a real session sends (PostToolUse left out, the plugin does not ask for it): a question, then a
+    /// SubagentStop after Stop for an agent id never seen before, with no SubagentStart.
+    func testRealSessionOrderWithQuestionAndLateUnknownSubagentStops() {
+        var office = OfficeState()
+        office.apply(event(.sessionStart), now: t0)
+        office.apply(event(.userPromptSubmit), now: t0 + 1)
+        office.apply(event(.preToolUse, asks: true), now: t0 + 2)
+        office.apply(event(.permissionRequest), now: t0 + 3)
+        office.apply(event(.notification, notification: "permission_prompt"), now: t0 + 9)
+        XCTAssertEqual(office.desks[0].sessions[0].shown.state, .waiting, "asking")
+        XCTAssertEqual(office.desks[0].sessions[0].shown.since, t0 + 2, "minutes count from the question")
+
+        office.apply(event(.stop), now: t0 + 30)
+        XCTAssertEqual(office.desks[0].sessions[0].state, .resting)
+        office.apply(event(.subagentStop, agent: "unseen-1"), now: t0 + 33)
+        XCTAssertTrue(office.desks[0].teammates.isEmpty, "an unknown SubagentStop seats nobody")
+        XCTAssertEqual(office.desks[0].sessions[0].shown.state, .resting)
+        XCTAssertEqual(office.desks[0].sessions[0].since, t0 + 30, "and leaves the session alone")
+
+        office.apply(event(.userPromptSubmit), now: t0 + 40)
+        office.apply(event(.preToolUse), now: t0 + 41)
+        office.apply(event(.stop), now: t0 + 50)
+        office.apply(event(.subagentStop, agent: "unseen-2"), now: t0 + 51)
+        XCTAssertTrue(office.desks[0].teammates.isEmpty)
+        XCTAssertEqual(office.desks[0].sessions[0].state, .resting)
+        XCTAssertEqual(office.desks[0].sessions[0].since, t0 + 50)
+
+        office.apply(event(.sessionEnd), now: t0 + 60)
+        XCTAssertTrue(office.desks[0].isOff, "off duty")
+    }
+
     func testDeadProcessEndsTheSession() {
         var office = OfficeState()
         office.apply(event(.sessionStart, "s1", pid: 10), now: t0)
