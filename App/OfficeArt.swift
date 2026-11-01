@@ -10,6 +10,11 @@ final class ArtStore {
     private var cells: [String: CGImage] = [:]
     private var pictures: [String: CGImage] = [:]
 
+    /// The screen's own colour space and pixel order (premultiplied BGRA). The office picture and its cells are
+    /// kept in them, so colours are matched once per cell instead of once per frame when the window shows it.
+    static let screenSpace = NSScreen.main?.colorSpace?.cgColorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
+    static let screenFormat = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+
     init(bundle: Bundle = .main) {
         folder = bundle.resourceURL?.appendingPathComponent("Art")
     }
@@ -25,8 +30,8 @@ final class ArtStore {
             guard
                 let context = CGContext(
                     data: nil, width: width * scale, height: height * scale, bitsPerComponent: 8, bytesPerRow: 0,
-                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                    space: ArtStore.screenSpace,
+                    bitmapInfo: ArtStore.screenFormat)
             else { return nil }
             context.interpolationQuality = .none
             context.draw(cell, in: CGRect(x: 0, y: 0, width: width * scale, height: height * scale))
@@ -234,7 +239,7 @@ struct OfficeRenderer {
         guard width > 0, height > 0,
             let context = CGContext(
                 data: nil, width: width * density, height: height * density, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+                space: ArtStore.screenSpace, bitmapInfo: ArtStore.screenFormat)
         else { return nil }
         context.scaleBy(x: CGFloat(density), y: CGFloat(density))
         context.interpolationQuality = .none
