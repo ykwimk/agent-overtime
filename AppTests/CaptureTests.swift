@@ -336,6 +336,46 @@ final class CaptureTests: XCTestCase {
         }
     }
 
+    /// A desk prop goes by the folder's name for a session (its second session and the seat it went home from
+    /// get the same one) and by the name for a teammate. Different names get different props, and every prop's
+    /// picture is in the bundle.
+    func testDeskPropsGoByFolderAndName() throws {
+        var office = OfficeState()
+        let folder = FakeScenario.root + "/my-project"
+        for session in ["a", "b", "c"] {
+            office.apply(HookEvent(kind: .userPromptSubmit, session: session, cwd: folder), now: today(14))
+            office.apply(
+                HookEvent(
+                    kind: .subagentStart, session: session, cwd: folder, agentID: session + "1", agentType: "Plan"),
+                now: today(14))
+        }
+        office.apply(HookEvent(kind: .sessionEnd, session: "a", cwd: folder), now: today(14))
+        let seats = office.pods.flatMap(\.seats).compactMap { $0 }
+        XCTAssertEqual(seats.count, 5, "a's teammate left with it; a's seat stays, faded")
+        let props = { (wanted: (Seat) -> Bool) in Set(seats.filter(wanted).map(OfficeScene.prop)) }
+        let sessions = props {
+            switch $0 {
+            case .session, .off: return true
+            case .teammate: return false
+            }
+        }
+        XCTAssertEqual(sessions.count, 1, "my-project 2, my-project 3 and the seat my-project left")
+        XCTAssertEqual(
+            props { if case .teammate = $0 { return true } else { return false } }.count, 1, "Plan 2, Plan 3")
+        let names = ["my-project", "web-app", "blog", "api", "Explore", "Plan", "code-reviewer", "helper"]
+        XCTAssertGreaterThanOrEqual(Set(names.map(Prop.pick)).count, 4, "the example names don't all match")
+
+        let store = ArtStore()
+        for (sheet, x, y) in [
+            ("Objects/Small Items/Lighting, Table.png", 224, 32), ("Objects/Small Items/Lighting, Table.png", 192, 32),
+            ("Objects/Small Items/Lighting, Table.png", 160, 32), ("Objects/Small Items/Lighting, Table.png", 128, 32),
+            ("Objects/Furniture/Planter.png", 128, 0), ("Objects/Small Items/Laptop.png", 64, 0),
+            ("Objects/Small Items/Laptop.png", 64, 96),
+        ] {
+            XCTAssertNotNil(store.cell(sheet, x, y, 32, 32), "\(sheet) \(x),\(y)")
+        }
+    }
+
     /// The bitmap is twice as dense as the art, so the view shows one bitmap pixel per point: the room keeps
     /// its size on screen.
     func testOfficeBitmapIsOnePixelPerPoint() {

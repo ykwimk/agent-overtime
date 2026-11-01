@@ -152,6 +152,16 @@ struct Look: Equatable {
     var layers: [Layer] { [Layer(sheet: Self.body, row: skin), clothes, hair] }
 }
 
+/// What stands on a desk beside the laptop. A name always gets the same one, picked like `Look.pick`: a session
+/// by its folder's name, a teammate by its own name.
+enum Prop: CaseIterable {
+    case lamp, shade, flowers, laptop, none
+
+    static func pick(_ seed: String) -> Prop {
+        allCases[Int(Look.stableHash("prop " + seed) % UInt32(allCases.count))]
+    }
+}
+
 /// The symbol in a speech bubble above a head.
 enum Mark {
     case dots, bang, zzz
@@ -228,6 +238,20 @@ struct OfficeScene {
         case .session(let session, _): return session.state
         case .teammate(let mate, _): return mate.state
         case .off: return nil
+        }
+    }
+
+    /// A session's prop goes by its folder's name (without the number), and stays on its desk after it went home.
+    static func prop(_ seat: Seat) -> Prop {
+        switch seat {
+        case .session(let session, _):
+            let suffix = session.number > 1 ? " \(session.number)".count : 0
+            return Prop.pick(String(session.name.dropLast(suffix)))
+        case .teammate(let mate, _):
+            return Prop.pick(mate.name ?? "helper")
+        case .off(_, let folder):
+            let last = (folder as NSString).lastPathComponent
+            return Prop.pick(last.isEmpty ? folder : last)
         }
     }
 }
@@ -499,6 +523,7 @@ struct OfficeRenderer {
             for seat in [1, 3] {
                 sprite(Sheet.desk, 67, 80, RoomLayout.deskWidth, 16, x0 + RoomLayout.deskX(seat), far)
             }
+            let lit = scene.darkness > 0
             for seat in [1, 3] {
                 let cx = x0 + RoomLayout.personX(seat)
                 // The back of the open laptop (the closed lid, standing), its logo lit while the screen is on.
@@ -508,6 +533,10 @@ struct OfficeRenderer {
                     pools.append((cx - 3, far - 4))
                 } else if wentHome[seat] {
                     sprite(Sheet.laptop, 0, 96, 32, 32, cx - 15, far - 4)
+                }
+                if let occupant = pod.seats[seat] {
+                    let x = x0 + RoomLayout.deskX(seat)
+                    prop(OfficeScene.prop(occupant), x: x, base: far + 6, across: true, lit: lit && here[seat] != nil)
                 }
             }
 
@@ -524,6 +553,11 @@ struct OfficeRenderer {
                     if person.state != .resting { screens.append((dx + 18, near + 2)) }
                     if person.state == .working { typing(dx + 2, near - 8, frame: scene.frame + seat) }
                     pools.append((dx + 44, near + 21))
+                }
+                if let occupant = pod.seats[seat] {
+                    prop(
+                        OfficeScene.prop(occupant), x: dx, base: near + 17, across: false, lit: lit && here[seat] != nil
+                    )
                 }
             }
             for seat in [0, 2] {
@@ -549,6 +583,37 @@ struct OfficeRenderer {
                 } else {
                     marks.append((Mark(person.state), cx, near + 8 - hop))
                 }
+            }
+        }
+
+        /// A desk prop: on a near desk right of the person, across the desks left of the person. A lamp is off by
+        /// day and where nobody works; at night it is drawn again, lit, over the dark.
+        private mutating func prop(_ prop: Prop, x dx: Int, base: Int, across: Bool, lit: Bool) {
+            switch prop {
+            case .lamp:
+                let x = across ? dx : dx + 34
+                sprite(Sheet.lamp, 224, 32, 32, 32, x, base - 22, mirrored: !across)
+                if lit {
+                    litLamps.append((192, x, base - 22, !across))
+                    bulbs.append(across ? (x + 17, base - 17) : (x + 12, base - 10))
+                }
+            case .shade:
+                let x = across ? dx + 1 : dx + 38
+                sprite(Sheet.lamp, 160, 32, 32, 32, x, base - 28)
+                if lit {
+                    litLamps.append((128, x, base - 28, false))
+                    bulbs.append((x + 12, base - 18))
+                }
+            case .flowers:
+                sprite(Sheet.planter, 128, 0, 32, 32, across ? dx - 1 : dx + 34, base - 31)
+            case .laptop:
+                if across {
+                    sprite(Sheet.laptop, 64, 96, 32, 32, dx - 4, base - 12)
+                } else {
+                    sprite(Sheet.laptop, 64, 0, 32, 32, dx + 36, base - 25)
+                }
+            case .none:
+                break
             }
         }
 
