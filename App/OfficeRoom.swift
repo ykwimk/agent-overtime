@@ -118,19 +118,39 @@ final class Stage: ObservableObject {
         return (walkers, away, doorOpen)
     }
 
-    private var last: (key: String, image: CGImage?)?
+    /// The room without walkers, and a piece of the finished picture around each walker.
+    typealias Picture = (room: CGImage?, walkers: [(box: CGRect, image: CGImage?)])
 
-    /// The office at `now`. A tick can draw the view twice; the second time reuses the first picture.
-    func picture(at now: Date, frame: Int, height: Int, reduceMotion: Bool) -> CGImage? {
+    private var last: (key: String, picture: Picture)?
+    private var room: (key: String, image: CGImage?)?
+
+    /// The office at `now`. The room is drawn again only when it changes (the 2.5-a-second frame, the clock's
+    /// minute, the light, the door, someone sitting down); each frame of a walk draws only the walkers' boxes.
+    /// A box is the whole office drawn inside it, so a walker stays under the night light and behind lit lamps
+    /// and bubbles exactly as in one picture. A tick can draw the view twice; the second time reuses the first.
+    func picture(at now: Date, frame: Int, height: Int, reduceMotion: Bool) -> Picture {
         let key = "\(now.timeIntervalSinceReferenceDate) \(frame) \(height) \(layout.width) \(generation)"
-        if let last, last.key == key { return last.image }
+        if let last, last.key == key { return last.picture }
         let moment = moment(at: now)
-        let image = OfficeRenderer().render(
-            OfficeScene(
-                layout: layout, height: height, pods: pods, darkness: Daylight.darkness(at: now), frame: frame,
-                now: now, walkers: moment.walkers, away: moment.away, doorOpen: moment.doorOpen && !reduceMotion))
-        last = (key, image)
-        return image
+        // Rounded so the room and the boxes, drawn at different moments, share one light.
+        let darkness = (Daylight.darkness(at: now) * 100).rounded() / 100
+        var scene = OfficeScene(
+            layout: layout, height: height, pods: pods, darkness: darkness, frame: frame, now: now,
+            away: moment.away, doorOpen: moment.doorOpen && !reduceMotion)
+        let minute = Int(now.timeIntervalSinceReferenceDate / 60)
+        let roomKey =
+            "\(frame) \(minute) \(darkness) \(scene.doorOpen) \(moment.away.sorted()) \(height) \(layout.width) "
+            + "\(generation)"
+        if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
+        scene.walkers = moment.walkers
+        let bounds = CGRect(x: 0, y: 0, width: layout.width, height: height)
+        let walkers = moment.walkers.map { walker -> (box: CGRect, image: CGImage?) in
+            let box = walker.box.intersection(bounds)
+            return (box, box.isEmpty ? nil : OfficeRenderer().render(scene, crop: box))
+        }
+        let picture = (room?.image, walkers)
+        last = (key, picture)
+        return picture
     }
 }
 
@@ -138,16 +158,20 @@ final class Stage: ObservableObject {
 /// each desk. Pods fill rows from the door; more pods add rows and the room scrolls.
 struct OfficeRoom: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReducesMotion
     @StateObject private var stage: Stage
     /// Screenshots pin the clock; the frame then stays at 0.
     let fixedNow: Date?
     /// Only the CPU test sets this: its window may open behind a full-screen app, where nothing would tick.
     let ticksWhileHidden: Bool
+    /// Only the CPU test sets this, to measure Reduce Motion without changing the Mac's setting.
+    let reducesMotion: Bool
+    private var reduceMotion: Bool { systemReducesMotion || reducesMotion }
 
-    init(fixedNow: Date? = nil, stage: Stage? = nil, ticksWhileHidden: Bool = false) {
+    init(fixedNow: Date? = nil, stage: Stage? = nil, ticksWhileHidden: Bool = false, reducesMotion: Bool = false) {
         self.fixedNow = fixedNow
         self.ticksWhileHidden = ticksWhileHidden
+        self.reducesMotion = reducesMotion
         _stage = StateObject(wrappedValue: stage ?? Stage())
     }
 
@@ -318,9 +342,9 @@ private struct Tag<Content: View>: View {
 
 /// The office picture at a whole-number scale, sharp: the GPU scales it with nearest-neighbour sampling.
 /// It keeps its own clock, so SwiftUI only touches it when the office changes. Between changes it redraws
-/// itself: 60 times a second while someone walks (2.5 art pixels a frame), 2.5 times a
-/// second otherwise, every 30 s with Reduce
-/// Motion, and not at all while its window is hidden or minimized (the app stays open all day).
+/// itself: 60 times a second while someone walks (2.5 art pixels a frame; only the walkers' boxes, laid over the
+/// room as small layers), 2.5 times a second otherwise, every 30 s with Reduce Motion, and not at all while its
+/// window is hidden or minimized (the app stays open all day).
 struct OfficePicture: NSViewRepresentable {
     let stage: Stage
     let height: Int
@@ -337,7 +361,9 @@ struct OfficePicture: NSViewRepresentable {
 
     final class PictureView: NSView {
         var settings: OfficePicture?
-        private var image: CGImage?
+        private var picture: Stage.Picture = (nil, [])
+        private var shownRoom: CGImage?
+        private var walkerLayers: [CALayer] = []
         private var timer: Timer?
         private var observer: NSObjectProtocol?
 
@@ -359,17 +385,49 @@ struct OfficePicture: NSViewRepresentable {
         override var isFlipped: Bool { true }
 
         override func updateLayer() {
-            layer?.contents = image
+            layer?.contents = picture.room
+            shownRoom = picture.room
+        }
+
+        /// Walker boxes are our own sublayers, moved without asking AppKit to display the window again.
+        private func placeWalkers() {
+            guard let layer else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            while walkerLayers.count < picture.walkers.count {
+                let walker = CALayer()
+                walker.magnificationFilter = .nearest
+                walker.contentsGravity = .resize
+                layer.addSublayer(walker)
+                walkerLayers.append(walker)
+            }
+            while walkerLayers.count > picture.walkers.count { walkerLayers.removeLast().removeFromSuperlayer() }
+            for (walker, piece) in zip(walkerLayers, picture.walkers) {
+                walker.contents = piece.image
+                walker.frame = convertToLayer(points(piece.box))
+            }
+            CATransaction.commit()
+        }
+
+        private func points(_ box: CGRect) -> CGRect {
+            let scale = CGFloat(RoomLayout.pointsPerPixel)
+            return CGRect(
+                x: box.minX * scale, y: box.minY * scale, width: box.width * scale, height: box.height * scale)
         }
 
         /// Used when the view is drawn into a bitmap (screenshots) instead of shown through its layer.
         override func draw(_ dirtyRect: NSRect) {
-            guard let image, let context = NSGraphicsContext.current?.cgContext else { return }
+            guard let room = picture.room, let context = NSGraphicsContext.current?.cgContext else { return }
             context.interpolationQuality = .none
             context.saveGState()
             context.translateBy(x: 0, y: bounds.height)
             context.scaleBy(x: 1, y: -1)
-            context.draw(image, in: bounds)
+            context.draw(room, in: bounds)
+            for piece in picture.walkers {
+                guard let image = piece.image else { continue }
+                let box = points(piece.box)
+                context.draw(image, in: box.offsetBy(dx: 0, dy: bounds.height - box.maxY - box.minY))
+            }
             context.restoreGState()
         }
 
@@ -393,9 +451,11 @@ struct OfficePicture: NSViewRepresentable {
             let now = settings.fixedNow ?? Date()
             let animated = settings.fixedNow == nil && !settings.reduceMotion
             let frame = animated ? Int(now.timeIntervalSinceReferenceDate / 0.4) : 0
-            image = settings.stage.picture(
+            picture = settings.stage.picture(
                 at: now, frame: frame, height: settings.height, reduceMotion: settings.reduceMotion)
-            needsDisplay = true
+            // The room changes a few times a second at most; a walk only moves the boxes.
+            if shownRoom !== picture.room { needsDisplay = true }
+            placeWalkers()
 
             let visible = window?.occlusionState.contains(.visible) ?? false
             guard settings.fixedNow == nil, window != nil, visible || settings.ticksWhileHidden else { return }

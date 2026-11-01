@@ -8,8 +8,9 @@ struct OfficeView: View {
     var fixedNow: Date?
     /// Screenshots can hand in a stage with someone already walking.
     var stage: Stage?
-    /// Only the CPU test sets this.
+    /// Only the CPU test sets these.
     var ticksWhileHidden = false
+    var reducesMotion = false
 
     static let defaultSize = CGSize(width: RoomLayout.defaultWindow.width, height: RoomLayout.defaultWindow.height)
     static let minSize = CGSize(width: RoomLayout.minWindow.width, height: RoomLayout.minWindow.height)
@@ -18,7 +19,10 @@ struct OfficeView: View {
         VStack(spacing: 0) {
             OfficeBar()
             Divider()
-            OfficeRoom(fixedNow: fixedNow, stage: stage, ticksWhileHidden: ticksWhileHidden).overlay { emptyMessage }
+            OfficeRoom(
+                fixedNow: fixedNow, stage: stage, ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion
+            )
+            .overlay { emptyMessage }
         }
         .frame(minWidth: Self.minSize.width, minHeight: Self.minSize.height)
         .sheet(item: $model.sheet) { sheet in

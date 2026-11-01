@@ -296,6 +296,53 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(image?.height, 300 * RoomLayout.pointsPerPixel)
     }
 
+    /// The room without walkers with each walker's box laid over it is the one picture, pixel for pixel: walkers
+    /// stay under the night light, behind lit lamps and bubbles, and the door opens for them.
+    func testWalkerBoxesOverTheRoomMakeTheSamePicture() throws {
+        for (hour, walked) in [(22, 0.1), (22, 0.9), (14, 1.5)] {
+            let now = today(hour)
+            let (model, stage) = scenario(at: now, walked: walked)
+            let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
+            let (pods, layout) = stage.sync(model.office, width: width, now: now, animate: true)
+            let height = layout.contentHeight + 20
+            let parts = stage.picture(at: now, frame: 3, height: height, reduceMotion: false)
+            XCTAssertFalse(parts.walkers.isEmpty)
+            let moment = stage.moment(at: now)
+            let scene = OfficeScene(
+                layout: layout, height: height, pods: pods,
+                darkness: (Daylight.darkness(at: now) * 100).rounded() / 100,
+                frame: 3, now: now, walkers: moment.walkers, away: moment.away, doorOpen: moment.doorOpen)
+            let whole = try XCTUnwrap(OfficeRenderer().render(scene))
+            func pixels(_ paint: (CGContext) throws -> Void) throws -> [UInt8] {
+                var bytes = [UInt8](repeating: 0, count: whole.width * whole.height * 4)
+                try bytes.withUnsafeMutableBytes { buffer in
+                    let context = try XCTUnwrap(
+                        CGContext(
+                            data: buffer.baseAddress, width: whole.width, height: whole.height, bitsPerComponent: 8,
+                            bytesPerRow: whole.width * 4, space: ArtStore.screenSpace,
+                            bitmapInfo: ArtStore.screenFormat))
+                    context.setBlendMode(.copy)
+                    try paint(context)
+                }
+                return bytes
+            }
+            let full = CGRect(x: 0, y: 0, width: whole.width, height: whole.height)
+            let density = CGFloat(OfficeRenderer.density)
+            let laid = try pixels { context in
+                context.draw(try XCTUnwrap(parts.room), in: full)
+                for piece in parts.walkers {
+                    let box = piece.box
+                    context.draw(
+                        try XCTUnwrap(piece.image),
+                        in: CGRect(
+                            x: box.minX * density, y: full.height - box.maxY * density, width: box.width * density,
+                            height: box.height * density))
+                }
+            }
+            XCTAssert(try laid == pixels { $0.draw(whole, in: full) }, "\(hour):00, \(walked) s in")
+        }
+    }
+
     /// Four pods, every desk working, the window on screen and ticking: how much CPU the office takes.
     func testCPUWithFourPodsWorking() throws {
         let model = makeModel(connected: true)
@@ -341,6 +388,32 @@ final class CaptureTests: XCTestCase {
                 kind: .subagentStop, session: "cpu-3", cwd: FakeScenario.root + "/cpu-3", agentID: "cpu-3-2",
                 agentType: "Explore"))
         let walking = percent(over: 4) - idle
+        // The walker still near the door, as the layers give it to the screen (screenshots use draw(_:)).
+        func picture(in view: NSView) -> NSView? {
+            view is OfficePicture.PictureView ? view : view.subviews.lazy.compactMap(picture).first
+        }
+        let layer = try XCTUnwrap(window.contentView.flatMap(picture)?.layer)
+        let rep = try XCTUnwrap(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(layer.bounds.width), pixelsHigh: Int(layer.bounds.height),
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                bytesPerRow: 0, bitsPerPixel: 0))
+        layer.render(in: try XCTUnwrap(NSGraphicsContext(bitmapImageRep: rep)).cgContext)
+        try rep.representation(using: .png, properties: [:])?.write(
+            to: out.appendingPathComponent("office-walking-layers.png"))
+        window.close()
+
+        // The same office with Reduce Motion: nobody walks, the picture ticks every 30 s.
+        let calm = NSWindow(
+            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled], backing: .buffered,
+            defer: false)
+        calm.isReleasedWhenClosed = false
+        calm.contentView = NSHostingView(
+            rootView: OfficeView(ticksWhileHidden: true, reducesMotion: true).environmentObject(model))
+        calm.orderFrontRegardless()
+        defer { calm.close() }
+        RunLoop.main.run(until: Date() + 3)
+        let reduced = percent(over: 10) - idle
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
         let asleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
@@ -358,13 +431,19 @@ final class CaptureTests: XCTestCase {
         let dayStart = Date()
         for _ in 0..<50 { _ = OfficeRenderer().render(day) }
         let dayMs = Date().timeIntervalSince(dayStart) / 50 * 1000
+        var passing = scene
+        passing.walkers = [Walker(look: Look.pick("box"), x: 200, y: 150, facing: .left, step: 0)]
+        let boxStart = Date()
+        for _ in 0..<50 { _ = OfficeRenderer().render(passing, crop: passing.walkers[0].box) }
+        let boxMs = Date().timeIntervalSince(boxStart) / 50 * 1000
 
         let office = total - idle
         let line = String(
             format:
                 "CPU, 4 pods x 4 desks working (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
-                + "(process %.2f%% - idle %.2f%%); walking: office %.2f%%; one picture: night %.2f ms, day %.2f ms\n",
-            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, walking, renderMs, dayMs)
+                + "(process %.2f%% - idle %.2f%%); walking: office %.2f%%; reduce motion: office %.2f%%; "
+                + "one picture: night %.2f ms, day %.2f ms; one walker box: night %.2f ms\n",
+            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, walking, reduced, renderMs, dayMs, boxMs)
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
         XCTAssertLessThan(office, 5)

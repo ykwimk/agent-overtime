@@ -184,6 +184,9 @@ struct Walker {
     let y: Int
     let facing: Facing
     let step: Int
+
+    /// What the walker and the shadow at their feet cover, in art pixels: one 32-pixel cell at 1.5.
+    var box: CGRect { CGRect(x: x - 24, y: y - 45, width: 48, height: 48) }
 }
 
 /// Everything one picture of the office needs. Sizes are art pixels.
@@ -229,8 +232,10 @@ struct OfficeRenderer {
 
     private let art = ArtStore.shared
 
-    func render(_ scene: OfficeScene) -> CGImage? {
-        Self.picture(width: scene.layout.width, height: scene.height, density: Self.density, art: art) {
+    /// The whole office, or only the part inside `crop` (whole art pixels), drawn exactly as it is there in the
+    /// whole picture.
+    func render(_ scene: OfficeScene, crop: CGRect? = nil) -> CGImage? {
+        Self.picture(width: scene.layout.width, height: scene.height, density: Self.density, crop: crop, art: art) {
             $0.draw(scene)
         }
     }
@@ -238,14 +243,18 @@ struct OfficeRenderer {
     /// A new bitmap `density` times the art size, painted in top-left art-pixel coordinates. Pictures reused
     /// inside the office (the empty room, glows, night views) stay at 1 and are scaled up without smoothing.
     private static func picture(
-        width: Int, height: Int, density: Int = 1, art: ArtStore, _ paint: (inout Canvas) -> Void
+        width: Int, height: Int, density: Int = 1, crop: CGRect? = nil, art: ArtStore,
+        _ paint: (inout Canvas) -> Void
     ) -> CGImage? {
-        guard width > 0, height > 0,
+        let area = crop ?? CGRect(x: 0, y: 0, width: width, height: height)
+        guard width > 0, height > 0, area.width > 0, area.height > 0,
             let context = CGContext(
-                data: nil, width: width * density, height: height * density, bitsPerComponent: 8, bytesPerRow: 0,
-                space: ArtStore.screenSpace, bitmapInfo: ArtStore.screenFormat)
+                data: nil, width: Int(area.width) * density, height: Int(area.height) * density, bitsPerComponent: 8,
+                bytesPerRow: 0, space: ArtStore.screenSpace, bitmapInfo: ArtStore.screenFormat)
         else { return nil }
         context.scaleBy(x: CGFloat(density), y: CGFloat(density))
+        // The canvas still paints the whole office; the bitmap keeps only `area` of it.
+        context.translateBy(x: -area.minX, y: area.maxY - CGFloat(height))
         context.interpolationQuality = .none
         context.setShouldAntialias(false)
         var canvas = Canvas(context: context, height: height, art: art)
@@ -388,8 +397,8 @@ struct OfficeRenderer {
             }
             for walker in scene.walkers.sorted(by: { $0.y < $1.y }) {
                 // The feet are 30 sheet pixels down the cell; the pack's shadow cell sits under them.
-                let x = CGFloat(walker.x) - 24
-                let y = CGFloat(walker.y) - 45
+                let x = walker.box.minX
+                let y = walker.box.minY
                 image(art.cell(Look.shadow, 0, 0, 32, 32, scale: Self.personScale), x, y, pixel: Self.bitmapPixel)
                 person(
                     walker.look, column: walker.facing.column + walker.step % 6, x, y, mirrored: walker.facing == .left)
