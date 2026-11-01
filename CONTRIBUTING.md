@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. Agent Overtime is maintained by one person; replies usually come within 3 days. English or Korean are both fine (한국어로 써도 돼요).
+Thanks for helping. Agent Overtime is maintained by one person; we'll reply as soon as we can. English or Korean are both fine (한국어로 써도 돼요).
 
 - Bugs and ideas: open an issue (there is a form for each). For a bigger change, please open an issue first so we agree on it before you write code.
 - Security problems: not in a public issue. See [SECURITY.md](SECURITY.md).
