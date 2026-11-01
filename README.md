@@ -53,6 +53,9 @@ Send Claude Code one message. A character walks in through the office door and s
 
 ## FAQ
 
+**Homebrew says "untrusted tap".**
+Run the install command again with the full name: `brew install --cask ykwimk/tap/agent-overtime`. With the full name, Homebrew trusts only this app, not the whole tap, and installs it.
+
 **My character doesn't show up.**
 Is agent-overtime turned on in Claude Code's `/plugin` list? Was the session already open (type `/reload-plugins` in it once)? Is the app in the Applications folder? Did you send Claude Code a message after installing?
 
