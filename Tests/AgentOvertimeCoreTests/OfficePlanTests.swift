@@ -90,6 +90,41 @@ final class OfficePlanTests: XCTestCase {
             MeetingRoom.columnDepth, "one island: the lounge still shows whole")
     }
 
+    /// The pots along the meeting room's glass keep clear of every walk to a seat, of the islands, and of the glass
+    /// door and the floor in front of it, at any window width with a right-hand column.
+    func testPlantersKeepWalksIslandsAndTheDoorClear() throws {
+        typealias Box = (x: Int, y: Int, width: Int, height: Int)
+        func overlap(_ a: Box, _ b: Box) -> Bool {
+            a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        }
+        for points in [Double(RoomLayout.defaultWindow.width), 1440, 2000] {
+            let layout = RoomLayout(points: points, slots: 9)
+            let room = try XCTUnwrap(layout.meetingRoom, "\(points)")
+            let pots = room.planters.map(MeetingRoom.footprint)
+            XCTAssertGreaterThanOrEqual(pots.count, 4)
+            var clear: [Box] = [
+                (
+                    room.left + MeetingRoom.doorX, MeetingRoom.front, MeetingRoom.doorWidth,
+                    room.doorstep.y + 8 - MeetingRoom.front
+                )
+            ]
+            for slot in 0..<9 {
+                let o = layout.origin(of: slot)
+                clear.append((o.x, o.y, RoomLayout.islandWidth, RoomLayout.islandDepth))
+                for seat in 0..<Island.size {
+                    let route = layout.route(slot: slot, seat: seat)
+                    // Each leg of a walk, as wide as the walker's feet and shadow.
+                    for (a, b) in zip(route, route.dropFirst()) {
+                        clear.append((min(a.x, b.x) - 8, min(a.y, b.y) - 2, abs(a.x - b.x) + 16, abs(a.y - b.y) + 4))
+                    }
+                }
+            }
+            for pot in pots {
+                for box in clear { XCTAssertFalse(overlap(pot, box), "\(points) pt: pot \(pot) blocks \(box)") }
+            }
+        }
+    }
+
     /// Every other row moves right, so islands don't line up; side by side and row to row, a tile stays clear.
     func testIslandsStaggerAndKeepATileClear() {
         let room = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)

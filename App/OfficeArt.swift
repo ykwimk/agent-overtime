@@ -526,6 +526,14 @@ struct OfficeRenderer {
             table(x0 + t.x, t.y, t.width, t.depth)
             for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 20) }
             glass(left: x0, right: right, doorOpen: doorOpen)
+            // Pots along the glass: a tall one left of the door, low ones taking turns to its right.
+            for (index, pot) in room.planters.enumerated() {
+                if index == 0 {
+                    sprite(Sheet.planter, 128, 32, 32, 64, pot.x - 16, pot.y - 47)
+                } else {
+                    sprite(Sheet.planter, index % 2 == 1 ? 96 : 128, 0, 32, 32, pot.x - 16, pot.y - 31)
+                }
+            }
         }
 
         /// The lounge under the meeting room, nobody in it: two loveseats facing each other on a rug, a coffee

@@ -169,4 +169,17 @@ public struct MeetingRoom {
 
     /// Just outside the glass door: where a walk to a meeting turns in.
     public var doorstep: (x: Int, y: Int) { (left + Self.doorX + Self.doorWidth / 2, Self.front + 10) }
+
+    /// Pots in a row along the front glass, one beside the door on each side and the door itself kept clear:
+    /// the middle of each pot's foot.
+    public var planters: [(x: Int, y: Int)] {
+        let foot = Self.front + 8
+        let right = left + Self.doorX + Self.doorWidth + 18
+        return [(left + 4, foot)] + (0..<5).map { (right + $0 * 30, foot) }
+    }
+
+    /// The floor a pot stands on, around the middle of its foot.
+    public static func footprint(_ pot: (x: Int, y: Int)) -> (x: Int, y: Int, width: Int, height: Int) {
+        (pot.x - 14, pot.y - 10, 28, 10)
+    }
 }
