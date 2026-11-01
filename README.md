@@ -25,9 +25,11 @@ Claude Code 세션을 여럿 돌릴 때 터미널을 하나씩 들여다보지 �
 - 책상 섬 하나 = 세션을 켠 폴더 하나 (이름표 = 폴더 이름). 같은 폴더의 두 번째 세션은 옆자리 "이름 2"
 - 서브에이전트는 그 섬의 팀원 (이름표 = 에이전트 이름, 이름 없는 기본 에이전트는 "도우미")
 - 메뉴바: 답 기다리는 세션이 있으면 `! 2` 처럼 바뀝니다
-- 출근 버튼 (선택): 등록한 폴더에서 등록한 명령 하나를 새 터미널 창으로 켭니다 (예: `claude`, 여러 세션을 켜는 내 스크립트 `./start.sh`)
+- 출근 버튼 (선택): 등록한 폴더에서 등록한 명령 하나를 새 터미널 창으로 켭니다 (예: `claude`, 여러 세션을 켜는 내 스크립트 `./run-agents.sh`)
 
 ### 설치
+첫 릴리스를 준비하고 있어요. 그 전까지는 아래 [직접 빌드](#직접-빌드) 로 앱을 만들어 써 볼 수 있어요.
+
 1. [Releases](https://github.com/ykwimk/agent-overtime/releases) 에서 `.dmg` 를 받아 `AgentOvertime.app` 을 **응용 프로그램** 폴더로 끕니다. 이름은 그대로 둡니다 (플러그인이 `/Applications/AgentOvertime.app` 또는 `~/Applications/AgentOvertime.app` 에서 앱을 찾습니다).
 2. 처음 열면 맥이 막습니다 (Apple 공증을 받지 않은 앱). **시스템 설정 > 개인정보 보호 및 보안** 맨 아래의 **Open Anyway (그래도 열기)** 를 누르고, 다시 뜨는 창에서 **열기**. macOS 13·14 는 Finder 에서 우클릭 > 열기 도 됩니다. macOS 15 부터는 시스템 설정 길 하나뿐입니다.
 3. 처음 여는 창의 **연결 명령 복사** 를 누르고, Claude Code 에 아래 두 줄을 붙여 넣습니다.
@@ -71,7 +73,9 @@ xcodebuild -project AgentOvertime.xcodeproj -scheme AgentOvertime -derivedDataPa
 swift run fake-events                        # 켜 둔 앱에 가짜 소식 보내기 (Claude Code 없이 네 상태 보기)
 ```
 
-### 남은 일 (v0.1 공개 전)
+만든 앱 `build/Build/Products/Release/AgentOvertime.app` 을 **응용 프로그램** 폴더 (또는 `~/Applications`) 로 옮긴 뒤, 위 설치 3단계부터 이어 갑니다. 플러그인은 이 두 곳에서만 앱을 찾습니다.
+
+### 남은 일 (첫 릴리스 전)
 - 실제 Claude Code 에 플러그인을 설치한 시험: 이벤트가 오는지, 퇴근 판정 (프로세스 번호) 이 맞는지
 - `.dmg`·ad-hoc 서명·`codesign --verify --deep --strict`·SHA-256, Apple 칩 맥 실기
 - 이 README 의 Open Anyway 캡처
@@ -96,6 +100,8 @@ No login. Everything stays on this Mac. Works with Claude Code. Not affiliated w
 - Start Work (optional): runs one command you register, in a folder you choose, in a new Terminal window.
 
 ### Install
+The first release is on its way. Until then, you can [build it yourself](#build-it-yourself).
+
 1. Download the `.dmg` from [Releases](https://github.com/ykwimk/agent-overtime/releases) and drag `AgentOvertime.app` into **Applications**. Keep its name: the plugin looks for `/Applications/AgentOvertime.app` or `~/Applications/AgentOvertime.app`.
 2. The first launch is blocked because the app is not notarized. Open **System Settings > Privacy & Security**, click **Open Anyway**, then **Open**. On macOS 13 and 14, right-click > Open in Finder also works; from macOS 15 the System Settings route is the only one.
 3. Click **Copy Connect Commands** in the first window and paste the two lines into Claude Code:
@@ -113,7 +119,7 @@ Turn off or remove `agent-overtime` with `/plugin` in Claude Code. The app never
 
 ### Privacy and security
 - The plugin's hooks (`plugin/hooks/hooks.json`, public in this repo) call a small helper inside the app, `agent-overtime-hook`.
-- The helper keeps only: event name, session id, folder path, subagent id and name, notification type, whether the tool is AskUserQuestion, and the Claude Code process id. Tool input, prompts, file contents and transcripts are discarded unread.
+- The helper keeps only: event name, session id, folder path, subagent id and name, notification type, whether the tool is AskUserQuestion, and the Claude Code process id. Tool input, prompts, file contents and transcripts are dropped right after parsing; they are never stored or sent.
 - The helper prints nothing (async hook output can reach the conversation) and always exits 0 within 0.5 s.
 - App and helper talk only over a unix socket that only your user can open (`~/Library/Application Support/AgentOvertime/events.sock`, folder 0700, file 0600). No network ports, nothing sent over the internet, no update checks, analytics or crash reports.
 - Incoming events only change the picture; nothing in them is ever executed.
@@ -130,6 +136,8 @@ Turn off or remove `agent-overtime` with `/plugin` in Claude Code. The app never
 
 ### Build it yourself
 Xcode 16+, macOS 13+. See the commands in the Korean section above.
+
+Move the built `build/Build/Products/Release/AgentOvertime.app` into **Applications** (or `~/Applications`), then continue from step 3 of Install. The plugin only looks for the app in those two places.
 
 ## License
 MIT. The pixel art is drawn in code for this app (MIT); no third-party art.
