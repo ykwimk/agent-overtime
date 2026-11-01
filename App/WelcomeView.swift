@@ -121,8 +121,9 @@ struct WelcomeView: View {
     }
 }
 
-/// A slice of the office with three example people: one working, a teammate waiting, a teammate resting.
-/// Always by day, whatever the clock says: the example is there to be seen clearly.
+/// A slice of the office with three example people: one working, a teammate waiting, a teammate resting, and a
+/// fourth on the way home, facing out, so the example shows a face too. Always by day, whatever the clock says:
+/// the example is there to be seen clearly.
 struct OfficeSlice: View {
     var now = Date()
 
@@ -151,9 +152,11 @@ struct OfficeSlice: View {
         let crop = CGRect(
             x: RoomLayout.lane - 4, y: top, width: RoomLayout.podWidth + 8,
             height: RoomLayout.firstRow + RoomLayout.podDepth - top)
+        let layout = RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1)
+        let leaving = layout.standPoint(pod: 0, desk: 3)
         let scene = OfficeScene(
-            layout: RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1),
-            height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: 0, frame: 0, now: now)
+            layout: layout, height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: 0, frame: 0,
+            now: now, walkers: [Walker(look: Look.all[1], x: leaving.x, y: leaving.y + 22, facing: .down, step: 1)])
         let density = CGFloat(OfficeRenderer.density)
         let pixels = CGRect(
             x: crop.minX * density, y: crop.minY * density, width: crop.width * density, height: crop.height * density)
