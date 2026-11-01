@@ -10,11 +10,9 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     }
 
-    static let artists = [
-        "Eliza Wyatt", "Lanea \"Sharm\" Zimmerman", "Stephen \"Redshrike\" Challener", "BlueCarrot16", "Durrani",
-        "BenCreating", "Thecilekli",
-    ]
+    static let artists = ["Eliza Wyatt", "Lanea \"Sharm\" Zimmerman"]
     static let artLicenseURL = URL(string: "https://static.opengameart.org/OGA-BY-3.0.txt")!
+    static let peopleURL = URL(string: "https://jik-a-4.itch.io/metrocity-free-topdown-character-pack")!
 
     /// Opens a text file from the app's Art folder in the default text app (nothing is written or sent).
     static func openBundled(_ name: String) {
@@ -113,7 +111,7 @@ struct SettingsView: View {
                 LabeledContent {
                     Text(verbatim: "LPC Revised")
                 } label: {
-                    Text("Art")
+                    Text("Room")
                 }
                 LabeledContent {
                     // No-break spaces inside each name, so lines only break after a comma.
@@ -130,8 +128,13 @@ struct SettingsView: View {
                 } label: {
                     Text("License")
                 }
+                LabeledContent {
+                    Link(destination: Self.peopleURL) { Text(verbatim: "MetroCity by JIK-A-4, CC0 1.0") }
+                } label: {
+                    Text("People")
+                }
                 Text(
-                    "The art is not MIT: it is OGA-BY 3.0, cropped and combined for this app. Each file's artists are in the credits."
+                    "The art is not MIT: the room is OGA-BY 3.0 and the people are CC0 1.0, cropped and combined for this app. Each file's artists are in the credits."
                 )
                 .fixedSize(horizontal: false, vertical: true)
                 .font(.callout).foregroundStyle(.secondary)

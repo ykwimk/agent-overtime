@@ -1,8 +1,13 @@
 Agent Overtime - Art license
 
-The image files in this folder (and its subfolders) come from LPC Revised
-by Eliza Wyatt and contributors (https://github.com/ElizaWy/LPC) and are
-licensed under the OpenGameArt.org Attribution 3.0 license (OGA-BY 3.0):
+The image files in this folder come from two packs, under two licenses.
+The MIT license in the repository's LICENSE file covers the code only, not
+these images. Who made each file, and where it came from, is listed in
+CREDITS.txt in this folder.
+
+1. Everything except the MetroCity folder comes from LPC Revised by Eliza
+Wyatt and contributors (https://github.com/ElizaWy/LPC) and is licensed
+under the OpenGameArt.org Attribution 3.0 license (OGA-BY 3.0):
 
   https://static.opengameart.org/OGA-BY-3.0.txt
 
@@ -10,6 +15,8 @@ OGA-BY 3.0 is based on Creative Commons Attribution 3.0 (CC-BY 3.0):
 
   https://creativecommons.org/licenses/by/3.0/legalcode
 
-Who made each file, and where it came from, is listed in CREDITS.txt in
-this folder. The MIT license in the repository's LICENSE file covers the
-code only, not these images.
+2. The MetroCity folder comes from the MetroCity Free Top Down Character
+Pack by JIK-A-4 (https://jik-a-4.itch.io/metrocity-free-topdown-character-pack),
+released under Creative Commons Zero v1.0 Universal (CC0 1.0):
+
+  https://creativecommons.org/publicdomain/zero/1.0/legalcode

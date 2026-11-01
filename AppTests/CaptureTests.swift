@@ -166,15 +166,27 @@ final class CaptureTests: XCTestCase {
         for name in ["CREDITS.txt", "LICENSE.txt"] {
             let text = try String(contentsOf: art.appendingPathComponent(name), encoding: .utf8)
             XCTAssertTrue(text.contains("OGA-BY 3.0"), name)
+            XCTAssertTrue(text.contains("CC0 1.0"), name)
         }
         let store = ArtStore()
+        XCTAssertNotNil(store.cell(Look.shadow, 0, 0, 32, 32))
         for look in Look.all {
-            for animation in ["Sitting", "Walk"] {
-                for layer in look.layers(animation) {
-                    XCTAssertNotNil(store.cell(layer.path, 0, 0, 64, 64), layer.path)
-                }
+            for layer in look.layers {
+                // The last cell of the row: the sheet is 24 cells wide and has this row.
+                XCTAssertNotNil(store.cell(layer.sheet, 23 * 32, layer.row * 32, 32, 32), "\(layer)")
             }
         }
+    }
+
+    /// Ten different people, both suits among them, every skin tone of the pack, and a name keeps its person.
+    func testLooks() {
+        XCTAssertEqual(Set(Look.all.map { "\($0.skin) \($0.clothes) \($0.hair)" }).count, Look.all.count)
+        XCTAssertGreaterThanOrEqual(Look.all.count, 8)
+        XCTAssertGreaterThanOrEqual(Look.all.filter { $0.clothes.sheet.hasSuffix("/Suit.png") }.count, 2)
+        XCTAssertEqual(Set(Look.all.map(\.skin)), Set(0..<6))
+        XCTAssertEqual(Look.pick("my-project"), Look.pick("my-project"))
+        XCTAssertGreaterThan(
+            Set(["my-project", "web-app", "blog", "prototype", "Explore 1"].map { "\(Look.pick($0))" }).count, 2)
     }
 
     /// The bitmap is twice as dense as the art, so the view shows one bitmap pixel per point: the room keeps

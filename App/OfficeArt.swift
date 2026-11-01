@@ -1,6 +1,7 @@
 import AppKit
 
-/// The LPC Revised sheets in Resources/Art (see CREDITS.txt there), cut into cells on first use.
+/// The sheets in Resources/Art (LPC Revised for the room, MetroCity for people; see CREDITS.txt there), cut
+/// into cells on first use.
 final class ArtStore {
     static let shared = ArtStore()
 
@@ -57,42 +58,44 @@ final class ArtStore {
     }
 }
 
-/// One of eight office workers, made of LPC Revised layers (body, head, clothes, hair).
+/// One of the office workers, made of MetroCity layers: a body in one skin tone, clothes, hair. Every sheet has
+/// 32-pixel cells, one row per variant and 24 columns: 6 frames each facing down, right, up and right again.
 struct Look: Equatable {
-    let feminine: Bool
-    let skin: String
-    let hair: String
-    let hairColor: String
-    let tops: [String]
-    let pants: String
-    let shoes: String
+    /// A row of one sheet in Art/MetroCity.
+    struct Layer: Equatable {
+        let sheet: String
+        let row: Int
+    }
+
+    /// Row of the body sheet (skin tone).
+    let skin: Int
+    let clothes: Layer
+    let hair: Layer
+
+    static let body = "MetroCity/CharacterModel/Character Model.png"
+    static let shadow = "MetroCity/CharacterModel/Shadow.png"
+    private static let hairs = "MetroCity/Hair/Hairs.png"
+    private static let hair2 = "MetroCity/MetroCity 2.0/Hair.png"
+    private static let suit = "MetroCity/MetroCity 2.0/Suit.png"
+    private static let shirts = "MetroCity/MetroCity 2.0/Suit1.png"
+
+    private init(_ skin: Int, _ clothes: (String, Int), _ hair: (String, Int)) {
+        self.skin = skin
+        self.clothes = Layer(sheet: clothes.0, row: clothes.1)
+        self.hair = Layer(sheet: hair.0, row: hair.1)
+    }
 
     static let all: [Look] = [
-        Look(
-            feminine: true, skin: "Peach", hair: "Medium 07 - Bob, Side Part", hairColor: "Chestnut",
-            tops: ["Torso/Shirt 09 - Polo/Teal"], pants: "Navy", shoes: "Black"),
-        Look(
-            feminine: false, skin: "Brown", hair: "Short 02 - Parted", hairColor: "Black",
-            tops: ["Torso/Shirt 07 - Buttoned Longsleeve Shirt/White"], pants: "Charcoal", shoes: "Brown"),
-        Look(
-            feminine: true, skin: "Coffee", hair: "Medium 05 - Cornrows", hairColor: "Black",
-            tops: ["Torso/Shirt 07 - Buttoned Longsleeve Shirt/Coral"], pants: "Denim", shoes: "Black"),
-        Look(
-            feminine: false, skin: "Porcelain", hair: "Short 02 - Parted", hairColor: "Blonde",
-            tops: ["Torso/Shirt 07 - Buttoned Longsleeve Shirt/Sky", "Torso 2/Sweater 01 - Cardigan/Gray"],
-            pants: "Oak", shoes: "Black"),
-        Look(
-            feminine: false, skin: "Tan", hair: "Medium 05 - Cornrows", hairColor: "Raven",
-            tops: ["Torso/Shirt 09 - Polo/Mustard"], pants: "Navy", shoes: "Brown"),
-        Look(
-            feminine: true, skin: "Ivory", hair: "Short 02 - Parted", hairColor: "Red",
-            tops: ["Torso/Shirt 09 - Polo/Lavender"], pants: "Charcoal", shoes: "Brown"),
-        Look(
-            feminine: false, skin: "Bronze", hair: "Short 02 - Parted", hairColor: "Gray",
-            tops: ["Torso/Shirt 07 - Buttoned Longsleeve Shirt/Forest"], pants: "Beige", shoes: "Black"),
-        Look(
-            feminine: true, skin: "Tawny", hair: "Medium 07 - Bob, Side Part", hairColor: "Platinum",
-            tops: ["Torso/Shirt 07 - Buttoned Longsleeve Shirt/Wine"], pants: "Black", shoes: "Black"),
+        Look(0, (suit, 2), (hairs, 7)),
+        Look(5, (suit, 2), (hairs, 0)),
+        Look(3, (shirts, 0), (hairs, 6)),
+        Look(2, (shirts, 2), (hair2, 0)),
+        Look(4, ("MetroCity/Outfits/Outfit5.png", 0), (hairs, 3)),
+        Look(1, (shirts, 4), (hair2, 4)),
+        Look(5, ("MetroCity/Outfits/Outfit6.png", 0), (hairs, 1)),
+        Look(0, (shirts, 0), (hair2, 3)),
+        Look(3, (shirts, 1), (hair2, 2)),
+        Look(2, ("MetroCity/Outfits/Outfit1.png", 0), (hairs, 2)),
     ]
 
     /// The same name always gets the same person (FNV-1a: stable across launches, unlike hashValue).
@@ -102,20 +105,8 @@ struct Look: Equatable {
         return all[Int(hash % UInt32(all.count))]
     }
 
-    /// Drawing order of one animation sheet; `true` marks head layers, which move when someone nods off.
-    func layers(_ animation: String) -> [(path: String, head: Bool)] {
-        let body = feminine ? "Body 01 - Feminine, Thin" : "Body 02 - Masculine, Thin"
-        let head = feminine ? "Head 01 - Feminine" : "Head 02 - Masculine"
-        let clothes = "Characters/Clothing/" + (feminine ? "Feminine, Thin" : "Masculine, Thin")
-        return [
-            ("Characters/Body/\(body)/\(skin)/\(animation).png", false),
-            ("Characters/Head/\(head)/\(skin)/\(animation).png", true),
-            ("\(clothes)/Feet/Shoes 01 - Shoes/\(shoes)/\(animation).png", false),
-            ("\(clothes)/Legs/Pants 03 - Pants/\(pants)/\(animation).png", false),
-        ] + tops.map { ("\(clothes)/\($0)/\(animation).png", false) } + [
-            ("Characters/Hair/\(hair)/\(hairColor)/\(animation).png", true)
-        ]
-    }
+    /// Drawing order, bottom first.
+    var layers: [Layer] { [Layer(sheet: Self.body, row: skin), clothes, hair] }
 }
 
 /// The symbol in a speech bubble above a head.
@@ -134,9 +125,17 @@ enum Mark {
 /// Someone on the way in or out, already placed for this moment. No bubble while walking: the state is on the
 /// name tag of the desk they walk to, and a bubble passing a seated "!" would blur whose it is.
 struct Walker {
-    enum Facing: Int {
-        case up = 0
-        case left, down, right
+    enum Facing {
+        case up, left, down, right
+
+        /// The first of its six walking frames on a MetroCity sheet; left is right, mirrored.
+        var column: Int {
+            switch self {
+            case .down: 0
+            case .left, .right: 6
+            case .up: 12
+            }
+        }
     }
     let look: Look
     /// Feet, in art pixels.
@@ -171,6 +170,8 @@ struct OfficeScene {
 /// lands on whole bitmap pixels.
 struct OfficeRenderer {
     static let density = RoomLayout.pointsPerPixel
+    /// Art pixels per MetroCity pixel: people about as tall as the LPC ones were, on whole bitmap pixels.
+    static let personPixel: CGFloat = 1.5
 
     private enum Sheet {
         static let floor = "Structure/Floor/Wood Floor A.png"
@@ -236,10 +237,9 @@ struct OfficeRenderer {
         /// Someone in a chair: `cx` is the middle of the desk, `top` the desk's top edge.
         struct Seat {
             let look: Look
-            let column: Int
             let cx: Int
             let top: Int
-            let nod: Int
+            let nod: Bool
         }
 
         init(context: CGContext, height: Int, art: ArtStore) {
@@ -344,9 +344,10 @@ struct OfficeRenderer {
                 self.pod(pod, origin: scene.layout.origin(of: index), scene: scene)
             }
             for walker in scene.walkers.sorted(by: { $0.y < $1.y }) {
+                // The feet are 30 sheet pixels down the cell.
                 person(
-                    walker.look, "Walk", column: walker.step % 8, row: walker.facing.rawValue, walker.x - 32,
-                    walker.y - 62)
+                    walker.look, column: walker.facing.column + walker.step % 6, CGFloat(walker.x) - 24,
+                    CGFloat(walker.y) - 45, mirrored: walker.facing == .left)
             }
             night(scene, glass: plan.glass)
             for (mark, x, top) in marks { bubble(mark, x, top) }
@@ -451,27 +452,33 @@ struct OfficeRenderer {
                     sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, y0 + 26)
                     continue
                 }
-                // Everyone stays seated; the bubble tells the states apart.
-                let resting = state == .resting
-                let seat = Seat(
-                    look: look, column: resting ? 1 : 0, cx: cx, top: y0, nod: resting && scene.frame % 4 >= 2 ? 1 : 0)
+                // Everyone stays seated; the bubble tells the states apart. Resting heads nod.
+                let seat = Seat(look: look, cx: cx, top: y0, nod: state == .resting && scene.frame % 4 >= 2)
                 sit(seat)
                 seated.append(seat)
                 // The "!" hops while waiting. With Reduce Motion the frame stays 0, so it holds still.
                 let hop = state == .waiting && scene.frame % 2 == 1 ? 2 : 0
-                marks.append((Mark(state), cx, y0 + 10 - hop))
+                marks.append((Mark(state), cx, y0 + 8 - hop))
             }
         }
 
+        /// The pack has no sitting pose: the back of a standing person, cut under the shoulders (sheet row 24),
+        /// behind the chair's backrest. Shoulders (row 20) sit 4 art pixels below the top of the backrest.
         private func sit(_ seat: Seat) {
-            person(seat.look, "Sitting", column: seat.column, row: 0, seat.cx - 32, seat.top - 14, nod: seat.nod)
+            let nod = seat.nod ? OfficeRenderer.personPixel : 0
+            person(seat.look, column: 12, rows: 24, CGFloat(seat.cx) - 24, CGFloat(seat.top) + 2 + nod)
             sprite(Sheet.chair, 0, 0, 32, 32, seat.cx - 16, seat.top + 28)
         }
 
-        private func person(_ look: Look, _ animation: String, column: Int, row: Int, _ x: Int, _ y: Int, nod: Int = 0)
-        {
-            for layer in look.layers(animation) {
-                sprite(layer.path, column * 64, row * 64, 64, 64, x, y + (layer.head ? nod : 0))
+        /// The top `rows` of one cell of every layer of a person, at `x`, `y` in art pixels.
+        private func person(
+            _ look: Look, column: Int, rows: Int = 32, _ x: CGFloat, _ y: CGFloat, mirrored: Bool = false
+        ) {
+            let scale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
+            for layer in look.layers {
+                image(
+                    art.cell(layer.sheet, column * 32, layer.row * 32, 32, rows, scale: scale), x, y,
+                    pixel: 1 / CGFloat(OfficeRenderer.density), mirrored: mirrored)
             }
         }
 
