@@ -140,12 +140,26 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.folders, ["/a/two"])
     }
 
+    /// A new folder sits where it is seen first, not below every remembered desk.
+    func testNewFolderTakesTheOffDutyDeskNearestTheDoor() {
+        var office = OfficeState(folders: ["/a/one", "/a/two", "/a/three"])
+        office.apply(event(.sessionStart, "s1", cwd: "/a/two"), now: t0)
+        XCTAssertFalse(office.apply(event(.sessionStart, "s2", cwd: "/a/two"), now: t0), "a remembered folder")
+
+        XCTAssertTrue(office.apply(event(.sessionStart, "n1", cwd: "/new/one"), now: t0))
+        XCTAssertEqual(office.folders, ["/new/one", "/a/two", "/a/three"])
+        office.apply(event(.sessionStart, "n2", cwd: "/new/two"), now: t0)
+        XCTAssertEqual(office.folders, ["/new/one", "/a/two", "/new/two"], "/a/two keeps its place")
+        office.apply(event(.sessionStart, "n3", cwd: "/new/three"), now: t0)
+        XCTAssertEqual(office.folders, ["/new/one", "/a/two", "/new/two", "/new/three"], "no off-duty desk left")
+    }
+
     func testCaps() {
         var office = OfficeState(folders: (0..<OfficeState.maxDesks).map { "/old/\($0)" })
         office.apply(event(.sessionStart, cwd: "/new/one"), now: t0)
         XCTAssertEqual(office.desks.count, OfficeState.maxDesks)
-        XCTAssertEqual(office.folders.first, "/old/1", "the oldest empty desk makes room")
-        XCTAssertEqual(office.folders.last, "/new/one")
+        XCTAssertEqual(office.folders.first, "/new/one", "takes the off-duty desk nearest the door")
+        XCTAssertEqual(office.folders.last, "/old/23")
 
         var full = OfficeState()
         for i in 0..<OfficeState.maxDesks { full.apply(event(.sessionStart, "s\(i)", cwd: "/busy/\(i)"), now: t0) }

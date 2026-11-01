@@ -155,13 +155,16 @@ public struct OfficeState: Equatable {
         if event.kind == .subagentStop { return nil }
         var d = desks.firstIndex { $0.folder == event.cwd }
         if d == nil {
-            if desks.count >= Self.maxDesks {
-                guard let oldestOff = desks.firstIndex(where: \.isOff) else { return nil }
-                desks.remove(at: oldestOff)
+            // A new folder takes over the off-duty desk nearest the door, so it is in view without scrolling.
+            // Other remembered desks keep their places. Only with no off-duty desk does it go at the end.
+            if let off = desks.firstIndex(where: \.isOff) {
+                desks[off] = Desk(folder: event.cwd)
+                d = off
+            } else if desks.count < Self.maxDesks {
+                desks.append(Desk(folder: event.cwd))
+                d = desks.count - 1
             }
-            desks.append(Desk(folder: event.cwd))
-            desksChanged = true
-            d = desks.count - 1
+            desksChanged = d != nil
         }
         guard let d, desks[d].sessions.count < Self.maxSessionsPerDesk else { return nil }
         desks[d].sessions.append(Session(id: event.session, pid: event.pid, state: .resting, since: now))

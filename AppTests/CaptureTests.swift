@@ -115,6 +115,29 @@ final class CaptureTests: XCTestCase {
         }
         try capture(
             "office-many", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(crowd))
+
+        // Six desks went off duty, then a new folder: it takes the desk by the door. Five teammates, the fifth
+        // without a desk ("+2") and waiting, which the summary and the main tag still count.
+        let returning = makeModel(connected: true)
+        let old = (1...6).map { FakeScenario.root + "/old-\($0)" }
+        for kind in [HookEvent.Kind.sessionStart, .sessionEnd] {
+            for folder in old { returning.receive(HookEvent(kind: kind, session: folder, cwd: folder), at: today(13)) }
+        }
+        let project = FakeScenario.root + "/my-project"
+        returning.receive(HookEvent(kind: .userPromptSubmit, session: "new", cwd: project), at: today(14) - 300)
+        for (k, type) in ["Explore", "Plan", "code-reviewer", "Explore", "Plan"].enumerated() {
+            returning.receive(
+                HookEvent(kind: .subagentStart, session: "new", cwd: project, agentID: "new-\(k)", agentType: type),
+                at: today(14) - 300)
+        }
+        returning.receive(
+            HookEvent(kind: .permissionRequest, session: "new", cwd: project, agentID: "new-4", agentType: "Plan"),
+            at: today(14) - 200)
+        XCTAssertEqual(returning.office.desks.first?.name, "my-project")
+        XCTAssertEqual(returning.office.count(.waiting), 1)
+        try capture(
+            "office-new-session", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: today(14)).environmentObject(returning))
     }
 
     /// Four pods fit the default window under the real top bar, with no scrolling.
