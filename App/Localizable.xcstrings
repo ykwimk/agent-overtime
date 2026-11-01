@@ -31,7 +31,6 @@
     "Install the plugin so Claude Code tells this app when it works." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 가 일할 때 이 앱에 알리도록 플러그인을 설치해 주세요." } } } },
     "It opens a new Terminal window. The app never adds options to your command." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 터미널 창에서 열립니다. 앱은 명령에 옵션을 덧붙이지 않습니다." } } } },
     "Later" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "나중에" } } } },
-    "MIT License. Pixel art drawn in code for this app (MIT)." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "MIT 라이선스. 픽셀 그림은 이 앱을 위해 코드로 그렸습니다 (MIT)." } } } },
     "Move AgentOvertime.app into the Applications folder, keep its name, and open it again. The plugin looks for it there." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "AgentOvertime.app 을 이름 그대로 응용 프로그램 폴더로 옮긴 뒤 다시 열어 주세요. 플러그인이 그 자리에서 앱을 찾습니다." } } } },
     "No news yet" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "아직 소식이 없어요" } } } },
     "No sessions running" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "켜진 세션 없음" } } } },
@@ -53,7 +52,6 @@
     "Resting %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "쉼 %lld" } } } },
     "Runs your start command in a new Terminal window (⇧⌘R)" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "등록한 출근 명령을 새 터미널 창에서 실행합니다 (⇧⌘R)" } } } },
     "See what it adds" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "넣을 내용 보기" } } } },
-    "session %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "세션 %lld" } } } },
     "Sessions opened before this app appear when they next move." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "켜 둔 세션은 다음에 움직일 때 나타나요." } } } },
     "Set Up Start Work" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "출근 등록" } } } },
     "Set Up…" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "등록하기…" } } } },
@@ -87,7 +85,16 @@
     "• Was the session already open? Type /reload-plugins in it once." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 미리 켜 둔 세션인가요? 그 세션에서 /reload-plugins 를 한 번 쳐 주세요." } } } },
     "When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치 창에서 Install for you 를 고르세요. 이미 켜 둔 다른 세션은 /reload-plugins 를 한 번 쳐야 소식이 옵니다." } } } },
     "• Is this app in the Applications folder?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 이 앱이 응용 프로그램 폴더에 있나요?" } } } },
-    "• Send Claude Code one message after installing." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 설치한 뒤 Claude Code 에 한 마디 보내 보세요." } } } }
+    "• Send Claude Code one message after installing." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 설치한 뒤 Claude Code 에 한 마디 보내 보세요." } } } },
+    "Teammate waiting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원 답 기다림" } } } },
+    "%lld more teammates" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원 %lld명 더" } } } },
+    "Code: MIT License." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "코드: MIT 라이선스." } } } },
+    "Art" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "그림" } } } },
+    "Artists" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "만든 사람" } } } },
+    "License" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "라이선스" } } } },
+    "Not MIT. Cropped and layered by this app; each file's artists are in the credits." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "MIT 가 아닙니다. 이 앱이 잘라 겹쳐 그립니다. 파일마다 만든 사람은 출처 파일에 있습니다." } } } },
+    "Open Credits" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "출처 파일 열기" } } } },
+    "Credits on GitHub" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "GitHub 에서 출처 보기" } } } }
   },
   "version" : "1.0"
 }

@@ -25,11 +25,7 @@ struct WelcomeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(alignment: .top, spacing: 20) {
-                example(.working, seed: "my-app")
-                example(.waiting, seed: "api-server")
-                example(.resting, seed: "notes")
-            }
+            OfficeSlice()
 
             Divider()
 
@@ -83,15 +79,6 @@ struct WelcomeView: View {
         }
     }
 
-    private func example(_ state: WorkState, seed: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Workstation(pose: Pose(state), seed: seed, scale: 2.5)
-            Text(verbatim: seed).font(.caption.weight(.medium))
-            state.word.font(.caption).foregroundStyle(state.color)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
     @ViewBuilder private var locationNote: some View {
         switch location ?? model.location {
         case .ok:
@@ -131,5 +118,50 @@ struct WelcomeView: View {
         } else if copiedAt != nil {
             Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// A slice of the office with three example people: one working, a teammate waiting, a teammate resting.
+struct OfficeSlice: View {
+    var now = Date()
+
+    private static let office: OfficeState = {
+        var office = OfficeState()
+        let folder = "/example/my-project"
+        let start = Date()
+        let events = [
+            HookEvent(kind: .userPromptSubmit, session: "example", cwd: folder),
+            HookEvent(kind: .subagentStart, session: "example", cwd: folder, agentID: "e1", agentType: "Explore"),
+            HookEvent(kind: .permissionRequest, session: "example", cwd: folder, agentID: "e1", agentType: "Explore"),
+            HookEvent(kind: .subagentStart, session: "example", cwd: folder, agentID: "e2", agentType: "Plan"),
+            HookEvent(
+                kind: .notification, session: "example", cwd: folder, agentID: "e2", agentType: "Plan",
+                notification: "idle_prompt"),
+        ]
+        for event in events { office.apply(event, now: start) }
+        return office
+    }()
+
+    var body: some View {
+        var plan = SeatPlan()
+        let pods = plan.pods(for: Self.office)
+        let scale = RoomLayout.pointsPerPixel
+        let top = 70
+        let crop = CGRect(
+            x: RoomLayout.lane - 4, y: top, width: RoomLayout.podWidth + 8,
+            height: RoomLayout.firstRow + RoomLayout.podDepth - top)
+        let scene = OfficeScene(
+            layout: RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1),
+            height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: Daylight.darkness(at: now),
+            frame: 0, now: now)
+        return ZStack(alignment: .topLeading) {
+            if let image = OfficeRenderer().render(scene)?.cropping(to: crop) {
+                Image(decorative: image, scale: 1 / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)
+            }
+            PodTags(pod: pods[0], now: now).offset(
+                x: CGFloat(4 * scale), y: CGFloat((RoomLayout.firstRow - top) * scale))
+        }
+        .frame(width: crop.width * CGFloat(scale), height: crop.height * CGFloat(scale), alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

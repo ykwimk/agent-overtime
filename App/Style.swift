@@ -15,6 +15,21 @@ enum Style {
                 : NSColor(srgbRed: 0.953, green: 0.945, blue: 0.925, alpha: 1)
         })
     static let title = Font.system(size: 20, weight: .semibold)
+
+    /// Name tag plates follow light and dark; the room behind them does not (it follows the clock).
+    static let tagPlate = dynamic(light: (1, 1, 1, 0.94), dark: (0.11, 0.11, 0.13, 0.92))
+    static let tagText = dynamic(light: (0.11, 0.11, 0.12, 1), dark: (1, 1, 1, 1))
+    static let tagSecondary = dynamic(light: (0.33, 0.33, 0.35, 1), dark: (0.72, 0.72, 0.74, 1))
+
+    private static func dynamic(
+        light: (CGFloat, CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat, CGFloat)
+    ) -> Color {
+        Color(
+            nsColor: NSColor(name: nil) { appearance in
+                let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+                return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: c.3)
+            })
+    }
 }
 
 extension WorkState {
@@ -43,6 +58,15 @@ extension WorkState {
         case .working: return .primary
         case .waiting: return Style.waiting
         case .resting: return .secondary
+        }
+    }
+
+    /// On a name tag plate, where the system's secondary grey would fall under 4.5:1.
+    var tagColor: Color {
+        switch self {
+        case .working: return Style.tagText
+        case .waiting: return Style.waiting
+        case .resting: return Style.tagSecondary
         }
     }
 }
