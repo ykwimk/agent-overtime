@@ -204,6 +204,7 @@ struct OfficeRoom: View {
 struct PodTags: View {
     let pod: Pod
     let now: Date
+    @ObservedObject private var keyboard = KeyboardNavigation.shared
 
     static let deskPoints = CGFloat(RoomLayout.deskWidth * RoomLayout.pointsPerPixel)
 
@@ -232,7 +233,7 @@ struct PodTags: View {
         .help(summary)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(summary)
-        .focusable()
+        .focusable(keyboard.active)
     }
 
     @ViewBuilder private var mainTag: some View {
@@ -271,6 +272,32 @@ struct PodTags: View {
         }
         if pod.extra > 0 { text = text + Text(verbatim: ", ") + Text("\(pod.extra) more teammates") }
         return text
+    }
+}
+
+/// Pods take keyboard focus only once Tab is pressed, and give it up on a click, so their focus ring shows for
+/// keyboard use only. Always focusable, the first pod took focus (and its ring) as the window opened, and macOS 13
+/// has no way to hide SwiftUI's ring. VoiceOver reads the pods either way.
+final class KeyboardNavigation: ObservableObject {
+    static let shared = KeyboardNavigation()
+    @Published var active = false
+    private var monitor: Any?
+
+    private init() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) {
+            [weak self] event in
+            guard let self else { return event }
+            guard event.type == .keyDown else {
+                if self.active { self.active = false }
+                return event
+            }
+            guard event.keyCode == 48, !self.active else { return event }  // 48: Tab
+            self.active = true
+            // shortcut: the pods turn focusable only after SwiftUI redraws, so this Tab comes back a moment later;
+            // hook into SwiftUI's own focus if a later macOS minimum gives a way.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { NSApp.postEvent(event, atStart: true) }
+            return nil
+        }
     }
 }
 

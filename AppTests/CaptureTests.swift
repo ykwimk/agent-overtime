@@ -166,6 +166,46 @@ final class CaptureTests: XCTestCase {
         XCTAssertTrue((4...5).contains(seconds), "\(seconds)")
     }
 
+    /// Pods are not focusable (no focus ring) when the window opens, and Tab makes them so. A real, key window, as
+    /// focus needs one. The ring itself can't be checked here: drawing the view into a bitmap leaves it out.
+    func testTabTurnsOnKeyboardFocus() throws {
+        let (model, stage) = scenario(at: today(22), still: true)
+        let host = NSHostingView(
+            rootView: OfficeView(fixedNow: today(22), stage: stage).environmentObject(model)
+                .environment(\.locale, Locale(identifier: "ko")))
+        let window = NSWindow(
+            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled], backing: .buffered,
+            defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentView = host
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        defer {
+            window.close()
+            KeyboardNavigation.shared.active = false  // as a click would, for the tests after this one
+        }
+        func settle() {
+            // The app's own event loop is not running here, so hand queued events (the re-posted Tab) over by hand.
+            let until = Date() + 0.5
+            while Date() < until {
+                if let event = NSApp.nextEvent(matching: .any, until: Date() + 0.05, inMode: .default, dequeue: true) {
+                    NSApp.sendEvent(event)
+                }
+            }
+        }
+        settle()
+        XCTAssertFalse(KeyboardNavigation.shared.active)
+        let tab = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+                isARepeat: false, keyCode: 48))
+        NSApp.sendEvent(tab)
+        settle()
+        XCTAssertTrue(KeyboardNavigation.shared.active)
+    }
+
     /// Four pods fit the default window under the real top bar, with no scrolling.
     func testDefaultWindowHoldsFourPods() {
         let model = makeModel(connected: true)
