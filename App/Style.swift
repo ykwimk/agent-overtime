@@ -72,7 +72,11 @@ extension WorkState {
 }
 
 extension Teammate {
-    var displayName: Text { name.map { Text(verbatim: $0) } ?? Text("Helper") }
+    /// "Explore", or "Explore 2" while another Explore works too.
+    var displayName: Text {
+        let base = name.map { Text(verbatim: $0) } ?? Text("Helper")
+        return number > 1 ? base + Text(verbatim: " \(number)") : base
+    }
 }
 
 /// A row that behaves like a menu item inside the menu bar window.

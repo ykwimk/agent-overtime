@@ -8,6 +8,9 @@ public struct Teammate: Equatable, Identifiable {
     public let id: String
     /// The subagent's name (agent_type). nil is the default helper agent.
     public var name: String?
+    /// 1 for the first teammate of a name, then the smallest number free when another of that name arrives
+    /// ("Explore 2"). It never changes while the teammate works.
+    public internal(set) var number = 1
     public var state: WorkState
     public var since: Date
     /// When it started while the app was listening; nil for one already at work, who sits down without walking in.
@@ -21,6 +24,10 @@ public struct Teammate: Equatable, Identifiable {
 
 public struct Session: Equatable, Identifiable {
     public let id: String
+    /// The folder's name, with " 2" and up when another running session already has that name. Numbers go by
+    /// arrival, the smallest free one first, and never change while the session runs.
+    public internal(set) var name = ""
+    public internal(set) var number = 1
     public var pid: Int32?
     public var state: WorkState
     public var since: Date
@@ -117,9 +124,10 @@ public struct OfficeState: Equatable {
             if let newState = Self.state(for: event, from: mates[i].state) { mates[i].set(newState, now: now) }
         case (_, nil):
             if mates.count < Self.maxTeammates {
+                let taken = desks.flatMap(\.teammates).filter { $0.name == event.agentType }.map(\.number)
                 mates.append(
                     Teammate(
-                        id: agentID, name: event.agentType,
+                        id: agentID, name: event.agentType, number: Self.firstFree(taken),
                         state: Self.state(for: event, from: .working) ?? .working, since: now,
                         arrived: event.kind == .subagentStart ? now : nil))
             }
@@ -180,11 +188,20 @@ public struct OfficeState: Equatable {
             desksChanged = d != nil
         }
         guard let d else { return nil }
+        let name = desks[d].name
+        let number = Self.firstFree(desks.filter { $0.name == name }.flatMap(\.sessions).map(\.number))
         desks[d].sessions.append(
             Session(
-                id: event.session, pid: event.pid, state: .resting, since: now,
-                arrived: event.kind == .sessionStart ? now : nil))
+                id: event.session, name: number == 1 ? name : "\(name) \(number)", number: number, pid: event.pid,
+                state: .resting, since: now, arrived: event.kind == .sessionStart ? now : nil))
         return (d, desks[d].sessions.count - 1)
+    }
+
+    /// The smallest number from 1 that is not taken, so a newcomer never renumbers anyone already there.
+    static func firstFree(_ taken: [Int]) -> Int {
+        var number = 1
+        while taken.contains(number) { number += 1 }
+        return number
     }
 
     private mutating func removeSessions(where shouldRemove: (Session) -> Bool) {

@@ -66,7 +66,7 @@ public struct SeatPlan {
                         mates: Array(repeating: nil, count: Pod.sideDesks), extra: 0))
                 continue
             }
-            for (index, session) in desk.sessions.enumerated() {
+            for session in desk.sessions {
                 running.insert(session.id)
                 let present = Set(session.teammates.map(\.id))
                 var ids = (desks[session.id] ?? Array(repeating: nil, count: Pod.sideDesks)).map { id in
@@ -81,8 +81,8 @@ public struct SeatPlan {
                 let mates = ids.map { $0.flatMap { byID[$0] } }
                 pods.append(
                     Pod(
-                        id: session.id, folder: desk.folder, name: index == 0 ? desk.name : "\(desk.name) \(index + 1)",
-                        session: session, mates: mates, extra: session.teammates.count - mates.compactMap { $0 }.count))
+                        id: session.id, folder: desk.folder, name: session.name, session: session, mates: mates,
+                        extra: session.teammates.count - mates.compactMap { $0 }.count))
             }
         }
         desks = desks.filter { running.contains($0.key) }

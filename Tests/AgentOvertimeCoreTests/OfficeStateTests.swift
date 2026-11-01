@@ -85,6 +85,32 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks[0].sessions.map(\.id), ["s1", "s2"])
     }
 
+    /// Same names get numbers in arrival order. Nobody is renumbered when someone leaves; a newcomer takes the
+    /// smallest free number. Folders elsewhere with the same name count as the same name.
+    func testSameNamesGetNumbersInArrivalOrder() {
+        var office = OfficeState()
+        office.apply(event(.sessionStart, "s1"), now: t0)
+        office.apply(event(.sessionStart, "s2"), now: t0)
+        office.apply(event(.sessionStart, "s3", cwd: "/elsewhere/shop"), now: t0)
+        func names() -> [String] { office.desks.flatMap(\.sessions).map(\.name) }
+        XCTAssertEqual(names(), ["shop", "shop 2", "shop 3"])
+        office.apply(event(.sessionEnd, "s1"), now: t0)
+        XCTAssertEqual(names(), ["shop 2", "shop 3"], "the others keep their numbers")
+        office.apply(event(.sessionStart, "s4"), now: t0)
+        office.apply(event(.sessionStart, "s5"), now: t0)
+        XCTAssertEqual(names(), ["shop 2", "shop", "shop 4", "shop 3"], "smallest free number first")
+
+        for (id, type) in [("a1", "Plan"), ("a2", "Plan"), ("a3", nil), ("a4", nil)] {
+            office.apply(event(.subagentStart, "s2", agent: id, type: type), now: t0)
+        }
+        office.apply(event(.subagentStart, "s4", agent: "a5", type: "Plan"), now: t0)
+        func mates() -> [String] { office.desks.flatMap(\.teammates).map { "\($0.name ?? "helper") \($0.number)" } }
+        XCTAssertEqual(mates(), ["Plan 1", "Plan 2", "helper 1", "helper 2", "Plan 3"], "across sessions too")
+        office.apply(event(.subagentStop, "s2", agent: "a1"), now: t0)
+        office.apply(event(.subagentStart, "s2", agent: "a6", type: "Plan"), now: t0)
+        XCTAssertEqual(mates(), ["Plan 2", "helper 1", "helper 2", "Plan 1", "Plan 3"])
+    }
+
     func testWaitingSinceCountsFromTheFirstPrompt() {
         var office = OfficeState()
         office.apply(event(.permissionRequest), now: t0)
