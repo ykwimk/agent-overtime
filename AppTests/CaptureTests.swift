@@ -343,6 +343,26 @@ final class CaptureTests: XCTestCase {
         }
     }
 
+    /// At the walking frame rate a walker moves about 5 art pixels a frame and the six-picture walk advances at
+    /// most one picture a frame, so the feet never skip a step.
+    func testWalkAtItsFrameRateMovesInSmallSteps() throws {
+        let now = today(14)
+        let (_, stage) = scenario(at: now, walked: 0)
+        let rate = OfficePicture.walkingFrameRate
+        var frames = 0
+        var last: Walker?
+        while let walker = stage.moment(at: now + Double(frames) / rate).walkers.first {
+            if let last {
+                let moved = hypot(Double(walker.x - last.x), Double(walker.y - last.y))
+                XCTAssertLessThanOrEqual(moved, Stage.speed / rate + 1.5, "frame \(frames)")
+                XCTAssert((0...1).contains(walker.step - last.step), "frame \(frames)")
+            }
+            last = walker
+            frames += 1
+        }
+        XCTAssertGreaterThan(frames, 10)
+    }
+
     /// Four pods, every desk working, the window on screen and ticking: how much CPU the office takes.
     func testCPUWithFourPodsWorking() throws {
         let model = makeModel(connected: true)
@@ -382,7 +402,7 @@ final class CaptureTests: XCTestCase {
 
         let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
-        // The far desk's teammate leaves: 4.7 s of walking to the door, drawn 60 times a second.
+        // The far desk's teammate leaves: 4.7 s of walking to the door, drawn 30 times a second.
         model.receive(
             HookEvent(
                 kind: .subagentStop, session: "cpu-3", cwd: FakeScenario.root + "/cpu-3", agentID: "cpu-3-2",

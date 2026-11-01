@@ -342,10 +342,13 @@ private struct Tag<Content: View>: View {
 
 /// The office picture at a whole-number scale, sharp: the GPU scales it with nearest-neighbour sampling.
 /// It keeps its own clock, so SwiftUI only touches it when the office changes. Between changes it redraws
-/// itself: 60 times a second while someone walks (2.5 art pixels a frame; only the walkers' boxes, laid over the
+/// itself: 30 times a second while someone walks (5 art pixels a frame; only the walkers' boxes, laid over the
 /// room as small layers), 2.5 times a second otherwise, every 30 s with Reduce Motion, and not at all while its
 /// window is hidden or minimized (the app stays open all day).
 struct OfficePicture: NSViewRepresentable {
+    /// 12 looked choppy and 30 reads as smooth for pixel art at half the wakeups of 60; go back to 60 if it doesn't.
+    static let walkingFrameRate = 30.0
+
     let stage: Stage
     let height: Int
     let reduceMotion: Bool
@@ -459,7 +462,8 @@ struct OfficePicture: NSViewRepresentable {
 
             let visible = window?.occlusionState.contains(.visible) ?? false
             guard settings.fixedNow == nil, window != nil, visible || settings.ticksWhileHidden else { return }
-            let interval = now < settings.stage.busyUntil ? 1.0 / 60 : (settings.reduceMotion ? 30 : 0.4)
+            let interval =
+                now < settings.stage.busyUntil ? 1 / OfficePicture.walkingFrameRate : (settings.reduceMotion ? 30 : 0.4)
             let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in self?.refresh() }
             timer.tolerance = interval / 10
             // Common modes: keep moving while the room is scrolled.
