@@ -37,7 +37,8 @@ Claude Code 세션을 여럿 돌릴 때 터미널을 하나씩 들여다보지 �
 /plugin install agent-overtime@agent-overtime
 ```
 
-4. Claude Code 에 한 마디 보내면 사무실 자리에 캐릭터가 들어와 앉습니다. 앱보다 먼저 켠 세션은 다음에 움직일 때 나타납니다.
+4. 두 번째 줄을 넣으면 Claude Code 가 설치 창을 엽니다. **Install for you (user scope)** 를 고르면 이 맥의 모든 프로젝트에 적용됩니다. 설치 요약이 `Plugin is now active.` 면 그 세션은 바로 됩니다. 이미 켜 둔 다른 세션은 `/reload-plugins` 를 한 번 치거나 다시 켜야 소식이 옵니다.
+5. Claude Code 에 한 마디 보내면 사무실 자리에 캐릭터가 앉습니다. 앱보다 먼저 켠 세션은 다음에 움직일 때 나타납니다.
 
 ### 끊기
 Claude Code 에서 `/plugin` 으로 `agent-overtime` 을 끄거나 지웁니다. 앱은 Claude Code 설정 파일을 읽지도 고치지도 않습니다.
@@ -101,7 +102,8 @@ No login. Everything stays on this Mac. Works with Claude Code. Not affiliated w
 /plugin install agent-overtime@agent-overtime
 ```
 
-4. Send Claude Code a message. Your character walks in and sits down. Sessions started before the app appear when they next move.
+4. The second line opens Claude Code's install panel. Choose **Install for you (user scope)** so it applies to every project on this Mac. If the summary says `Plugin is now active.`, that session works right away. Sessions that were already open need `/reload-plugins` once, or a restart.
+5. Send Claude Code a message. Your character sits down at a desk. Sessions started before the app appear when they next move.
 
 ### Disconnect
 Turn off or remove `agent-overtime` with `/plugin` in Claude Code. The app never reads or edits Claude Code's settings files.

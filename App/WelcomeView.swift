@@ -45,6 +45,9 @@ struct WelcomeView: View {
                     .background(RoundedRectangle(cornerRadius: 6).fill(Style.floor))
                     .accessibilityLabel(Text("Connect commands"))
                     .accessibilityValue(Text(verbatim: AppModel.connectCommands))
+                Text("When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 locationNote
                 progress
             }
@@ -114,6 +117,7 @@ struct WelcomeView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("No news yet").font(.headline).foregroundStyle(Style.waiting)
                 Text("• Is agent-overtime turned on in Claude Code's /plugin list?")
+                Text("• Was the session already open? Type /reload-plugins in it once.")
                 Text("• Is this app in the Applications folder?")
                 Text("• Send Claude Code one message after installing.")
             }

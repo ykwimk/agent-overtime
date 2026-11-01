@@ -84,6 +84,8 @@
     "Works with Claude Code. Not affiliated with Anthropic." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 와 함께 써요. Anthropic 과 관계없는 앱입니다." } } } },
     "You're already at work. Start one more?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "이미 출근했어요. 하나 더 켤까요?" } } } },
     "• Is agent-overtime turned on in Claude Code's /plugin list?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• Claude Code 의 /plugin 목록에서 agent-overtime 이 켜져 있나요?" } } } },
+    "• Was the session already open? Type /reload-plugins in it once." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 미리 켜 둔 세션인가요? 그 세션에서 /reload-plugins 를 한 번 쳐 주세요." } } } },
+    "When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "설치 창에서 Install for you 를 고르세요. 이미 켜 둔 다른 세션은 /reload-plugins 를 한 번 쳐야 소식이 옵니다." } } } },
     "• Is this app in the Applications folder?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 이 앱이 응용 프로그램 폴더에 있나요?" } } } },
     "• Send Claude Code one message after installing." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "• 설치한 뒤 Claude Code 에 한 마디 보내 보세요." } } } }
   },
