@@ -68,7 +68,7 @@ struct OfficeBar: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                summary.font(.system(size: 15, weight: .medium))
+                summary.font(.title3.weight(.medium))
                 status.font(.callout)
             }
             Spacer(minLength: 8)

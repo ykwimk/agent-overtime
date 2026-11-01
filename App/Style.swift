@@ -55,21 +55,25 @@ struct MenuRow: View {
     var shortcut: String?
     let action: () -> Void
     @State private var hovering = false
+    @FocusState private var focused: Bool
 
     var body: some View {
+        // Keyboard focus gets the same highlight as the mouse.
+        let lit = hovering || focused
         Button(action: action) {
             HStack {
                 Text(title)
                 Spacer()
-                if let shortcut { Text(verbatim: shortcut).foregroundStyle(.secondary) }
+                if let shortcut { Text(verbatim: shortcut).foregroundStyle(lit ? Color.white.opacity(0.85) : .secondary) }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Color.accentColor.opacity(0.85) : .clear))
-            .foregroundStyle(hovering ? Color.white : Color.primary)
+            .background(RoundedRectangle(cornerRadius: 5).fill(lit ? Color.accentColor.opacity(0.85) : .clear))
+            .foregroundStyle(lit ? Color.white : Color.primary)
         }
         .buttonStyle(.plain)
+        .focused($focused)
         .onHover { hovering = $0 }
         .padding(.horizontal, 5)
     }

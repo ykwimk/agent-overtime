@@ -13,7 +13,7 @@ struct DeskView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(verbatim: desk.name)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.title3.weight(.semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .foregroundStyle(desk.isOff ? .secondary : .primary)
