@@ -10,6 +10,10 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     }
 
+    static let artists = [
+        "Eliza Wyatt", "Lanea \"Sharm\" Zimmerman", "Stephen \"Redshrike\" Challener", "BlueCarrot16", "Durrani",
+        "BenCreating", "Thecilekli",
+    ]
     static let artLicenseURL = URL(string: "https://static.opengameart.org/OGA-BY-3.0.txt")!
 
     /// Opens a text file from the app's Art folder in the default text app (nothing is written or sent).
@@ -112,9 +116,10 @@ struct SettingsView: View {
                     Text("Art")
                 }
                 LabeledContent {
+                    // No-break spaces inside each name, so lines only break after a comma.
                     Text(
-                        verbatim:
-                            "Eliza Wyatt, Lanea \"Sharm\" Zimmerman, Stephen \"Redshrike\" Challener, BlueCarrot16, Durrani, BenCreating, Thecilekli"
+                        verbatim: Self.artists.map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }.joined(
+                            separator: ", ")
                     )
                     .multilineTextAlignment(.trailing)
                 } label: {
@@ -125,8 +130,11 @@ struct SettingsView: View {
                 } label: {
                     Text("License")
                 }
-                Text("Not MIT. Cropped and layered by this app; each file's artists are in the credits.")
-                    .font(.callout).foregroundStyle(.secondary)
+                Text(
+                    "The art is not MIT: it is OGA-BY 3.0, cropped and combined for this app. Each file's artists are in the credits."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Button("Open Credits") { Self.openBundled("CREDITS.txt") }
                     Link(destination: AppModel.creditsURL) { Text("Credits on GitHub") }

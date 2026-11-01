@@ -92,7 +92,7 @@
     "Art" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "그림" } } } },
     "Artists" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "만든 사람" } } } },
     "License" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "라이선스" } } } },
-    "Not MIT. Cropped and layered by this app; each file's artists are in the credits." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "MIT 가 아닙니다. 이 앱이 잘라 겹쳐 그립니다. 파일마다 만든 사람은 출처 파일에 있습니다." } } } },
+    "The art is not MIT: it is OGA-BY 3.0, cropped and combined for this app. Each file's artists are in the credits." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "그림은 MIT 가 아니라 OGA-BY 3.0 이에요. 앱에 맞게 잘라 붙여 썼어요. 파일마다 만든 사람은 출처 파일에 있어요." } } } },
     "Open Credits" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "출처 파일 열기" } } } },
     "Credits on GitHub" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "GitHub 에서 출처 보기" } } } }
   },
