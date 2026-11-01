@@ -151,7 +151,10 @@ final class AppModel: ObservableObject {
     }
 
     private func tick() {
-        office.endSessions { pid in kill(pid, 0) != 0 && errno == ESRCH }
+        // Assign only on a change: every assignment redraws everything that watches the office.
+        var checked = office
+        checked.endSessions { pid in kill(pid, 0) != 0 && errno == ESRCH }
+        if checked != office { office = checked }
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }
