@@ -144,10 +144,13 @@ public struct RoomLayout: Equatable {
         return (o.x + desk * Self.deskWidth + 30, o.y + 62)
     }
 
-    /// The door's feet point and the walking route from it to a desk: down the lane, then along the row.
+    /// The door's feet point and the walking route from it to a desk: down the lane, along the row under the
+    /// name tags (not in front of the chairs, so nobody walks over the heads of people sitting there), then up
+    /// to the chair.
     public func route(pod: Int, desk: Int) -> [(x: Int, y: Int)] {
         let stand = standPoint(pod: pod, desk: desk)
         let laneX = Self.lane / 2 + 4
-        return [(laneX, Self.wall + 2), (laneX, stand.y), stand]
+        let aisle = origin(of: pod).y + Self.podDepth - 2
+        return [(laneX, Self.wall + 2), (laneX, aisle), (stand.x, aisle), stand]
     }
 }

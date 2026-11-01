@@ -117,7 +117,8 @@ enum Mark {
     }
 }
 
-/// Someone on the way in or out, already placed for this moment.
+/// Someone on the way in or out, already placed for this moment. No bubble while walking: the state is on the
+/// name tag of the desk they walk to, and a bubble passing a seated "!" would blur whose it is.
 struct Walker {
     enum Facing: Int {
         case up = 0
@@ -129,7 +130,6 @@ struct Walker {
     let y: Int
     let facing: Facing
     let step: Int
-    let mark: Mark?
 }
 
 /// Everything one picture of the office needs. Sizes are art pixels.
@@ -295,7 +295,6 @@ struct OfficeRenderer {
                 person(
                     walker.look, "Walk", column: walker.step % 8, row: walker.facing.rawValue, walker.x - 32,
                     walker.y - 62)
-                if let mark = walker.mark { marks.append((mark, walker.x, walker.y - 48)) }
             }
             night(scene, glass: plan.glass)
             for (mark, x, top) in marks { bubble(mark, x, top) }
@@ -325,10 +324,10 @@ struct OfficeRenderer {
                 return CGRect(
                     x: o.x - 6, y: o.y - 24, width: RoomLayout.podWidth + 12, height: RoomLayout.podDepth + 24)
             }
-            let lastStand =
-                scene.pods.isEmpty ? RoomLayout.firstRow : layout.standPoint(pod: scene.pods.count - 1, desk: 0).y
+            let lastTurn =
+                scene.pods.isEmpty ? RoomLayout.firstRow : layout.route(pod: scene.pods.count - 1, desk: 0)[1].y
             busy.append(
-                CGRect(x: 0, y: RoomLayout.wall, width: RoomLayout.lane, height: lastStand + 4 - RoomLayout.wall))
+                CGRect(x: 0, y: RoomLayout.wall, width: RoomLayout.lane, height: lastTurn + 4 - RoomLayout.wall))
             let width = layout.width
             let candidates: [(CGRect, () -> Void)] = [
                 (

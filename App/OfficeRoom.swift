@@ -10,14 +10,12 @@ final class Stage: ObservableObject {
         let start: Date
         let duration: TimeInterval
         let leaving: Bool
-        let mark: Mark?
     }
 
     private struct Seated {
         let look: Look
         let pod: Int
         let desk: Int
-        let mark: Mark
     }
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
@@ -48,24 +46,22 @@ final class Stage: ObservableObject {
 
         var seated: [String: Seated] = [:]
         for (index, pod) in pods.enumerated() {
-            if let session = pod.session {
-                seated[OfficeScene.mainID(pod)] = Seated(
-                    look: OfficeScene.mainLook(pod), pod: index, desk: 0, mark: Mark(session.state))
+            if pod.session != nil {
+                seated[OfficeScene.mainID(pod)] = Seated(look: OfficeScene.mainLook(pod), pod: index, desk: 0)
             }
             for (slot, mate) in pod.mates.enumerated() {
                 guard let mate else { continue }
                 seated[OfficeScene.mateID(mate)] = Seated(
-                    look: OfficeScene.mateLook(mate, desk: slot + 1), pod: index, desk: slot + 1, mark: Mark(mate.state)
-                )
+                    look: OfficeScene.mateLook(mate, desk: slot + 1), pod: index, desk: slot + 1)
             }
         }
         walks = walks.filter { now.timeIntervalSince($0.value.start) < $0.value.duration }
         if animate, !first {
             for (id, person) in seated where present[id] == nil {
-                walks[id] = walk(person.look, layout.route(pod: person.pod, desk: person.desk), now, false, person.mark)
+                walks[id] = walk(person.look, layout.route(pod: person.pod, desk: person.desk), now, false)
             }
             for (id, person) in present where seated[id] == nil {
-                walks[id] = walk(person.look, before.route(pod: person.pod, desk: person.desk), now, true, nil)
+                walks[id] = walk(person.look, before.route(pod: person.pod, desk: person.desk), now, true)
             }
         }
         present = seated
@@ -74,11 +70,11 @@ final class Stage: ObservableObject {
         return (pods, layout)
     }
 
-    private func walk(_ look: Look, _ route: [(x: Int, y: Int)], _ now: Date, _ leaving: Bool, _ mark: Mark?) -> Walk {
+    private func walk(_ look: Look, _ route: [(x: Int, y: Int)], _ now: Date, _ leaving: Bool) -> Walk {
         let length = Self.length(route)
         return Walk(
             look: look, route: route, start: now, duration: min(Self.longest, max(1, length / Self.speed)),
-            leaving: leaving, mark: mark)
+            leaving: leaving)
     }
 
     private static func length(_ route: [(x: Int, y: Int)]) -> Double {
@@ -118,7 +114,7 @@ final class Stage: ObservableObject {
             let door = walk.route[0]
             if abs(point.x - door.x) + abs(point.y - door.y) < 30 { doorOpen = true }
             let step = Int((max(0, elapsed) / walk.duration * total / 5).rounded(.down))
-            walkers.append(Walker(look: walk.look, x: point.x, y: point.y, facing: facing, step: step, mark: walk.mark))
+            walkers.append(Walker(look: walk.look, x: point.x, y: point.y, facing: facing, step: step))
         }
         return (walkers, away, doorOpen)
     }

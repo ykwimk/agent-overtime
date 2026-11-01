@@ -55,14 +55,19 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(RoomLayout(points: 2000, podCount: 9).columns, 3)
     }
 
-    func testRouteGoesDownTheLaneThenAlongTheRow() {
+    func testRouteGoesDownTheLaneThenAlongTheRowBehindTheChairs() {
         let layout = RoomLayout(points: 1080, podCount: 4)
         let route = layout.route(pod: 3, desk: 2)
-        XCTAssertEqual(route.count, 3)
+        let stand = layout.standPoint(pod: 3, desk: 2)
+        XCTAssertEqual(route.count, 4)
         XCTAssertEqual(route[0].x, route[1].x, "straight down from the door")
         XCTAssertLessThan(route[0].x, RoomLayout.lane, "the lane is left of every pod")
         XCTAssertEqual(route[1].y, route[2].y, "then along the row")
-        XCTAssertEqual(route[2].x, layout.standPoint(pod: 3, desk: 2).x)
+        XCTAssertGreaterThanOrEqual(route[1].y - stand.y, 24, "below the seated heads, not over them")
+        XCTAssertLessThan(route[1].y, layout.origin(of: 3).y + RoomLayout.podDepth, "inside the pod's own row")
+        XCTAssertEqual(route[2].x, stand.x)
+        XCTAssertEqual(route[3].x, stand.x, "then up to the chair")
+        XCTAssertEqual(route[3].y, stand.y)
     }
 
     private func event(
