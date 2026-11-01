@@ -196,8 +196,8 @@ public struct OfficeState: Equatable {
         removeSessions { session in session.pid.map(isGone) ?? false }
     }
 
-    /// Forgets desks that are off duty. Desks with someone at them stay.
-    public mutating func forgetEmptyDesks() {
+    /// Forgets the recent folders nobody works in. Folders with a session running stay.
+    public mutating func forgetIdleFolders() {
         desks.removeAll(where: \.isOff)
     }
 

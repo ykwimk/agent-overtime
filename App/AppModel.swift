@@ -156,8 +156,8 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func forgetEmptyDesks() {
-        office.forgetEmptyDesks()
+    func forgetIdleFolders() {
+        office.forgetIdleFolders()
         save()
     }
 

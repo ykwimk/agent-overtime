@@ -223,12 +223,14 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks.map(\.isOff), [true, false, false], "no pid means no guess")
     }
 
-    func testRememberedDesksStartOffAndCanBeForgotten() {
+    /// Recent folders (for Start Work) can be cleared; a folder with a session running stays.
+    func testRecentFoldersCanBeCleared() {
         var office = OfficeState(folders: ["/a/one", "/a/two"])
         XCTAssertEqual(office.desks.map(\.isOff), [true, true])
         office.apply(event(.sessionStart, cwd: "/a/two"), now: t0)
-        office.forgetEmptyDesks()
+        office.forgetIdleFolders()
         XCTAssertEqual(office.folders, ["/a/two"])
+        XCTAssertEqual(office.islands.count, 1, "seats are untouched")
     }
 
     /// A new folder sits where it is seen first, not below every remembered desk.

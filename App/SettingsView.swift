@@ -79,14 +79,17 @@ struct SettingsView: View {
                 LabeledContent {
                     Text(verbatim: "\(model.office.desks.count)")
                 } label: {
-                    Text("Remembered desks")
+                    Text("Recent folders")
                 }
-                Button("Forget Empty Desks") { model.forgetEmptyDesks() }
+                Button("Clear Recent Folders") { model.forgetIdleFolders() }
                     .disabled(!model.office.desks.contains(where: \.isOff))
-                Text("Desks are the folders sessions ran in, kept only on this Mac.").font(.callout).foregroundStyle(
-                    .secondary)
+                Text(
+                    "Folders sessions ran in, to pick from when you set up Start Work. Kept only on this Mac; folders with a session running stay."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
             } header: {
-                Text("Desks")
+                Text("Recent Folders")
             }
 
             Section {
