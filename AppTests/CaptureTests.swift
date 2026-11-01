@@ -147,6 +147,18 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: today(14)).environmentObject(returning))
     }
 
+    /// The README picture (copied by hand to docs/images/): the window a little taller than the default so the
+    /// off-duty prototype desk shows too, and the helper still in the lane by the door, facing out. Light by
+    /// day, dark by night.
+    func testCaptureReadme() throws {
+        for (time, hour) in [("day", 14), ("night", 22)] {
+            let (model, stage) = scenario(at: today(hour), walked: 0.8)
+            try capture(
+                "readme-\(time)", size: CGSize(width: OfficeView.defaultSize.width, height: 860),
+                OfficeView(fixedNow: today(hour), stage: stage).environmentObject(model))
+        }
+    }
+
     /// Four pods fit the default window under the real top bar, with no scrolling.
     func testDefaultWindowHoldsFourPods() {
         let model = makeModel(connected: true)
