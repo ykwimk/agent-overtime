@@ -35,14 +35,14 @@ struct WelcomeView: View {
                     "A small plugin lets Claude Code tell this app when it works. Paste these two lines into Claude Code. They apply to every Claude Code session on this Mac, and you can turn the plugin off or remove it in Claude Code at any time."
                 )
                 .fixedSize(horizontal: false, vertical: true)
-                Text(verbatim: AppModel.connectCommands)
+                Text(verbatim: Release.connectCommands)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Style.floor))
                     .accessibilityLabel(Text("Connect commands"))
-                    .accessibilityValue(Text(verbatim: AppModel.connectCommands))
+                    .accessibilityValue(Text(verbatim: Release.connectCommands))
                 Text(
                     "When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once."
                 )
@@ -62,7 +62,7 @@ struct WelcomeView: View {
                 .keyboardShortcut(.cancelAction)
                 Button("Copy Connect Commands") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(AppModel.connectCommands, forType: .string)
+                    NSPasteboard.general.setString(Release.connectCommands, forType: .string)
                     copiedAt = Date()
                     noNewsYet = false
                 }

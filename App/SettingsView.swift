@@ -38,7 +38,7 @@ struct SettingsView: View {
                 }
                 Button("Copy Connect Commands") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(AppModel.connectCommands, forType: .string)
+                    NSPasteboard.general.setString(Release.connectCommands, forType: .string)
                     copied = true
                 }
                 if copied {
@@ -98,7 +98,7 @@ struct SettingsView: View {
                     Text("Version")
                 }
                 LabeledContent {
-                    Link(destination: AppModel.repositoryURL) { Text(verbatim: AppModel.repository) }
+                    Link(destination: AppModel.repositoryURL) { Text(verbatim: Release.repository) }
                 } label: {
                     Text("Source")
                 }

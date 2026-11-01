@@ -52,3 +52,13 @@ public enum HookCommand {
         return "test -x '\(system)' && exec '\(system)'; test -x \"\(user)\" && exec \"\(user)\"; exit 0"
     }
 }
+
+/// The repository and the release the connect commands pin, so a later change on main never reaches someone's
+/// hooks by itself. Both READMEs quote these commands; a test keeps them the same.
+public enum Release {
+    public static let repository = "ykwimk/agent-overtime"
+    public static let tag = "v0.2.0"
+    public static var connectCommands: String {
+        "/plugin marketplace add \(repository)#\(tag)\n/plugin install agent-overtime@agent-overtime"
+    }
+}

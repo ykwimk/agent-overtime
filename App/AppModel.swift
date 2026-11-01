@@ -77,15 +77,11 @@ final class AppModel: ObservableObject {
         static let welcomeDismissed = "welcomeDismissed"
     }
 
-    static let repository = "ykwimk/agent-overtime"
-    /// The release these commands pin, so a later change on main never reaches someone's hooks by itself.
-    static let releaseTag = "v0.2.0"
-    static var connectCommands: String {
-        "/plugin marketplace add \(repository)#\(releaseTag)\n/plugin install agent-overtime@agent-overtime"
-    }
-    static let hooksURL = URL(string: "https://github.com/\(repository)/blob/\(releaseTag)/plugin/hooks/hooks.json")!
-    static let creditsURL = URL(string: "https://github.com/\(repository)/blob/\(releaseTag)/App/Art/CREDITS.txt")!
-    static let repositoryURL = URL(string: "https://github.com/\(repository)")!
+    static let hooksURL = URL(
+        string: "https://github.com/\(Release.repository)/blob/\(Release.tag)/plugin/hooks/hooks.json")!
+    static let creditsURL = URL(
+        string: "https://github.com/\(Release.repository)/blob/\(Release.tag)/App/Art/CREDITS.txt")!
+    static let repositoryURL = URL(string: "https://github.com/\(Release.repository)")!
 
     init(supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath)
     {
