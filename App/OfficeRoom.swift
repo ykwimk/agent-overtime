@@ -20,8 +20,8 @@ final class Stage: ObservableObject {
         let mark: Mark
     }
 
-    /// The office ticks fast until this moment (someone is walking), and slowly after.
-    @Published private(set) var busyUntil = Date.distantPast
+    /// The picture ticks fast until this moment (someone is walking), and slowly after.
+    private(set) var busyUntil = Date.distantPast
 
     private var plan = SeatPlan()
     private var office: OfficeState?
@@ -29,6 +29,8 @@ final class Stage: ObservableObject {
     private var pods: [Pod] = []
     private var present: [String: Seated] = [:]
     private var walks: [String: Walk] = [:]
+    /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
+    private var generation = 0
 
     /// Pixels a second; long routes walk faster so nobody takes more than `longest` seconds.
     private static let speed = 90.0
@@ -39,6 +41,7 @@ final class Stage: ObservableObject {
         guard office != self.office || width != layout.width else { return (pods, layout) }
         let first = self.office == nil
         let before = layout
+        generation += 1
         self.office = office
         pods = plan.pods(for: office)
         layout = RoomLayout(width: width, podCount: pods.count)
@@ -67,8 +70,7 @@ final class Stage: ObservableObject {
         }
         present = seated
 
-        let until = walks.values.map { $0.start + $0.duration }.max() ?? .distantPast
-        if until > busyUntil { DispatchQueue.main.async { self.busyUntil = until } }
+        busyUntil = walks.values.map { $0.start + $0.duration }.max() ?? .distantPast
         return (pods, layout)
     }
 
@@ -120,6 +122,21 @@ final class Stage: ObservableObject {
         }
         return (walkers, away, doorOpen)
     }
+
+    private var last: (key: String, image: CGImage?)?
+
+    /// The office at `now`. A tick can draw the view twice; the second time reuses the first picture.
+    func picture(at now: Date, frame: Int, height: Int, reduceMotion: Bool) -> CGImage? {
+        let key = "\(now.timeIntervalSinceReferenceDate) \(frame) \(height) \(layout.width) \(generation)"
+        if let last, last.key == key { return last.image }
+        let moment = moment(at: now)
+        let image = OfficeRenderer().render(
+            OfficeScene(
+                layout: layout, height: height, pods: pods, darkness: Daylight.darkness(at: now), frame: frame,
+                now: now, walkers: moment.walkers, away: moment.away, doorOpen: moment.doorOpen && !reduceMotion))
+        last = (key, image)
+        return image
+    }
 }
 
 /// The office as one picture at 2 points per art pixel, with system-font name tags on the floor in front of
@@ -128,72 +145,61 @@ struct OfficeRoom: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var stage: Stage
-    @State private var visible = true
     /// Screenshots pin the clock; the frame then stays at 0.
     let fixedNow: Date?
+    /// Only the CPU test sets this: its window may open behind a full-screen app, where nothing would tick.
+    let ticksWhileHidden: Bool
 
-    init(fixedNow: Date? = nil, stage: Stage? = nil) {
+    init(fixedNow: Date? = nil, stage: Stage? = nil, ticksWhileHidden: Bool = false) {
         self.fixedNow = fixedNow
+        self.ticksWhileHidden = ticksWhileHidden
         _stage = StateObject(wrappedValue: stage ?? Stage())
     }
 
     var body: some View {
         GeometryReader { geometry in
-            if let fixedNow {
-                room(now: fixedNow, frame: 0, size: geometry.size)
-            } else if !visible {
-                // Hidden or minimized: one still picture, no ticking (the app stays open all day).
-                room(now: Date(), frame: 0, size: geometry.size)
-            } else {
-                TimelineView(OfficeSchedule(busyUntil: stage.busyUntil, slow: reduceMotion ? 30 : 0.4)) { context in
-                    room(
-                        now: context.date,
-                        frame: reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 0.4),
-                        size: geometry.size)
+            let scale = RoomLayout.pointsPerPixel
+            let animate = fixedNow == nil && !reduceMotion
+            let synced = stage.sync(
+                model.office, width: Int(geometry.size.width) / scale, now: fixedNow ?? Date(), animate: animate)
+            let height = max(synced.layout.contentHeight, Int(geometry.size.height) / scale)
+            ScrollView(.vertical) {
+                ZStack(alignment: .topLeading) {
+                    OfficePicture(
+                        stage: stage, height: height, reduceMotion: reduceMotion, fixedNow: fixedNow,
+                        ticksWhileHidden: ticksWhileHidden
+                    )
+                    .frame(width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale))
+                    .accessibilityHidden(true)
+                    tags(synced.pods, synced.layout)
                 }
+                .frame(
+                    width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale),
+                    alignment: .topLeading)
             }
         }
-        .background(WindowVisibility(visible: $visible))
     }
 
-    private func room(now: Date, frame: Int, size: CGSize) -> some View {
-        let scale = RoomLayout.pointsPerPixel
-        let animate = fixedNow == nil && !reduceMotion
-        let synced = stage.sync(model.office, width: Int(size.width) / scale, now: fixedNow ?? Date(), animate: animate)
-        let layout = synced.layout
-        let moment = stage.moment(at: now)
-        let scene = OfficeScene(
-            layout: layout, height: max(layout.contentHeight, Int(size.height) / scale), pods: synced.pods,
-            darkness: Daylight.darkness(at: now), frame: frame, now: now, walkers: moment.walkers, away: moment.away,
-            doorOpen: moment.doorOpen && !reduceMotion)
-        return ScrollView(.vertical) {
-            ZStack(alignment: .topLeading) {
-                if let image = OfficeRenderer().render(scene) {
-                    Image(decorative: image, scale: 1 / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)
-                }
-                ForEach(Array(synced.pods.enumerated()), id: \.element.id) { index, pod in
-                    let origin = layout.origin(of: index)
-                    PodTags(pod: pod, now: now)
-                        .offset(x: CGFloat(origin.x * scale), y: CGFloat(origin.y * scale))
-                }
+    /// Name tags only change by the minute ("Waiting · 3 min"), so they tick slowly on their own.
+    @ViewBuilder private func tags(_ pods: [Pod], _ layout: RoomLayout) -> some View {
+        if let fixedNow {
+            tagLayer(pods, layout, now: fixedNow)
+        } else {
+            TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 30)) { context in
+                tagLayer(pods, layout, now: context.date)
             }
-            .frame(
-                width: CGFloat(layout.width * scale), height: CGFloat(scene.height * scale), alignment: .topLeading)
         }
     }
-}
 
-/// Ticks about 12 times a second while someone walks, then every `slow` seconds.
-struct OfficeSchedule: TimelineSchedule {
-    let busyUntil: Date
-    let slow: TimeInterval
-
-    func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
-        var next = start
-        return AnyIterator {
-            let current = next
-            next = current + (current < busyUntil ? 1.0 / 12 : slow)
-            return current
+    private func tagLayer(_ pods: [Pod], _ layout: RoomLayout, now: Date) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(pods.enumerated()), id: \.element.id) { index, pod in
+                let origin = layout.origin(of: index)
+                PodTags(pod: pod, now: now)
+                    .offset(
+                        x: CGFloat(origin.x * RoomLayout.pointsPerPixel),
+                        y: CGFloat(origin.y * RoomLayout.pointsPerPixel))
+            }
         }
     }
 }
@@ -288,44 +294,94 @@ private struct Tag<Content: View>: View {
     }
 }
 
-/// Reports whether the window is on screen; hidden or minimized windows stop the animation.
-struct WindowVisibility: NSViewRepresentable {
-    @Binding var visible: Bool
+/// The office picture at a whole-number scale, sharp: the GPU scales it with nearest-neighbour sampling.
+/// It keeps its own clock, so SwiftUI only touches it when the office changes. Between changes it redraws
+/// itself: about 12 times a second while someone walks, 2.5 times a second otherwise, every 30 s with Reduce
+/// Motion, and not at all while its window is hidden or minimized (the app stays open all day).
+struct OfficePicture: NSViewRepresentable {
+    let stage: Stage
+    let height: Int
+    let reduceMotion: Bool
+    let fixedNow: Date?
+    let ticksWhileHidden: Bool
 
-    func makeNSView(context: Context) -> NSView {
-        Watcher { visible in
-            if self.visible != visible { self.visible = visible }
-        }
+    func makeNSView(context: Context) -> PictureView { PictureView() }
+
+    func updateNSView(_ view: PictureView, context: Context) {
+        view.settings = self
+        view.refresh()
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
-
-    final class Watcher: NSView {
-        private let onChange: (Bool) -> Void
+    final class PictureView: NSView {
+        var settings: OfficePicture?
+        private var image: CGImage?
+        private var timer: Timer?
         private var observer: NSObjectProtocol?
 
-        init(onChange: @escaping (Bool) -> Void) {
-            self.onChange = onChange
-            super.init(frame: .zero)
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer?.magnificationFilter = .nearest
+            layer?.contentsGravity = .resize
         }
 
         required init?(coder: NSCoder) { nil }
 
         deinit {
+            timer?.invalidate()
             if let observer { NotificationCenter.default.removeObserver(observer) }
+        }
+
+        override var wantsUpdateLayer: Bool { true }
+        override var isFlipped: Bool { true }
+
+        override func updateLayer() {
+            layer?.contents = image
+        }
+
+        /// Used when the view is drawn into a bitmap (screenshots) instead of shown through its layer.
+        override func draw(_ dirtyRect: NSRect) {
+            guard let image, let context = NSGraphicsContext.current?.cgContext else { return }
+            context.interpolationQuality = .none
+            context.saveGState()
+            context.translateBy(x: 0, y: bounds.height)
+            context.scaleBy(x: 1, y: -1)
+            context.draw(image, in: bounds)
+            context.restoreGState()
         }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             if let observer { NotificationCenter.default.removeObserver(observer) }
             observer = nil
-            guard let window else { return }
-            observer = NotificationCenter.default.addObserver(
-                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
-            ) { [weak self, weak window] _ in
-                guard let window else { return }
-                self?.onChange(window.occlusionState.contains(.visible))
+            if let window {
+                observer = NotificationCenter.default.addObserver(
+                    forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+                ) { [weak self] _ in self?.refresh() }
             }
+            refresh()
+        }
+
+        /// Draws now, then books the next frame if the window can be seen.
+        func refresh() {
+            timer?.invalidate()
+            timer = nil
+            guard let settings else { return }
+            let now = settings.fixedNow ?? Date()
+            let animated = settings.fixedNow == nil && !settings.reduceMotion
+            let frame = animated ? Int(now.timeIntervalSinceReferenceDate / 0.4) : 0
+            image = settings.stage.picture(
+                at: now, frame: frame, height: settings.height, reduceMotion: settings.reduceMotion)
+            needsDisplay = true
+
+            let visible = window?.occlusionState.contains(.visible) ?? false
+            guard settings.fixedNow == nil, window != nil, visible || settings.ticksWhileHidden else { return }
+            let interval = now < settings.stage.busyUntil ? 1.0 / 12 : (settings.reduceMotion ? 30 : 0.4)
+            let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in self?.refresh() }
+            timer.tolerance = interval / 10
+            // Common modes: keep moving while the room is scrolled.
+            RunLoop.main.add(timer, forMode: .common)
+            self.timer = timer
         }
     }
 }

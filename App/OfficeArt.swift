@@ -7,6 +7,7 @@ final class ArtStore {
     private let folder: URL?
     private var sheets: [String: CGImage] = [:]
     private var cells: [String: CGImage] = [:]
+    private var pictures: [String: CGImage] = [:]
 
     init(bundle: Bundle = .main) {
         folder = bundle.resourceURL?.appendingPathComponent("Art")
@@ -19,6 +20,16 @@ final class ArtStore {
         else { return nil }
         cells[key] = cell
         return cell
+    }
+
+    /// Pictures drawn once and reused (the empty room, the night view through a window). A few at most:
+    /// resizing the window makes a new room size each time.
+    func picture(_ key: String, draw: () -> CGImage?) -> CGImage? {
+        if let picture = pictures[key] { return picture }
+        if pictures.count > 32 { pictures.removeAll() }
+        let picture = draw()
+        pictures[key] = picture
+        return picture
     }
 
     private func sheet(_ path: String) -> CGImage? {
@@ -159,8 +170,11 @@ struct OfficeRenderer {
     private let art = ArtStore.shared
 
     func render(_ scene: OfficeScene) -> CGImage? {
-        let width = scene.layout.width
-        let height = scene.height
+        Self.picture(width: scene.layout.width, height: scene.height, art: art) { $0.draw(scene) }
+    }
+
+    /// A new bitmap at art resolution, painted in top-left pixel coordinates.
+    private static func picture(width: Int, height: Int, art: ArtStore, _ paint: (inout Canvas) -> Void) -> CGImage? {
         guard width > 0, height > 0,
             let context = CGContext(
                 data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -169,8 +183,20 @@ struct OfficeRenderer {
         context.interpolationQuality = .none
         context.setShouldAntialias(false)
         var canvas = Canvas(context: context, height: height, art: art)
-        canvas.draw(scene)
+        paint(&canvas)
         return context.makeImage()
+    }
+
+    /// The glass of each window on the back wall, and whether the bookcase still fits beside them.
+    private static func wallPlan(width: Int) -> (glass: [CGRect], shelf: Bool) {
+        let shelf = width - 112 - 144 >= 76
+        var glass: [CGRect] = []
+        var x = 144
+        while x + 76 <= width - (shelf ? 112 : 44) {
+            glass.append(CGRect(x: x + 2, y: 19, width: 72, height: 36))
+            x += 92
+        }
+        return (glass, shelf)
     }
 
     /// Drawing helpers in top-left pixel coordinates, plus what has to wait for the night pass.
@@ -181,7 +207,6 @@ struct OfficeRenderer {
         var marks: [(Mark, Int, Int)] = []
         var lamps: [(x: Int, y: Int)] = []
         var screens: [(x: Int, y: Int)] = []
-        var windows: [CGRect] = []
 
         init(context: CGContext, height: Int, art: ArtStore) {
             self.context = context
@@ -219,16 +244,23 @@ struct OfficeRenderer {
                 blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
         }
 
-        func glow(_ x: Int, _ y: Int, radius: CGFloat, _ hex: UInt32, _ alpha: CGFloat) {
-            guard alpha > 0,
-                let gradient = CGGradient(
-                    colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                    colors: [Self.color(hex, alpha), Self.color(hex, alpha * 0.35), Self.color(hex, 0)] as CFArray,
-                    locations: [0, 0.4, 1])
-            else { return }
-            let center = CGPoint(x: CGFloat(x), y: CGFloat(height - y))
-            context.drawRadialGradient(
-                gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
+        static func gradient(_ hex: UInt32, _ alpha: CGFloat) -> CGGradient? {
+            CGGradient(
+                colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                colors: [color(hex, alpha), color(hex, alpha * 0.35), color(hex, 0)] as CFArray, locations: [0, 0.4, 1])
+        }
+
+        /// A soft round light, drawn once per colour and strength and then stamped where it shines.
+        func glow(_ hex: UInt32, _ alpha: CGFloat, radius: Int) -> CGImage? {
+            art.picture("glow \(hex) \(Int(alpha * 100)) \(radius)") { [art] in
+                OfficeRenderer.picture(width: radius * 2, height: radius * 2, art: art) { canvas in
+                    guard let gradient = Self.gradient(hex, alpha) else { return }
+                    let center = CGPoint(x: radius, y: radius)
+                    canvas.context.drawRadialGradient(
+                        gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: CGFloat(radius),
+                        options: [])
+                }
+            }
         }
 
         /// A one-pixel line, for clock hands and whiteboard scribbles.
@@ -244,8 +276,17 @@ struct OfficeRenderer {
 
         mutating func draw(_ scene: OfficeScene) {
             let width = scene.layout.width
-            floor(width: width)
-            wall(width: width, scene: scene)
+            let height = self.height
+            let plan = OfficeRenderer.wallPlan(width: width)
+            let room = art.picture("room \(width)x\(height) open:\(scene.doorOpen)") { [art] in
+                OfficeRenderer.picture(width: width, height: height, art: art) { room in
+                    room.floor(width: width)
+                    room.wall(width: width, plan: plan)
+                    room.door(open: scene.doorOpen)
+                }
+            }
+            image(room, 0, 0)
+            clock(center: (123, 21), scene.now, scene.calendar)
             props(scene)
             for (index, pod) in scene.pods.enumerated() {
                 self.pod(pod, origin: scene.layout.origin(of: index), scene: scene)
@@ -256,7 +297,7 @@ struct OfficeRenderer {
                     walker.y - 62)
                 if let mark = walker.mark { marks.append((mark, walker.x, walker.y - 48)) }
             }
-            night(scene)
+            night(scene, glass: plan.glass)
             for (mark, x, top) in marks { bubble(mark, x, top) }
         }
 
@@ -266,20 +307,13 @@ struct OfficeRenderer {
             }
         }
 
-        private mutating func wall(width: Int, scene: OfficeScene) {
+        private func wall(width: Int, plan: (glass: [CGRect], shelf: Bool)) {
             for x in stride(from: 0, to: width, by: 32) {
                 sprite(Sheet.wall, 224, 128 - RoomLayout.wall, 32, RoomLayout.wall, x, 0)
             }
-            door(open: scene.doorOpen)
             whiteboard(50, 14)
-            clock(center: (123, 21), scene.now, scene.calendar)
-            let keepShelf = width - 112 - 144 >= 76
-            var x = 144
-            while x + 76 <= width - (keepShelf ? 112 : 44) {
-                window(x, 8, 76, 50)
-                x += 92
-            }
-            if keepShelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
+            for glass in plan.glass { window(Int(glass.minX) - 2, 8, 76, 50) }
+            if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
             sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
         }
 
@@ -399,7 +433,7 @@ struct OfficeRenderer {
         // MARK: drawn in code (the pack has no office window, plain door, whiteboard or wall clock)
 
         /// A wide office window with a thin metal frame and half-open blinds.
-        private mutating func window(_ x: Int, _ y: Int, _ w: Int, _ h: Int) {
+        private func window(_ x: Int, _ y: Int, _ w: Int, _ h: Int) {
             fill(x - 1, y - 1, w + 2, h + 3, 0x3E434D)
             fill(x, y, w, h, 0x7D848F)
             let glass = CGRect(x: x + 2, y: y + 11, width: w - 4, height: h - 14)
@@ -433,7 +467,6 @@ struct OfficeRenderer {
             }
             fill(x - 3, y + h, w + 6, 2, 0xE2DED4)
             fill(x - 3, y + h + 2, w + 6, 1, 0x8C867A)
-            windows.append(glass)
         }
 
         /// A plain office door with a narrow glass panel. It stands open while someone walks through.
@@ -538,7 +571,7 @@ struct OfficeRenderer {
         // MARK: night
 
         /// The room dims, the windows show the city at night, and only desks with someone at them glow.
-        private func night(_ scene: OfficeScene) {
+        private func night(_ scene: OfficeScene, glass: [CGRect]) {
             let d = CGFloat(scene.darkness)
             guard d > 0 else { return }
             let full = CGRect(x: 0, y: 0, width: scene.layout.width, height: height)
@@ -548,14 +581,24 @@ struct OfficeRenderer {
             context.setBlendMode(.normal)
 
             context.setAlpha(d)
-            for (index, glass) in windows.enumerated() { nightView(glass, seed: index) }
+            for (index, pane) in glass.enumerated() {
+                let view = art.picture("night \(index)") { [art] in
+                    OfficeRenderer.picture(width: Int(pane.width), height: Int(pane.height), art: art) {
+                        $0.nightView(CGRect(origin: .zero, size: pane.size), seed: index)
+                    }
+                }
+                image(view, Int(pane.minX), Int(pane.minY))
+            }
             context.setAlpha(1)
 
             context.setBlendMode(.plusLighter)
-            for screen in screens { glow(screen.x, screen.y, radius: 22, 0x7FB2FF, 0.55 * d) }
+            let screenLight = glow(0x7FB2FF, 0.55 * d, radius: 22)
+            let pool = glow(0xFFB15C, 0.5 * d, radius: 46)
+            let bulb = glow(0xFFE2A8, 0.6 * d, radius: 12)
+            for screen in screens { image(screenLight, screen.x - 22, screen.y - 22) }
             for lamp in lamps {
-                glow(lamp.x + 10, lamp.y + 26, radius: 46, 0xFFB15C, 0.5 * d)
-                glow(lamp.x + 12, lamp.y + 12, radius: 12, 0xFFE2A8, 0.6 * d)
+                image(pool, lamp.x + 10 - 46, lamp.y + 26 - 46)
+                image(bulb, lamp.x, lamp.y)
             }
             context.setBlendMode(.normal)
             context.setAlpha(d)
