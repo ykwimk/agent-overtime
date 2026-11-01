@@ -167,10 +167,28 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertFalse(full.folders.contains("/busy/late"), "never evicts a desk with someone at it")
 
         var crowded = OfficeState()
-        for i in 0..<10 { crowded.apply(event(.sessionStart, "s\(i)"), now: t0) }
-        XCTAssertEqual(crowded.desks[0].sessions.count, OfficeState.maxSessionsPerDesk)
-        for i in 0..<20 { crowded.apply(event(.subagentStart, "s0", agent: "a\(i)"), now: t0) }
-        XCTAssertEqual(crowded.desks[0].teammates.count, OfficeState.maxTeammates)
+        for i in 0..<100 { crowded.apply(event(.sessionStart, "s\(i)"), now: t0) }
+        XCTAssertEqual(crowded.liveSessionCount, OfficeState.maxSessions)
+        for i in 0..<100 { crowded.apply(event(.subagentStart, "s0", agent: "a\(i)"), now: t0) }
+        XCTAssertEqual(crowded.desks[0].sessions[0].teammates.count, OfficeState.maxTeammates)
+    }
+
+    /// v0.1 seated 4 sessions per folder and 8 teammates; the 5th session and the 9th teammate went uncounted.
+    func testFifthSessionAndNinthTeammateAreCounted() {
+        var office = OfficeState()
+        for i in 1...5 { office.apply(event(.userPromptSubmit, "s\(i)"), now: t0) }
+        office.apply(event(.permissionRequest, "s5"), now: t0)
+        XCTAssertEqual(office.liveSessionCount, 5)
+        XCTAssertEqual(office.count(.waiting), 1, "the 5th session's wait reaches the summary and menu bar")
+
+        for i in 1...9 { office.apply(event(.subagentStart, "s1", agent: "a\(i)"), now: t0) }
+        office.apply(event(.permissionRequest, "s1", agent: "a9"), now: t0)
+        XCTAssertEqual(office.count(.waiting), 2, "so does the 9th teammate's")
+        var plan = SeatPlan()
+        let pods = plan.pods(for: office)
+        XCTAssertEqual(pods.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
+        XCTAssertEqual(pods[0].extra, 6, "three at desks, six as +6")
+        XCTAssertTrue(pods[0].teammateWaiting)
     }
 
     func testCounts() {

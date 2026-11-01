@@ -54,8 +54,10 @@ public struct Desk: Equatable, Identifiable {
 
 public struct OfficeState: Equatable {
     public static let maxDesks = 24
-    public static let maxSessionsPerDesk = 4
-    public static let maxTeammates = 8
+    /// Guards against a runaway process flooding the socket, far above real use, so every real session and
+    /// teammate is counted in the summary and the menu bar. Teammates without a desk show as "+n".
+    public static let maxSessions = 64
+    public static let maxTeammates = 64
 
     public private(set) var desks: [Desk]
 
@@ -152,7 +154,7 @@ public struct OfficeState: Equatable {
 
     /// Seats a session the office has not seen yet (a new one, or one started before the app).
     private mutating func seat(_ event: HookEvent, now: Date, desksChanged: inout Bool) -> (Int, Int)? {
-        if event.kind == .subagentStop { return nil }
+        if event.kind == .subagentStop || liveSessionCount >= Self.maxSessions { return nil }
         var d = desks.firstIndex { $0.folder == event.cwd }
         if d == nil {
             // A new folder takes over the off-duty desk nearest the door, so it is in view without scrolling.
@@ -166,7 +168,7 @@ public struct OfficeState: Equatable {
             }
             desksChanged = d != nil
         }
-        guard let d, desks[d].sessions.count < Self.maxSessionsPerDesk else { return nil }
+        guard let d else { return nil }
         desks[d].sessions.append(Session(id: event.session, pid: event.pid, state: .resting, since: now))
         return (d, desks[d].sessions.count - 1)
     }
