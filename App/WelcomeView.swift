@@ -122,6 +122,7 @@ struct WelcomeView: View {
 }
 
 /// A slice of the office with three example people: one working, a teammate waiting, a teammate resting.
+/// Always by day, whatever the clock says: the example is there to be seen clearly.
 struct OfficeSlice: View {
     var now = Date()
 
@@ -152,8 +153,7 @@ struct OfficeSlice: View {
             height: RoomLayout.firstRow + RoomLayout.podDepth - top)
         let scene = OfficeScene(
             layout: RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1),
-            height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: Daylight.darkness(at: now),
-            frame: 0, now: now)
+            height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: 0, frame: 0, now: now)
         return ZStack(alignment: .topLeading) {
             if let image = OfficeRenderer().render(scene)?.cropping(to: crop) {
                 Image(decorative: image, scale: 1 / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)

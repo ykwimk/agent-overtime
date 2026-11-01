@@ -207,6 +207,16 @@ struct OfficeRenderer {
         var marks: [(Mark, Int, Int)] = []
         var lamps: [(x: Int, y: Int)] = []
         var screens: [(x: Int, y: Int)] = []
+        var seated: [Seat] = []
+
+        /// Someone in a chair: `cx` is the middle of the desk, `top` the desk's top edge.
+        struct Seat {
+            let look: Look
+            let column: Int
+            let cx: Int
+            let top: Int
+            let nod: Int
+        }
 
         init(context: CGContext, height: Int, art: ArtStore) {
             self.context = context
@@ -401,13 +411,19 @@ struct OfficeRenderer {
                 }
                 // Everyone stays seated; the bubble tells the states apart.
                 let resting = state == .resting
-                let nod = resting && scene.frame % 4 >= 2 ? 1 : 0
-                person(look, "Sitting", column: resting ? 1 : 0, row: 0, cx - 32, y0 - 14, nod: nod)
-                sprite(Sheet.chair, 0, 0, 32, 32, cx - 16, y0 + 28)
+                let seat = Seat(
+                    look: look, column: resting ? 1 : 0, cx: cx, top: y0, nod: resting && scene.frame % 4 >= 2 ? 1 : 0)
+                sit(seat)
+                seated.append(seat)
                 // The "!" hops while waiting. With Reduce Motion the frame stays 0, so it holds still.
                 let hop = state == .waiting && scene.frame % 2 == 1 ? 2 : 0
                 marks.append((Mark(state), cx, y0 + 10 - hop))
             }
+        }
+
+        private func sit(_ seat: Seat) {
+            person(seat.look, "Sitting", column: seat.column, row: 0, seat.cx - 32, seat.top - 14, nod: seat.nod)
+            sprite(Sheet.chair, 0, 0, 32, 32, seat.cx - 16, seat.top + 28)
         }
 
         private func person(_ look: Look, _ animation: String, column: Int, row: Int, _ x: Int, _ y: Int, nod: Int = 0)
@@ -575,6 +591,14 @@ struct OfficeRenderer {
             context.setFillColor(Self.color(Self.mix(0xFFFFFF, 0x262C58, Double(d))))
             context.fill(full)
             context.setBlendMode(.normal)
+
+            // People at their lit desks come back halfway to their daytime colours, so the lamp shows who sits
+            // there instead of a silhouette. One layer, so the chair still hides the body behind it.
+            context.setAlpha(0.5 * d)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.setAlpha(1)
+            for seat in seated { sit(seat) }
+            context.endTransparencyLayer()
 
             context.setAlpha(d)
             for (index, pane) in glass.enumerated() {
