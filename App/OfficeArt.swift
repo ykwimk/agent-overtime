@@ -53,8 +53,40 @@ final class ArtStore {
             let source = CGImageSourceCreateWithURL(url as CFURL, nil),
             let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
         else { return nil }
-        sheets[path] = image
-        return image
+        let sheet = path.hasPrefix("MetroCity/") ? Self.recolored(image) ?? image : image
+        sheets[path] = sheet
+        return sheet
+    }
+
+    /// A MetroCity sheet with every opaque pixel passed through `nearRoom`, once, in memory.
+    private static func recolored(_ image: CGImage) -> CGImage? {
+        let width = image.width
+        let height = image.height
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let pixels = context.data?.bindMemory(to: UInt8.self, capacity: width * height * 4) else { return nil }
+        // Semi-transparent pixels (the shadow) stay as they are.
+        for i in stride(from: 0, to: width * height * 4, by: 4) where pixels[i + 3] == 255 {
+            (pixels[i], pixels[i + 1], pixels[i + 2]) = nearRoom(pixels[i], pixels[i + 1], pixels[i + 2])
+        }
+        return context.makeImage()
+    }
+
+    /// MetroCity people drawn beside LPC Revised furniture: colours a little less saturated and less contrasty,
+    /// like LPC's muted palette, and near-black outlines lifted one step toward LPC's dark plum-brown.
+    static func nearRoom(_ r: UInt8, _ g: UInt8, _ b: UInt8) -> (UInt8, UInt8, UInt8) {
+        let gray = 0.299 * Double(r) + 0.587 * Double(g) + 0.114 * Double(b)
+        func channel(_ value: UInt8, _ outline: Double) -> UInt8 {
+            var v = Double(value) + (gray - Double(value)) * 0.12
+            v = 10 + v * 0.93
+            if gray < 40 { v += (outline - v) * 0.6 }
+            return UInt8(min(255, max(0, v.rounded())))
+        }
+        return (channel(r, 0x3B), channel(g, 0x2A), channel(b, 0x33))
     }
 }
 
@@ -232,7 +264,9 @@ struct OfficeRenderer {
         var marks: [(Mark, Int, Int)] = []
         var lamps: [(x: Int, y: Int)] = []
         var screens: [(x: Int, y: Int)] = []
-        var seated: [Seat] = []
+        /// Bitmap pixels per MetroCity pixel, and art pixels per bitmap pixel.
+        static let personScale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
+        static let bitmapPixel = 1 / CGFloat(OfficeRenderer.density)
 
         /// Someone in a chair: `cx` is the middle of the desk, `top` the desk's top edge.
         struct Seat {
@@ -344,10 +378,12 @@ struct OfficeRenderer {
                 self.pod(pod, origin: scene.layout.origin(of: index), scene: scene)
             }
             for walker in scene.walkers.sorted(by: { $0.y < $1.y }) {
-                // The feet are 30 sheet pixels down the cell.
+                // The feet are 30 sheet pixels down the cell; the pack's shadow cell sits under them.
+                let x = CGFloat(walker.x) - 24
+                let y = CGFloat(walker.y) - 45
+                image(art.cell(Look.shadow, 0, 0, 32, 32, scale: Self.personScale), x, y, pixel: Self.bitmapPixel)
                 person(
-                    walker.look, column: walker.facing.column + walker.step % 6, CGFloat(walker.x) - 24,
-                    CGFloat(walker.y) - 45, mirrored: walker.facing == .left)
+                    walker.look, column: walker.facing.column + walker.step % 6, x, y, mirrored: walker.facing == .left)
             }
             night(scene, glass: plan.glass)
             for (mark, x, top) in marks { bubble(mark, x, top) }
@@ -455,7 +491,6 @@ struct OfficeRenderer {
                 // Everyone stays seated; the bubble tells the states apart. Resting heads nod.
                 let seat = Seat(look: look, cx: cx, top: y0, nod: state == .resting && scene.frame % 4 >= 2)
                 sit(seat)
-                seated.append(seat)
                 // The "!" hops while waiting. With Reduce Motion the frame stays 0, so it holds still.
                 let hop = state == .waiting && scene.frame % 2 == 1 ? 2 : 0
                 marks.append((Mark(state), cx, y0 + 8 - hop))
@@ -474,11 +509,10 @@ struct OfficeRenderer {
         private func person(
             _ look: Look, column: Int, rows: Int = 32, _ x: CGFloat, _ y: CGFloat, mirrored: Bool = false
         ) {
-            let scale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
             for layer in look.layers {
                 image(
-                    art.cell(layer.sheet, column * 32, layer.row * 32, 32, rows, scale: scale), x, y,
-                    pixel: 1 / CGFloat(OfficeRenderer.density), mirrored: mirrored)
+                    art.cell(layer.sheet, column * 32, layer.row * 32, 32, rows, scale: Self.personScale), x, y,
+                    pixel: Self.bitmapPixel, mirrored: mirrored)
             }
         }
 
@@ -635,19 +669,32 @@ struct OfficeRenderer {
         private func night(_ scene: OfficeScene, glass: [CGRect]) {
             let d = CGFloat(scene.darkness)
             guard d > 0 else { return }
-            let full = CGRect(x: 0, y: 0, width: scene.layout.width, height: height)
+            // The room dims, but less in the pool under each lit lamp. People and furniture there are lit alike
+            // and keep about half their daytime colours, so the lamp shows who sits there.
+            let width = scene.layout.width
+            let height = self.height
+            let pools = lamps.map { CGPoint(x: $0.x + 10, y: height - $0.y - 26) }
+            let key = pools.map { "\(Int($0.x)),\(Int($0.y))" }.joined(separator: " ")
+            let shade = art.picture("shade \(width)x\(height) \(Int(d * 100)) \(key)") { [art] in
+                OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
+                    canvas in
+                    canvas.fill(0, 0, width, height, Self.mix(0xFFFFFF, 0x262C58, Double(d)))
+                    let lit = Self.mix(0xFFFFFF, 0x262C58, Double(d) * 0.45)
+                    guard
+                        let gradient = CGGradient(
+                            colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                            colors: [Self.color(lit), Self.color(lit, 0.8), Self.color(lit, 0)] as CFArray,
+                            locations: [0, 0.45, 1])
+                    else { return }
+                    for pool in pools {
+                        canvas.context.drawRadialGradient(
+                            gradient, startCenter: pool, startRadius: 0, endCenter: pool, endRadius: 46, options: [])
+                    }
+                }
+            }
             context.setBlendMode(.multiply)
-            context.setFillColor(Self.color(Self.mix(0xFFFFFF, 0x262C58, Double(d))))
-            context.fill(full)
+            stamp(shade, 0, 0)
             context.setBlendMode(.normal)
-
-            // People at their lit desks come back halfway to their daytime colours, so the lamp shows who sits
-            // there instead of a silhouette. One layer, so the chair still hides the body behind it.
-            context.setAlpha(0.5 * d)
-            context.beginTransparencyLayer(auxiliaryInfo: nil)
-            context.setAlpha(1)
-            for seat in seated { sit(seat) }
-            context.endTransparencyLayer()
 
             context.setAlpha(d)
             for (index, pane) in glass.enumerated() {

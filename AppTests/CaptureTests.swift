@@ -178,6 +178,16 @@ final class CaptureTests: XCTestCase {
         }
     }
 
+    /// People get LPC-like colours: black outlines one step lighter, no pure white, a little less saturated.
+    func testPeopleColoursMoveTowardTheRoom() {
+        let black = ArtStore.nearRoom(0, 0, 0)
+        XCTAssertGreaterThan(Int(black.0) + Int(black.1) + Int(black.2), 60)
+        XCTAssertLessThan(ArtStore.nearRoom(255, 255, 255).0, 255)
+        let orange = ArtStore.nearRoom(0xCC, 0x74, 0x1D)
+        XCTAssertLessThan(Int(orange.0) - Int(orange.2), 0xCC - 0x1D)
+        XCTAssertGreaterThan(orange.0, orange.1, "still orange")
+    }
+
     /// Ten different people, both suits among them, every skin tone of the pack, and a name keeps its person.
     func testLooks() {
         XCTAssertEqual(Set(Look.all.map { "\($0.skin) \($0.clothes) \($0.hair)" }).count, Look.all.count)

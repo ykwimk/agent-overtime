@@ -146,8 +146,10 @@ MetroCity/MetroCity 2.0/ come from its MetroCity 2.0 update.
 MODIFIED: by Agent Overtime contributors, 2026, while drawing; the files
    themselves are not changed. The app stacks a body, clothes and hair;
    seats people by cutting the back view under the shoulders and drawing a
-   chair's backrest over it; moves that cut down one pixel for nodding; and
-   draws each pixel 1.5 times the size of the room's pixels.
+   chair's backrest over it; moves that cut down one pixel for nodding;
+   draws each pixel 1.5 times the size of the room's pixels; and moves the
+   colours a little toward the LPC Revised palette (near-black outlines one
+   step lighter, slightly less saturation and contrast).
 
 
 ================================================================
