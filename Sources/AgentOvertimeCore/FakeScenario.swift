@@ -1,31 +1,32 @@
 import Foundation
 
-/// Made-up events for trying the app without Claude Code: four desks, teammates, and every state.
+/// Made-up events for trying the app without Claude Code: four folders, teammates, and every state.
 /// Used by `swift run fake-events` and by the screenshot tests.
 public enum FakeScenario {
     public static let root = "/Users/demo/work"
 
     public static var events: [HookEvent] {
-        let shop = root + "/web-shop"
-        let overtime = root + "/agent-overtime"
+        let shop = root + "/my-project"
+        let overtime = root + "/web-app"
         let blog = root + "/blog"
         let prototype = root + "/prototype"
         return [
-            // web-shop: working, with three teammates in three states (the verifier waits, so the session
-            // counts as waiting), and a second session resting
+            // my-project: working, with three teammates in three states (Plan waits, so the session counts as
+            // waiting), and a second session resting
             HookEvent(kind: .sessionStart, session: "demo-b1", cwd: shop),
             HookEvent(kind: .userPromptSubmit, session: "demo-b1", cwd: shop),
-            HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-r", agentType: "researcher"),
-            HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "verifier"),
-            HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "planner"),
-            HookEvent(kind: .preToolUse, session: "demo-b1", cwd: shop, agentID: "demo-r", agentType: "researcher"),
+            HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-r", agentType: "Explore"),
+            HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "Plan"),
             HookEvent(
-                kind: .permissionRequest, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "verifier"),
+                kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "code-reviewer"),
+            HookEvent(kind: .preToolUse, session: "demo-b1", cwd: shop, agentID: "demo-r", agentType: "Explore"),
             HookEvent(
-                kind: .notification, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "planner",
+                kind: .permissionRequest, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "Plan"),
+            HookEvent(
+                kind: .notification, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "code-reviewer",
                 notification: "idle_prompt"),
             HookEvent(kind: .sessionStart, session: "demo-b2", cwd: shop),
-            // agent-overtime: waiting for the user's answer
+            // web-app: waiting for the user's answer
             HookEvent(kind: .sessionStart, session: "demo-o1", cwd: overtime),
             HookEvent(kind: .userPromptSubmit, session: "demo-o1", cwd: overtime),
             HookEvent(kind: .permissionRequest, session: "demo-o1", cwd: overtime),

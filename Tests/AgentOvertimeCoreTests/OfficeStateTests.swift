@@ -63,19 +63,19 @@ final class OfficeStateTests: XCTestCase {
     func testTeammatesComeAndGo() {
         var office = OfficeState()
         office.apply(event(.userPromptSubmit), now: t0)
-        office.apply(event(.subagentStart, agent: "a1", type: "researcher"), now: t0)
+        office.apply(event(.subagentStart, agent: "a1", type: "Explore"), now: t0)
         office.apply(event(.subagentStart, agent: "a2"), now: t0)
-        XCTAssertEqual(office.desks[0].teammates.map(\.name), ["researcher", nil])
+        XCTAssertEqual(office.desks[0].teammates.map(\.name), ["Explore", nil])
         XCTAssertEqual(office.desks[0].teammates.map(\.state), [.working, .working])
 
-        office.apply(event(.permissionRequest, agent: "a1", type: "researcher"), now: t0 + 1)
+        office.apply(event(.permissionRequest, agent: "a1", type: "Explore"), now: t0 + 1)
         XCTAssertEqual(office.desks[0].teammates[0].state, .waiting)
         XCTAssertEqual(office.desks[0].sessions[0].state, .working, "the session's own pose does not change")
 
         office.apply(event(.preToolUse, agent: "a2"), now: t0 + 2)
         XCTAssertEqual(office.desks[0].teammates[1].state, .working)
 
-        office.apply(event(.subagentStop, agent: "a1", type: "researcher"), now: t0 + 3)
+        office.apply(event(.subagentStop, agent: "a1", type: "Explore"), now: t0 + 3)
         XCTAssertEqual(office.desks[0].teammates.map(\.id), ["a2"])
     }
 
@@ -83,21 +83,21 @@ final class OfficeStateTests: XCTestCase {
     func testWaitingTeammateCountsTheSessionAsWaiting() {
         var office = OfficeState()
         office.apply(event(.userPromptSubmit), now: t0)
-        office.apply(event(.subagentStart, agent: "a1", type: "verifier"), now: t0)
+        office.apply(event(.subagentStart, agent: "a1", type: "Plan"), now: t0)
         XCTAssertEqual(office.count(.waiting), 0)
         XCTAssertEqual(office.count(.working), 1)
 
-        office.apply(event(.permissionRequest, agent: "a1", type: "verifier"), now: t0 + 30)
+        office.apply(event(.permissionRequest, agent: "a1", type: "Plan"), now: t0 + 30)
         XCTAssertEqual(office.count(.waiting), 1)
         XCTAssertEqual(office.count(.working), 0)
         XCTAssertEqual(office.desks[0].sessions[0].shown.since, t0 + 30, "minutes count from the teammate's prompt")
 
-        office.apply(event(.preToolUse, agent: "a1", type: "verifier"), now: t0 + 60)
+        office.apply(event(.preToolUse, agent: "a1", type: "Plan"), now: t0 + 60)
         XCTAssertEqual(office.count(.waiting), 0, "answered: back to work, nothing stays stuck")
         XCTAssertEqual(office.count(.working), 1)
 
         office.apply(event(.permissionRequest), now: t0 + 90)
-        office.apply(event(.permissionRequest, agent: "a1", type: "verifier"), now: t0 + 100)
+        office.apply(event(.permissionRequest, agent: "a1", type: "Plan"), now: t0 + 100)
         XCTAssertEqual(office.count(.waiting), 1, "one session, counted once")
         XCTAssertEqual(office.desks[0].sessions[0].shown.since, t0 + 90, "the earliest wait")
     }
@@ -162,9 +162,9 @@ final class OfficeStateTests: XCTestCase {
     func testCounts() {
         var office = OfficeState()
         for e in FakeScenario.events { office.apply(e, now: t0) }
-        XCTAssertEqual(office.desks.map(\.name), ["web-shop", "agent-overtime", "blog", "prototype"])
+        XCTAssertEqual(office.desks.map(\.name), ["my-project", "web-app", "blog", "prototype"])
         XCTAssertEqual(office.count(.working), 1)
-        XCTAssertEqual(office.count(.waiting), 2, "web-shop works, but its verifier waits")
+        XCTAssertEqual(office.count(.waiting), 2, "my-project works, but its Plan teammate waits")
         XCTAssertEqual(office.count(.resting), 1)
         XCTAssertEqual(office.liveSessionCount, 4)
         XCTAssertEqual(office.desks[0].sessions[0].state, .working)
