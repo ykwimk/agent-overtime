@@ -1,5 +1,6 @@
-@testable import AgentOvertimeCore
 import XCTest
+
+@testable import AgentOvertimeCore
 
 final class StartCommandTests: XCTestCase {
     let home = "/Users/me"
@@ -12,13 +13,15 @@ final class StartCommandTests: XCTestCase {
 
     func testScriptShape() throws {
         let script = try StartCommand(folder: "~/my-project", run: ["./dev.sh", "up"]).script(home: home)
-        XCTAssertEqual(script, """
-        #!/bin/sh
-        rm -f -- "$0"
-        cd -- '/Users/me/my-project' || exit 1
-        exec './dev.sh' 'up'
+        XCTAssertEqual(
+            script,
+            """
+            #!/bin/sh
+            rm -f -- "$0"
+            cd -- '/Users/me/my-project' || exit 1
+            exec './dev.sh' 'up'
 
-        """)
+            """)
     }
 
     func testRejectsBadCommands() {
@@ -35,8 +38,12 @@ final class StartCommandTests: XCTestCase {
 
     /// Runs the generated script with /bin/sh and checks every argument arrives byte for byte.
     func testArgumentsSurviveTheShellExactly() throws {
-        let tricky = ["it's", "a;b", "$(touch /tmp/agent-overtime-pwned)", "two words", "line\nbreak", "출근 시험", "`id`", "*", "~/x", "\"q\""]
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("ao-start-\(UUID().uuidString)/한글 it's")
+        let tricky = [
+            "it's", "a;b", "$(touch /tmp/agent-overtime-pwned)", "two words", "line\nbreak", "출근 시험", "`id`", "*",
+            "~/x", "\"q\"",
+        ]
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "ao-start-\(UUID().uuidString)/한글 it's")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
 
@@ -53,8 +60,11 @@ final class StartCommandTests: XCTestCase {
         let output = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
-        let received = output.split(separator: 0, omittingEmptySubsequences: false).dropLast().map { String(decoding: $0, as: UTF8.self) }
-        XCTAssertEqual(received, tricky.map { $0 == "~/x" ? "/nonexistent/x" : $0 }, "only a leading ~/ changes, on purpose")
+        let received = output.split(separator: 0, omittingEmptySubsequences: false).dropLast().map {
+            String(decoding: $0, as: UTF8.self)
+        }
+        XCTAssertEqual(
+            received, tricky.map { $0 == "~/x" ? "/nonexistent/x" : $0 }, "only a leading ~/ changes, on purpose")
         XCTAssertFalse(FileManager.default.fileExists(atPath: scriptURL.path), "the script deletes itself")
         XCTAssertFalse(FileManager.default.fileExists(atPath: "/tmp/agent-overtime-pwned"))
     }
@@ -80,7 +90,9 @@ final class StartCommandTests: XCTestCase {
         XCTAssertEqual(base.fingerprint, StartCommand(folder: "/a", run: ["claude"]).fingerprint)
         XCTAssertNotEqual(base.fingerprint, StartCommand(folder: "/b", run: ["claude"]).fingerprint)
         XCTAssertNotEqual(base.fingerprint, StartCommand(folder: "/a", run: ["claude", "-p"]).fingerprint)
-        XCTAssertNotEqual(StartCommand(folder: "/a", run: ["b c"]).fingerprint, StartCommand(folder: "/a", run: ["b", "c"]).fingerprint)
+        XCTAssertNotEqual(
+            StartCommand(folder: "/a", run: ["b c"]).fingerprint,
+            StartCommand(folder: "/a", run: ["b", "c"]).fingerprint)
         XCTAssertEqual(base.fingerprint.count, 64)
     }
 

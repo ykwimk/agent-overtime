@@ -29,7 +29,8 @@ struct DeskView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Workstation(pose: Pose(session.state), seed: desk.name + "\(index)", frame: frame)
                             if index > 0 {
-                                Text(verbatim: "\(desk.name) \(index + 1)").font(.caption).lineLimit(1).truncationMode(.middle)
+                                Text(verbatim: "\(desk.name) \(index + 1)").font(.caption).lineLimit(1).truncationMode(
+                                    .middle)
                             }
                             session.state.label(since: session.since, now: now)
                                 .font(.callout)
@@ -79,7 +80,9 @@ struct DeskView: View {
             if minutes >= 1 { text = text + Text(verbatim: ", ") + Text("\(minutes) min") }
         }
         for mate in desk.teammates {
-            text = text + Text(verbatim: ", ") + Text("teammate") + Text(verbatim: " ") + mate.displayName + Text(verbatim: " ") + mate.state.word
+            text =
+                text + Text(verbatim: ", ") + Text("teammate") + Text(verbatim: " ") + mate.displayName
+                + Text(verbatim: " ") + mate.state.word
         }
         return text
     }

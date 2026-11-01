@@ -57,9 +57,12 @@ struct MenuContent: View {
             ForEach(rows.prefix(Self.maxRows), id: \.session.id) { row in
                 let shown = row.session.shown  // waiting if a teammate waits, same rule as the counts
                 HStack(spacing: 8) {
-                    Circle().fill(shown.state == .waiting ? Style.waiting : Color.secondary.opacity(shown.state == .working ? 0.9 : 0.4))
-                        .frame(width: 7, height: 7)
-                        .accessibilityHidden(true)
+                    Circle().fill(
+                        shown.state == .waiting
+                            ? Style.waiting : Color.secondary.opacity(shown.state == .working ? 0.9 : 0.4)
+                    )
+                    .frame(width: 7, height: 7)
+                    .accessibilityHidden(true)
                     Text(verbatim: row.index == 0 ? row.desk.name : "\(row.desk.name) \(row.index + 1)")
                         .lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 8)
@@ -71,7 +74,8 @@ struct MenuContent: View {
                 .accessibilityElement(children: .combine)
             }
             if rows.count > Self.maxRows {
-                Text("and \(rows.count - Self.maxRows) more").foregroundStyle(.secondary).padding(.horizontal, 15).padding(.vertical, 3)
+                Text("and \(rows.count - Self.maxRows) more").foregroundStyle(.secondary).padding(.horizontal, 15)
+                    .padding(.vertical, 3)
             }
         }
     }

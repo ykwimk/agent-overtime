@@ -86,7 +86,9 @@ public struct OfficeState: Equatable {
             return false
         }
         var desksChanged = false
-        guard let (d, s) = locate(event.session) ?? seat(event, now: now, desksChanged: &desksChanged) else { return false }
+        guard let (d, s) = locate(event.session) ?? seat(event, now: now, desksChanged: &desksChanged) else {
+            return false
+        }
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
         let newState = Self.state(for: event)
 

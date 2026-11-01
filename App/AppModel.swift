@@ -68,7 +68,8 @@ final class AppModel: ObservableObject {
     static let hooksURL = URL(string: "https://github.com/\(repository)/blob/main/plugin/hooks/hooks.json")!
     static let repositoryURL = URL(string: "https://github.com/\(repository)")!
 
-    init(supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath) {
+    init(supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath)
+    {
         self.socketPath = socketPath
         self.defaults = defaults
         configURL = URL(fileURLWithPath: supportFolder).appendingPathComponent("config.json")
@@ -77,7 +78,8 @@ final class AppModel: ObservableObject {
         welcomeDismissed = defaults.bool(forKey: Keys.welcomeDismissed)
 
         try? EventServer.prepareFolder(supportFolder)
-        let stored = (try? Data(contentsOf: configURL)).flatMap { try? JSONDecoder().decode(Stored.self, from: $0) } ?? Stored()
+        let stored =
+            (try? Data(contentsOf: configURL)).flatMap { try? JSONDecoder().decode(Stored.self, from: $0) } ?? Stored()
         office = OfficeState(folders: stored.desks)
         start = stored.start
     }
@@ -123,7 +125,8 @@ final class AppModel: ObservableObject {
             defaults.set(true, forKey: Keys.everConnected)
         }
         if event.kind == .sessionStart, case .starting = startPhase, let start,
-           OfficeState.isInside(event.cwd, start.resolved(home: Paths.home).folder) {
+            OfficeState.isInside(event.cwd, start.resolved(home: Paths.home).folder)
+        {
             startPhase = .idle
         }
     }
@@ -205,8 +208,8 @@ final class AppModel: ObservableObject {
     }
 }
 
-private extension JSONEncoder {
-    static var pretty: JSONEncoder {
+extension JSONEncoder {
+    fileprivate static var pretty: JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return encoder

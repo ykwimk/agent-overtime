@@ -19,9 +19,11 @@ public enum FakeScenario {
             HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "verifier"),
             HookEvent(kind: .subagentStart, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "planner"),
             HookEvent(kind: .preToolUse, session: "demo-b1", cwd: shop, agentID: "demo-r", agentType: "researcher"),
-            HookEvent(kind: .permissionRequest, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "verifier"),
-            HookEvent(kind: .notification, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "planner",
-                      notification: "idle_prompt"),
+            HookEvent(
+                kind: .permissionRequest, session: "demo-b1", cwd: shop, agentID: "demo-v", agentType: "verifier"),
+            HookEvent(
+                kind: .notification, session: "demo-b1", cwd: shop, agentID: "demo-p", agentType: "planner",
+                notification: "idle_prompt"),
             HookEvent(kind: .sessionStart, session: "demo-b2", cwd: shop),
             // agent-overtime: waiting for the user's answer
             HookEvent(kind: .sessionStart, session: "demo-o1", cwd: overtime),

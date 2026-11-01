@@ -31,15 +31,17 @@ public struct StartCommand: Codable, Equatable {
     public func script(home: String) throws -> String {
         let command = resolved(home: home)
         guard let program = command.run.first, !program.isEmpty else { throw Problem.emptyCommand }
-        guard !([command.folder] + command.run).contains(where: { $0.contains("\u{0}") }) else { throw Problem.nulCharacter }
+        guard !([command.folder] + command.run).contains(where: { $0.contains("\u{0}") }) else {
+            throw Problem.nulCharacter
+        }
         guard command.folder.hasPrefix("/") else { throw Problem.folderNotAbsolute }
         return """
-        #!/bin/sh
-        rm -f -- "$0"
-        cd -- \(Self.quote(command.folder)) || exit 1
-        exec \(command.run.map(Self.quote).joined(separator: " "))
+            #!/bin/sh
+            rm -f -- "$0"
+            cd -- \(Self.quote(command.folder)) || exit 1
+            exec \(command.run.map(Self.quote).joined(separator: " "))
 
-        """
+            """
     }
 
     /// Single-quotes one argument for /bin/sh. Inside single quotes nothing is special except the quote itself.

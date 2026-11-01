@@ -28,7 +28,8 @@ struct SettingsView: View {
                     copied = true
                 }
                 if copied {
-                    Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(.secondary)
+                    Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(
+                        .secondary)
                 }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -38,10 +39,18 @@ struct SettingsView: View {
 
             Section {
                 if let start = model.start {
-                    LabeledContent { Text(verbatim: StartCommand.revealed(start.folder)).textSelection(.enabled) } label: { Text("Folder") }
                     LabeledContent {
-                        Text(verbatim: start.run.map(StartCommand.revealed).joined(separator: " ")).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-                    } label: { Text("Command") }
+                        Text(verbatim: StartCommand.revealed(start.folder)).textSelection(.enabled)
+                    } label: {
+                        Text("Folder")
+                    }
+                    LabeledContent {
+                        Text(verbatim: start.run.map(StartCommand.revealed).joined(separator: " ")).font(
+                            .system(.body, design: .monospaced)
+                        ).textSelection(.enabled)
+                    } label: {
+                        Text("Command")
+                    }
                     HStack {
                         Button("Change…") { editing = true }
                         Button("Remove", role: .destructive) { confirmRemove = true }
@@ -55,19 +64,34 @@ struct SettingsView: View {
             }
 
             Section {
-                LabeledContent { Text(verbatim: "\(model.office.desks.count)") } label: { Text("Remembered desks") }
+                LabeledContent {
+                    Text(verbatim: "\(model.office.desks.count)")
+                } label: {
+                    Text("Remembered desks")
+                }
                 Button("Forget Empty Desks") { model.forgetEmptyDesks() }
                     .disabled(!model.office.desks.contains(where: \.isOff))
-                Text("Desks are the folders sessions ran in, kept only on this Mac.").font(.callout).foregroundStyle(.secondary)
+                Text("Desks are the folders sessions ran in, kept only on this Mac.").font(.callout).foregroundStyle(
+                    .secondary)
             } header: {
                 Text("Desks")
             }
 
             Section {
-                LabeledContent { Text(verbatim: version) } label: { Text("Version") }
-                LabeledContent { Link(destination: AppModel.repositoryURL) { Text(verbatim: AppModel.repository) } } label: { Text("Source") }
-                Text("MIT License. Pixel art drawn in code for this app (MIT).").font(.callout).foregroundStyle(.secondary)
-                Text("Works with Claude Code. Not affiliated with Anthropic.").font(.callout).foregroundStyle(.secondary)
+                LabeledContent {
+                    Text(verbatim: version)
+                } label: {
+                    Text("Version")
+                }
+                LabeledContent {
+                    Link(destination: AppModel.repositoryURL) { Text(verbatim: AppModel.repository) }
+                } label: {
+                    Text("Source")
+                }
+                Text("MIT License. Pixel art drawn in code for this app (MIT).").font(.callout).foregroundStyle(
+                    .secondary)
+                Text("Works with Claude Code. Not affiliated with Anthropic.").font(.callout).foregroundStyle(
+                    .secondary)
             } header: {
                 Text("About")
             }

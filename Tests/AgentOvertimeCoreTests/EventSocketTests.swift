@@ -1,5 +1,6 @@
-@testable import AgentOvertimeCore
 import XCTest
+
+@testable import AgentOvertimeCore
 
 final class EventSocketTests: XCTestCase {
     private var folder: String!
@@ -17,7 +18,10 @@ final class EventSocketTests: XCTestCase {
         let path = folder + "/events.sock"
         let received = expectation(description: "event")
         var got: HookEvent?
-        let server = EventServer(path: path) { got = $0; received.fulfill() }
+        let server = EventServer(path: path) {
+            got = $0
+            received.fulfill()
+        }
         try server.start()
         defer { server.stop() }
 
@@ -34,7 +38,10 @@ final class EventSocketTests: XCTestCase {
         let path = folder + "/events.sock"
         let good = expectation(description: "only the valid line arrives")
         var events: [HookEvent] = []
-        let server = EventServer(path: path) { events.append($0); good.fulfill() }
+        let server = EventServer(path: path) {
+            events.append($0)
+            good.fulfill()
+        }
         try server.start()
         defer { server.stop() }
 
@@ -74,9 +81,12 @@ final class EventSocketTests: XCTestCase {
     }
 
     func testSocketPathFallsBackWhenHomeIsLong() {
-        XCTAssertEqual(Paths.socket(home: "/Users/me", tempFolder: "/tmp/u/"), "/Users/me/Library/Application Support/AgentOvertime/events.sock")
+        XCTAssertEqual(
+            Paths.socket(home: "/Users/me", tempFolder: "/tmp/u/"),
+            "/Users/me/Library/Application Support/AgentOvertime/events.sock")
         let long = "/Users/" + String(repeating: "x", count: 80)
-        XCTAssertEqual(Paths.socket(home: long, tempFolder: "/var/folders/ab/T/"), "/var/folders/ab/T/agent-overtime.sock")
+        XCTAssertEqual(
+            Paths.socket(home: long, tempFolder: "/var/folders/ab/T/"), "/var/folders/ab/T/agent-overtime.sock")
     }
 
     private func mode(_ path: String) throws -> Int {

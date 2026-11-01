@@ -1,14 +1,18 @@
-@testable import AgentOvertimeCore
 import XCTest
+
+@testable import AgentOvertimeCore
 
 final class OfficeStateTests: XCTestCase {
     let t0 = Date(timeIntervalSince1970: 1_000_000)
     let shop = "/Users/me/shop"
 
-    private func event(_ kind: HookEvent.Kind, _ session: String = "s1", cwd: String? = nil, agent: String? = nil,
-                       type: String? = nil, notification: String? = nil, asks: Bool = false, pid: Int32? = nil) -> HookEvent {
-        HookEvent(kind: kind, session: session, cwd: cwd ?? shop, agentID: agent, agentType: type,
-                  notification: notification, asksUser: asks, pid: pid)
+    private func event(
+        _ kind: HookEvent.Kind, _ session: String = "s1", cwd: String? = nil, agent: String? = nil,
+        type: String? = nil, notification: String? = nil, asks: Bool = false, pid: Int32? = nil
+    ) -> HookEvent {
+        HookEvent(
+            kind: kind, session: session, cwd: cwd ?? shop, agentID: agent, agentType: type,
+            notification: notification, asksUser: asks, pid: pid)
     }
 
     func testStateTable() {

@@ -33,11 +33,20 @@ public struct HookEvent: Codable, Equatable {
     public var pid: Int32?
 
     enum CodingKeys: String, CodingKey {
-        case kind = "e", session = "s", cwd = "d", agentID = "a", agentType = "t", notification = "n", asksUser = "q", pid = "p"
+        case kind = "e"
+        case session = "s"
+        case cwd = "d"
+        case agentID = "a"
+        case agentType = "t"
+        case notification = "n"
+        case asksUser = "q"
+        case pid = "p"
     }
 
-    public init(kind: Kind, session: String, cwd: String, agentID: String? = nil, agentType: String? = nil,
-                notification: String? = nil, asksUser: Bool = false, pid: Int32? = nil) {
+    public init(
+        kind: Kind, session: String, cwd: String, agentID: String? = nil, agentType: String? = nil,
+        notification: String? = nil, asksUser: Bool = false, pid: Int32? = nil
+    ) {
         self.kind = kind
         self.session = session
         self.cwd = cwd
@@ -65,11 +74,11 @@ public struct HookEvent: Codable, Equatable {
     /// Reads Claude Code's hook JSON and keeps only the allowlisted fields.
     public static func fromHookInput(_ data: Data, pid: Int32?) -> HookEvent? {
         guard data.count <= Limits.hookInput,
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let name = object["hook_event_name"] as? String,
-              let kind = Kind(rawValue: name),
-              let session = object["session_id"] as? String,
-              let cwd = object["cwd"] as? String
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let name = object["hook_event_name"] as? String,
+            let kind = Kind(rawValue: name),
+            let session = object["session_id"] as? String,
+            let cwd = object["cwd"] as? String
         else { return nil }
         let event = HookEvent(
             kind: kind, session: session, cwd: cwd,
@@ -92,14 +101,16 @@ public struct HookEvent: Codable, Equatable {
 
     /// The socket is a trust boundary: any process of this user can write to it, so everything is checked again.
     public static func fromWire(_ line: Data) -> HookEvent? {
-        guard line.count <= Limits.line, let event = try? JSONDecoder().decode(HookEvent.self, from: line) else { return nil }
+        guard line.count <= Limits.line, let event = try? JSONDecoder().decode(HookEvent.self, from: line) else {
+            return nil
+        }
         return event.cleaned()
     }
 
     /// Strips hidden characters, caps lengths and drops events the office does not use.
     func cleaned() -> HookEvent? {
         guard let session = Sanitize.clean(session, max: Limits.id),
-              let cwd = Sanitize.clean(cwd, max: Limits.cwd), cwd.hasPrefix("/")
+            let cwd = Sanitize.clean(cwd, max: Limits.cwd), cwd.hasPrefix("/")
         else { return nil }
         var event = self
         event.session = session

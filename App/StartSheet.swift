@@ -31,9 +31,11 @@ struct StartSheet: View {
                     TextField(text: $commandLine) { Text("Command") }
                         .font(.system(.body, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
-                    Text("Put quotes around a value that has spaces. Terminal symbols such as && · | · $ don't work here; they are passed on as plain text. To start several things, put them in one script.")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        "Put quotes around a value that has spaces. Terminal symbols such as && · | · $ don't work here; they are passed on as plain text. To start several things, put them in one script."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
             case .confirm:
                 Text("Start with this command?").font(Style.title)

@@ -21,7 +21,10 @@ public enum EventClient {
 /// on a background thread. Received lines only ever change the picture; nothing in them is executed.
 public final class EventServer {
     public enum Failure: Error, Equatable {
-        case folder(Int32), notASocket, socket(Int32), pathTooLong
+        case folder(Int32)
+        case notASocket
+        case socket(Int32)
+        case pathTooLong
     }
 
     public let path: String
@@ -98,7 +101,7 @@ public final class EventServer {
         var cred = xucred()
         var size = socklen_t(MemoryLayout<xucred>.size)
         guard getsockopt(connection, SOL_LOCAL, LOCAL_PEERCRED, &cred, &size) == 0,
-              cred.cr_version == XUCRED_VERSION, cred.cr_uid == getuid()
+            cred.cr_version == XUCRED_VERSION, cred.cr_uid == getuid()
         else { return nil }
 
         var timeout = timeval(tv_sec: 1, tv_usec: 0)
@@ -114,7 +117,8 @@ public final class EventServer {
             data.append(buffer, count: n)
             if buffer[..<n].contains(0x0A) { break }
         }
-        guard data.count <= Limits.line, let end = data.firstIndex(of: 0x0A) ?? (data.isEmpty ? nil : data.endIndex) else {
+        guard data.count <= Limits.line, let end = data.firstIndex(of: 0x0A) ?? (data.isEmpty ? nil : data.endIndex)
+        else {
             return nil
         }
         return HookEvent.fromWire(data[data.startIndex..<end])

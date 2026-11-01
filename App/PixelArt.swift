@@ -26,7 +26,8 @@ struct Workstation: View {
 
     var body: some View {
         Canvas { context, _ in
-            PixelPainter(context: context, scale: scale, palette: Palette(scheme: scheme, seed: seed), frame: frame).draw(pose)
+            PixelPainter(context: context, scale: scale, palette: Palette(scheme: scheme, seed: seed), frame: frame)
+                .draw(pose)
         }
         .frame(width: Self.grid * scale, height: Self.grid * scale)
         .accessibilityHidden(true)
@@ -41,7 +42,9 @@ struct Palette {
     init(scheme: ColorScheme, seed: String) {
         let dark = scheme == .dark
         func rgb(_ hex: UInt32) -> Color {
-            Color(.sRGB, red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+            Color(
+                .sRGB, red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255,
+                blue: Double(hex & 0xFF) / 255)
         }
         ink = rgb(dark ? 0xE6E8EC : 0x2B2F38)
         face = rgb(0x2B2F38)
@@ -76,7 +79,8 @@ private struct PixelPainter {
     let frame: Int
 
     func px(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: Color) {
-        let rect = CGRect(x: CGFloat(x) * scale, y: CGFloat(y) * scale, width: CGFloat(w) * scale, height: CGFloat(h) * scale)
+        let rect = CGRect(
+            x: CGFloat(x) * scale, y: CGFloat(y) * scale, width: CGFloat(w) * scale, height: CGFloat(h) * scale)
         context.fill(Path(rect), with: .color(color))
     }
 
@@ -172,7 +176,8 @@ private struct PixelPainter {
         px(7, 13, 9, 7, p.shirt)
         // A 5×5 "z" with a clear diagonal, drifting up one pixel every other beat.
         let lift = frame % 4 < 2 ? 0 : 1
-        let x = 18, y = 2 - lift
+        let x = 18
+        let y = 2 - lift
         px(x, y, 5, 1, p.ink)
         px(x + 3, y + 1, 1, 1, p.ink)
         px(x + 2, y + 2, 1, 1, p.ink)

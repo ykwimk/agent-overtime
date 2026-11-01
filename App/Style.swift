@@ -2,16 +2,18 @@ import SwiftUI
 
 /// Colour sits on status only: waiting gets the one accent, everything else is ink and grey.
 enum Style {
-    static let waiting = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 1.0, green: 0.56, blue: 0.33, alpha: 1)
-            : NSColor(srgbRed: 0.76, green: 0.25, blue: 0.03, alpha: 1)
-    })
-    static let floor = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0.165, green: 0.172, blue: 0.192, alpha: 1)
-            : NSColor(srgbRed: 0.953, green: 0.945, blue: 0.925, alpha: 1)
-    })
+    static let waiting = Color(
+        nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(srgbRed: 1.0, green: 0.56, blue: 0.33, alpha: 1)
+                : NSColor(srgbRed: 0.76, green: 0.25, blue: 0.03, alpha: 1)
+        })
+    static let floor = Color(
+        nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(srgbRed: 0.165, green: 0.172, blue: 0.192, alpha: 1)
+                : NSColor(srgbRed: 0.953, green: 0.945, blue: 0.925, alpha: 1)
+        })
     static let title = Font.system(size: 20, weight: .semibold)
 }
 
@@ -64,7 +66,9 @@ struct MenuRow: View {
             HStack {
                 Text(title)
                 Spacer()
-                if let shortcut { Text(verbatim: shortcut).foregroundStyle(lit ? Color.white.opacity(0.85) : .secondary) }
+                if let shortcut {
+                    Text(verbatim: shortcut).foregroundStyle(lit ? Color.white.opacity(0.85) : .secondary)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 4)

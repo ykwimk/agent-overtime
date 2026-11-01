@@ -28,13 +28,18 @@ struct OfficeView: View {
 
     @ViewBuilder private var content: some View {
         if !model.everConnected {
-            EmptyOffice(title: "Connection needed",
-                        detail: "Install the plugin so Claude Code tells this app when it works.") {
+            EmptyOffice(
+                title: "Connection needed",
+                detail: "Install the plugin so Claude Code tells this app when it works."
+            ) {
                 Button("Connect…") { openWindow(id: "welcome") }
             }
         } else if model.office.desks.isEmpty {
-            EmptyOffice(title: "Nobody's at work yet",
-                        detail: "Start claude in a terminal, or press Start Work. Sessions opened before this app appear when they next move.") {
+            EmptyOffice(
+                title: "Nobody's at work yet",
+                detail:
+                    "Start claude in a terminal, or press Start Work. Sessions opened before this app appear when they next move."
+            ) {
                 EmptyView()
             }
         } else if let fixedNow {
@@ -42,15 +47,18 @@ struct OfficeView: View {
         } else {
             // About 2.5 frames a second for the pixel motion; with Reduce Motion only the minutes update.
             TimelineView(.periodic(from: .now, by: reduceMotion ? 30 : 0.4)) { context in
-                grid(now: context.date, frame: reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 0.4))
+                grid(
+                    now: context.date, frame: reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 0.4))
             }
         }
     }
 
     private func grid(now: Date, frame: Int) -> some View {
         ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: DeskView.width, maximum: 420), spacing: 12, alignment: .top)],
-                      alignment: .leading, spacing: 12) {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: DeskView.width, maximum: 420), spacing: 12, alignment: .top)],
+                alignment: .leading, spacing: 12
+            ) {
                 ForEach(model.office.desks) { desk in
                     DeskView(desk: desk, now: now, frame: frame)
                 }

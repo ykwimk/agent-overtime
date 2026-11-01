@@ -35,8 +35,10 @@ struct WelcomeView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Connect").font(.headline)
-                Text("A small plugin lets Claude Code tell this app when it works. Paste these two lines into Claude Code. They apply to every Claude Code session on this Mac, and you can turn the plugin off or remove it in Claude Code at any time.")
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "A small plugin lets Claude Code tell this app when it works. Paste these two lines into Claude Code. They apply to every Claude Code session on this Mac, and you can turn the plugin off or remove it in Claude Code at any time."
+                )
+                .fixedSize(horizontal: false, vertical: true)
                 Text(verbatim: AppModel.connectCommands)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
@@ -45,9 +47,11 @@ struct WelcomeView: View {
                     .background(RoundedRectangle(cornerRadius: 6).fill(Style.floor))
                     .accessibilityLabel(Text("Connect commands"))
                     .accessibilityValue(Text(verbatim: AppModel.connectCommands))
-                Text("When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once.")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once."
+                )
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
                 locationNote
                 progress
             }
@@ -94,8 +98,10 @@ struct WelcomeView: View {
             EmptyView()
         case .translocated, .notInApplications:
             Label {
-                Text("Move AgentOvertime.app into the Applications folder, keep its name, and open it again. The plugin looks for it there.")
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Move AgentOvertime.app into the Applications folder, keep its name, and open it again. The plugin looks for it there."
+                )
+                .fixedSize(horizontal: false, vertical: true)
             } icon: {
                 Image(systemName: "exclamationmark.triangle")
             }

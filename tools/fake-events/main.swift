@@ -9,6 +9,7 @@ for event in FakeScenario.events {
     if EventClient.send(event.wireLine(), to: path) { sent += 1 }
     usleep(150_000)
 }
-print(sent == FakeScenario.events.count
-      ? "Sent \(sent) events to \(path)"
-      : "Sent \(sent) of \(FakeScenario.events.count) events. Is Agent Overtime open?")
+print(
+    sent == FakeScenario.events.count
+        ? "Sent \(sent) events to \(path)"
+        : "Sent \(sent) of \(FakeScenario.events.count) events. Is Agent Overtime open?")

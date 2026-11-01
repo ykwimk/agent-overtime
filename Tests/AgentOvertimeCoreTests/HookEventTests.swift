@@ -1,5 +1,6 @@
-@testable import AgentOvertimeCore
 import XCTest
+
+@testable import AgentOvertimeCore
 
 final class HookEventTests: XCTestCase {
     private func input(_ fields: [String: Any]) -> Data {
@@ -24,32 +25,50 @@ final class HookEventTests: XCTestCase {
     }
 
     func testAskUserQuestionIsTheOnlyToolFactKept() {
-        let ask = HookEvent.fromHookInput(input(["hook_event_name": "PreToolUse", "session_id": "a", "cwd": "/x", "tool_name": "AskUserQuestion"]), pid: nil)
-        let read = HookEvent.fromHookInput(input(["hook_event_name": "PreToolUse", "session_id": "a", "cwd": "/x", "tool_name": "Read"]), pid: nil)
+        let ask = HookEvent.fromHookInput(
+            input(["hook_event_name": "PreToolUse", "session_id": "a", "cwd": "/x", "tool_name": "AskUserQuestion"]),
+            pid: nil)
+        let read = HookEvent.fromHookInput(
+            input(["hook_event_name": "PreToolUse", "session_id": "a", "cwd": "/x", "tool_name": "Read"]), pid: nil)
         XCTAssertEqual(ask?.asksUser, true)
         XCTAssertEqual(read?.asksUser, false)
     }
 
     func testDropsUnknownEventsAndUnusedNotifications() {
-        XCTAssertNil(HookEvent.fromHookInput(input(["hook_event_name": "PostToolUse", "session_id": "a", "cwd": "/x"]), pid: nil))
+        XCTAssertNil(
+            HookEvent.fromHookInput(
+                input(["hook_event_name": "PostToolUse", "session_id": "a", "cwd": "/x"]), pid: nil))
         for type in ["auth_success", "quota_auto_resume_fired", "plugin_notification", "agent_completed"] {
-            XCTAssertNil(HookEvent.fromHookInput(input(["hook_event_name": "Notification", "session_id": "a", "cwd": "/x", "notification_type": type]), pid: nil), type)
+            XCTAssertNil(
+                HookEvent.fromHookInput(
+                    input([
+                        "hook_event_name": "Notification", "session_id": "a", "cwd": "/x", "notification_type": type,
+                    ]), pid: nil), type)
         }
-        let idle = HookEvent.fromHookInput(input(["hook_event_name": "Notification", "session_id": "a", "cwd": "/x", "notification_type": "idle_prompt", "message": "Claude is waiting"]), pid: nil)
+        let idle = HookEvent.fromHookInput(
+            input([
+                "hook_event_name": "Notification", "session_id": "a", "cwd": "/x", "notification_type": "idle_prompt",
+                "message": "Claude is waiting",
+            ]), pid: nil)
         XCTAssertEqual(idle?.notification, "idle_prompt")
     }
 
     func testRejectsMissingOrRelativeFields() {
         XCTAssertNil(HookEvent.fromHookInput(input(["hook_event_name": "Stop", "cwd": "/x"]), pid: nil))
-        XCTAssertNil(HookEvent.fromHookInput(input(["hook_event_name": "Stop", "session_id": "a", "cwd": "relative/path"]), pid: nil))
+        XCTAssertNil(
+            HookEvent.fromHookInput(
+                input(["hook_event_name": "Stop", "session_id": "a", "cwd": "relative/path"]), pid: nil))
         XCTAssertNil(HookEvent.fromHookInput(Data("not json".utf8), pid: nil))
-        XCTAssertNil(HookEvent.fromHookInput(input(["hook_event_name": "Stop", "session_id": "\u{200B}", "cwd": "/x"]), pid: nil))
+        XCTAssertNil(
+            HookEvent.fromHookInput(
+                input(["hook_event_name": "Stop", "session_id": "\u{200B}", "cwd": "/x"]), pid: nil))
     }
 
     func testStripsHiddenCharactersAndCapsLengths() throws {
         let data = input([
             "hook_event_name": "SubagentStart", "session_id": "s", "cwd": "/Users/me/ev\u{202E}il\n",
-            "agent_id": String(repeating: "a", count: 500), "agent_type": "re\u{0}search\u{200B}er" + String(repeating: "x", count: 100),
+            "agent_id": String(repeating: "a", count: 500),
+            "agent_type": "re\u{0}search\u{200B}er" + String(repeating: "x", count: 100),
         ])
         let event = try XCTUnwrap(HookEvent.fromHookInput(data, pid: 1))
         XCTAssertEqual(event.cwd, "/Users/me/evil")
@@ -60,7 +79,8 @@ final class HookEventTests: XCTestCase {
     }
 
     func testWireRoundTripAndRecheck() throws {
-        let event = HookEvent(kind: .subagentStart, session: "s", cwd: "/a/b", agentID: "x", agentType: "planner", pid: 77)
+        let event = HookEvent(
+            kind: .subagentStart, session: "s", cwd: "/a/b", agentID: "x", agentType: "planner", pid: 77)
         XCTAssertEqual(HookEvent.fromWire(event.wireLine().dropLast()), event)
 
         // Anything on this Mac can write to the socket: the app checks again.
