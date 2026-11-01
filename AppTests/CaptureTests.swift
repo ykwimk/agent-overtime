@@ -95,6 +95,28 @@ final class CaptureTests: XCTestCase {
         try capture("menubar-icon-idle", MenuBarLabel(model: fresh).padding(6))
     }
 
+    /// Pressing 출근 again while starting, or while "one more?" is up, must not start a second time.
+    func testStartWorkTwiceStartsOnce() {
+        // The folder never exists, so any real launch shows "folder is missing" instead of opening Terminal.
+        let missing = "/nonexistent-agent-overtime-test/\(UUID().uuidString.prefix(8))"
+        let model = makeModel(connected: true)
+        model.approveAndStart(StartCommand(folder: missing, run: ["echo", "출근 시험"]))
+        XCTAssertEqual(model.startPhase, .failed(.folderMissing), "approved, and launch() was reached")
+
+        let since = Date()
+        model.startPhase = .starting(since)
+        model.startWork()
+        XCTAssertEqual(model.startPhase, .starting(since), "second press while starting")
+
+        model.startPhase = .idle
+        model.receive(HookEvent(kind: .sessionStart, session: "twice", cwd: missing))
+        model.startWork()
+        XCTAssertTrue(model.askAnother)
+        model.startWork()
+        XCTAssertTrue(model.askAnother)
+        XCTAssertEqual(model.startPhase, .idle, "second press while asking")
+    }
+
     /// Opens a real Terminal window with `echo`, so it only runs once after captures/.run-terminal-test is created.
     func testStartOpensTerminalWithoutAutomationPermission() throws {
         let flag = out.appendingPathComponent(".run-terminal-test")

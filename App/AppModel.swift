@@ -163,6 +163,8 @@ final class AppModel: ObservableObject {
 
     /// The 출근 button. Runs the saved command only if the user approved exactly this folder and these arguments.
     func startWork(force: Bool = false) {
+        // Until the new session arrives (or 30 s pass) a second press would open a second Terminal window.
+        if case .starting = startPhase { return }
         guard let start else {
             sheet = .register
             return
