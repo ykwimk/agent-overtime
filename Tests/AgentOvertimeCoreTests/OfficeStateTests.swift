@@ -43,6 +43,30 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertFalse(office.apply(event(.stop), now: t0), "same desk, nothing to save")
     }
 
+    /// idle_prompt while a question or permission prompt is open keeps the wait (and its minutes); after Stop it
+    /// still means resting. A teammate follows the same rule.
+    func testIdlePromptDoesNotEndAWait() {
+        let cases: [(HookEvent, WorkState)] = [
+            (event(.preToolUse, asks: true), .waiting),
+            (event(.notification, notification: "permission_prompt"), .waiting),
+            (event(.stop), .resting),
+            (event(.preToolUse, agent: "a1", asks: true), .waiting),
+        ]
+        for (first, expected) in cases {
+            var office = OfficeState()
+            office.apply(first, now: t0)
+            office.apply(event(.notification, agent: first.agentID, notification: "idle_prompt"), now: t0 + 60)
+            let session = office.desks[0].sessions[0]
+            XCTAssertEqual(session.shown.state, expected, "\(first.kind) \(first.agentID ?? "")")
+            if expected == .waiting { XCTAssertEqual(session.shown.since, t0, "minutes count from the first wait") }
+        }
+        var office = OfficeState()
+        office.apply(event(.preToolUse, asks: true), now: t0)
+        office.apply(event(.notification, notification: "idle_prompt"), now: t0 + 60)
+        office.apply(event(.preToolUse), now: t0 + 90)
+        XCTAssertEqual(office.desks[0].sessions[0].state, .working, "the next step ends the wait")
+    }
+
     func testArrivedOnlyForThoseWhoStartWhileTheAppListens() {
         var office = OfficeState()
         office.apply(event(.sessionStart, "new"), now: t0)

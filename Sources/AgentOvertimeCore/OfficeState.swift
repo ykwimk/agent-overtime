@@ -72,14 +72,17 @@ public struct OfficeState: Equatable {
 
     public var folders: [String] { desks.map(\.folder) }
 
-    /// The state a main session takes for an event, or nil when the event does not set one.
-    static func state(for event: HookEvent) -> WorkState? {
+    /// The state a session or teammate in `current` takes for an event, or nil when the event does not set one.
+    static func state(for event: HookEvent, from current: WorkState) -> WorkState? {
         switch event.kind {
         case .sessionStart, .stop: return .resting
         case .userPromptSubmit: return .working
         case .preToolUse: return event.asksUser ? .waiting : .working
         case .permissionRequest: return .waiting
-        case .notification: return event.notification == "idle_prompt" ? .resting : .waiting
+        case .notification:
+            guard event.notification == "idle_prompt" else { return .waiting }
+            // idle_prompt also comes while a question or permission prompt is still open: that stays a wait.
+            return current == .waiting ? nil : .resting
         case .sessionEnd, .subagentStart, .subagentStop: return nil
         }
     }
@@ -96,10 +99,10 @@ public struct OfficeState: Equatable {
             return false
         }
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
-        let newState = Self.state(for: event)
-
         guard let agentID = event.agentID else {
-            if let newState { desks[d].sessions[s].set(newState, now: now) }
+            if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
+                desks[d].sessions[s].set(newState, now: now)
+            }
             return desksChanged
         }
 
@@ -111,12 +114,13 @@ public struct OfficeState: Equatable {
         case (.subagentStop, nil):
             break
         case (_, let i?):
-            if let newState { mates[i].set(newState, now: now) }
+            if let newState = Self.state(for: event, from: mates[i].state) { mates[i].set(newState, now: now) }
         case (_, nil):
             if mates.count < Self.maxTeammates {
                 mates.append(
                     Teammate(
-                        id: agentID, name: event.agentType, state: newState ?? .working, since: now,
+                        id: agentID, name: event.agentType,
+                        state: Self.state(for: event, from: .working) ?? .working, since: now,
                         arrived: event.kind == .subagentStart ? now : nil))
             }
         }
