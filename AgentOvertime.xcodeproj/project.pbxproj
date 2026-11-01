@@ -19,6 +19,7 @@
 		AC000000000000000000010A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010A /* SettingsView.swift */; };
 		AC000000000000000000010B /* Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010B /* Style.swift */; };
 		AC000000000000000000010C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010C /* Localizable.xcstrings */; };
+		AC000000000000000000010D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010D /* Assets.xcassets */; };
 		AC0000000000000000000201 /* EventSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000201 /* EventSocket.swift */; };
 		AC0000000000000000000202 /* FakeScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000202 /* FakeScenario.swift */; };
 		AC0000000000000000000203 /* HookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000203 /* HookEvent.swift */; };
@@ -77,6 +78,7 @@
 		AB000000000000000000010A /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AB000000000000000000010B /* Style.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Style.swift; sourceTree = "<group>"; };
 		AB000000000000000000010C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		AB000000000000000000010D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		AB0000000000000000000201 /* EventSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSocket.swift; sourceTree = "<group>"; };
 		AB0000000000000000000202 /* FakeScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeScenario.swift; sourceTree = "<group>"; };
 		AB0000000000000000000203 /* HookEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEvent.swift; sourceTree = "<group>"; };
@@ -151,6 +153,7 @@
 				AB000000000000000000010A /* SettingsView.swift */,
 				AB000000000000000000010B /* Style.swift */,
 				AB000000000000000000010C /* Localizable.xcstrings */,
+				AB000000000000000000010D /* Assets.xcassets */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -290,6 +293,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AC000000000000000000010C /* Localizable.xcstrings in Resources */,
+				AC000000000000000000010D /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,6 +425,7 @@
 		B20000000000000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Agent Overtime";
@@ -438,6 +443,7 @@
 		B20000000000000000000002 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Agent Overtime";
