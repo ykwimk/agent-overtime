@@ -9,6 +9,16 @@ final class AppModel: ObservableObject {
         case starting(Date)
         case failed(StartFailure)
         case nobodyCame
+
+        /// What VoiceOver reads when the office bar shows this phase (same keys as OfficeBar).
+        var announcement: String? {
+            switch self {
+            case .failed(.folderMissing): return String(localized: "Couldn't start: the folder is missing")
+            case .failed(.other(let line)): return String(localized: "Couldn't start: \(line)")
+            case .nobodyCame: return String(localized: "The command ran, but nobody came to the office")
+            case .idle, .starting: return nil
+            }
+        }
     }
 
     enum StartFailure: Equatable {
@@ -41,9 +51,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var receivedThisRun = false
     @Published private(set) var everConnected: Bool
     @Published private(set) var serverFailed = false
-    @Published var startPhase: StartPhase = .idle
+    @Published var startPhase: StartPhase = .idle {
+        didSet { if startPhase != oldValue, let text = startPhase.announcement { Self.announce(text) } }
+    }
     @Published var sheet: Sheet?
-    @Published var askAnother = false
+    @Published var askAnother = false {
+        didSet {
+            if askAnother, !oldValue { Self.announce(String(localized: "You're already at work. Start one more?")) }
+        }
+    }
     @Published var welcomeDismissed: Bool {
         didSet { defaults.set(welcomeDismissed, forKey: Keys.welcomeDismissed) }
     }
@@ -192,6 +208,14 @@ final class AppModel: ObservableObject {
             let firstLine = error.localizedDescription.split(separator: "\n").first.map(String.init) ?? ""
             self?.startPhase = .failed(.other(firstLine))
         }
+    }
+
+    /// The bar's question and errors appear without moving focus, so VoiceOver would not read them on its own.
+    private static func announce(_ text: String) {
+        guard let app = NSApp else { return }
+        NSAccessibility.post(
+            element: app, notification: .announcementRequested,
+            userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
     // MARK: storage (folder 0700, file 0600; only desks and the start command)
