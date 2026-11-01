@@ -213,6 +213,8 @@ struct OfficeScene {
     /// People still walking in: their desks look empty until they arrive.
     var away: Set<String> = []
     var doorOpen = false
+    /// The meeting room's glass door; nobody walks to a meeting yet, so it stays shut.
+    var meetingDoorOpen = false
     var calendar = Calendar.current
 
     /// Who walks to and from a seat. Nobody walks for a seat someone went home from.
@@ -269,6 +271,10 @@ struct OfficeRenderer {
         static let wall = "Structure/Walls/Painted Walls.png"
         static let border = "Structure/Wall Borders/Plain Smooth Border.png"
         static let painting = "Objects/Wall Items/Paintings, Abstract.png"
+        static let posters = "Objects/Wall Items/Posters.png"
+        static let tv = "Objects/Furniture/TV, Widescreen.png"
+        static let noSignal = "Objects/Furniture/TV, Widescreen - No Service.png"
+        static let rug = "Objects/Furniture/Rugs/Diamond Rug, tiling.png"
         static let desk = "Objects/Furniture/Desk, Office.png"
         static let chair = "Objects/Furniture/Seating/Chair, Office.png"
         static let laptop = "Objects/Small Items/Laptop.png"
@@ -312,10 +318,11 @@ struct OfficeRenderer {
     }
 
     /// The glass of each window on the back wall, whether the bookcase still fits beside them, and where the
-    /// painting hangs: between the last window and the right-hand column, when there is one.
+    /// painting hangs: between the last window and the right-hand column, when there is one. The column's
+    /// meeting room takes the bookcase's place.
     private static func wallPlan(_ layout: RoomLayout) -> (glass: [CGRect], shelf: Bool, painting: Int?) {
         let width = layout.width
-        let shelf = width - 112 - 144 >= 76
+        let shelf = layout.pillar == nil && width - 112 - 144 >= 76
         let end = layout.pillar.map { $0 - 52 } ?? width - (shelf ? 112 : 44)
         var glass: [CGRect] = []
         var x = 144
@@ -431,12 +438,16 @@ struct OfficeRenderer {
             let width = scene.layout.width
             let height = self.height
             let plan = OfficeRenderer.wallPlan(scene.layout)
-            let room = art.picture("room \(width)x\(height) open:\(scene.doorOpen)") { [art] in
+            let key = "room \(width)x\(height) open:\(scene.doorOpen) \(scene.meetingDoorOpen)"
+            let room = art.picture(key) { [art] in
                 OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
                     room in
                     room.floor(width: width)
                     room.wall(width: width, plan: plan)
                     room.door(open: scene.doorOpen)
+                    if let meeting = scene.layout.meetingRoom {
+                        room.meetingRoom(meeting, right: width, doorOpen: scene.meetingDoorOpen)
+                    }
                 }
             }
             stamp(room, 0, 0)
@@ -485,9 +496,117 @@ struct OfficeRenderer {
             fill(0, RoomLayout.wall - 2, width, 2, 0xC2C1B4)
             whiteboard(50, 14)
             for glass in plan.glass { window(Int(glass.minX) - 2, 8, 76, 50) }
-            if let x = plan.painting { sprite(Sheet.painting, 136, 0, 48, 32, x - 5, 21) }
-            if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
-            sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
+            if let x = plan.painting {
+                sprite(Sheet.painting, 136, 0, 48, 32, x - 5, 21)
+            } else {
+                // Without the right-hand column; with it, the water cooler stands in the lounge.
+                if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
+                sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
+            }
+        }
+
+        // MARK: the right-hand column
+
+        /// The meeting room, empty: the TV showing no signal, a table for six, glass on the left and in front with
+        /// its door shut. Someone in a meeting is drawn over it later.
+        private func meetingRoom(_ room: MeetingRoom, right: Int, doorOpen: Bool) {
+            let x0 = room.left
+            let t = MeetingRoom.table
+            let middle = x0 + t.x + t.width / 2
+            sprite(Sheet.tv, 224, 0, 96, 64, middle - 47, 17)
+            sprite(Sheet.noSignal, 224, 0, 96, 64, middle - 47, 17)
+            sprite(Sheet.posters, 128, 64, 32, 32, x0 + 158, 27)
+            stretch(Sheet.rug, (192, 96, 96, 96), edges: (32, 32, 32, 32), middle - 72, t.y - 20, 144, 80)
+            for seat in room.seats.prefix(3) { sprite(Sheet.chair, 0, 40, 32, 48, seat.x - 16, t.y - 17) }
+            table(x0 + t.x, t.y, t.width, t.depth)
+            for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 20) }
+            glass(left: x0, right: right, doorOpen: doorOpen)
+        }
+
+        /// The office desk's top stretched into a long table (its corners and edges as they are, its plain middle
+        /// repeated), on two of its legs, with a soft shadow under it.
+        private func table(_ x: Int, _ y: Int, _ w: Int, _ depth: Int) {
+            let h = depth + 6
+            fill(x + 2, y + h, w - 4, 12, 0x2B2233, 0.16)
+            stretch(Sheet.desk, (67, 80, 58, 18), edges: (4, 4, 6, 6), x, y, w, h)
+            sprite(Sheet.desk, 120, 98, 5, 14, x + w - 5, y + h)
+            sprite(Sheet.desk, 120, 98, 5, 14, x, y + h, mirrored: true)
+        }
+
+        /// Glass seen from the room: the side glass edge-on from the back wall to the front, the front glass face
+        /// on. Thin dark frames, a pale blue tint and a sheen, and the door near the left end.
+        private func glass(left: Int, right: Int, doorOpen: Bool) {
+            let ink: UInt32 = 0x2B2A33
+            let tint: UInt32 = 0xCFE8F3
+            let foot = MeetingRoom.front
+            let top = foot - MeetingRoom.glassHeight
+            let sideTop = RoomLayout.wall - MeetingRoom.glassHeight
+            fill(left, sideTop, 4, foot - sideTop, tint, 0.5)
+            fill(left, sideTop, 1, foot - sideTop, ink)
+            fill(left + 3, sideTop, 1, foot - sideTop, ink)
+            fill(left, sideTop - 1, 4, 2, ink)
+
+            let doorX = left + MeetingRoom.doorX
+            let doorRight = doorX + MeetingRoom.doorWidth
+            for (from, to) in [(left + 4, doorX), (doorRight, right)] {
+                fill(from, top, to - from, foot - top, tint, 0.28)
+                // A sheen: two pale streaks on each pane.
+                for pane in stride(from: from, to: to - 20, by: 44) {
+                    for k in 0..<12 { fill(pane + 8 + k, foot - 10 - k * 2, 2, 2, 0xFFFFFF, 0.35) }
+                    for k in 0..<7 { fill(pane + 18 + k, foot - 10 - k * 2, 1, 2, 0xFFFFFF, 0.3) }
+                }
+                var mullion = from + 44
+                while mullion < to - 8 {
+                    fill(mullion, top, 1, foot - top, ink)
+                    mullion += 44
+                }
+            }
+            fill(left, top - 2, right - left, 2, ink)
+            fill(left, top, right - left, 1, 0xF4FAFD, 0.8)
+            fill(left, foot - 2, right - left, 2, ink)
+            glassDoor(doorX, top, foot, open: doorOpen)
+        }
+
+        /// The meeting room's glass door, shut or standing open (swung in against its hinge on the left).
+        private func glassDoor(_ x: Int, _ top: Int, _ foot: Int, open: Bool) {
+            let ink: UInt32 = 0x2B2A33
+            let w = MeetingRoom.doorWidth
+            let h = foot - top
+            if open {
+                fill(x + 1, top - 6, 5, h, 0xCFE8F3, 0.55)
+                fill(x + 1, top - 6, 5, 1, ink)
+                fill(x + 5, top - 6, 1, h, ink)
+            } else {
+                fill(x + 1, top, w - 2, h, 0xCFE8F3, 0.42)
+                for k in 0..<9 { fill(x + 5 + k, foot - 8 - k * 3, 2, 2, 0xFFFFFF, 0.35) }
+                fill(x + w - 6, top + 15, 2, 11, ink)
+                fill(x + w - 6, top + 16, 1, 9, 0xD5DAE0)
+            }
+            fill(x, top, 2, h, ink)
+            fill(x + w - 2, top, 2, h, ink)
+        }
+
+        /// A piece of a sheet stretched to `w` × `h` without scaling: its edges as they are (left, top, right,
+        /// bottom widths), its middle repeated.
+        private func stretch(
+            _ sheet: String, _ source: (x: Int, y: Int, w: Int, h: Int), edges: (Int, Int, Int, Int), _ x: Int,
+            _ y: Int, _ w: Int, _ h: Int
+        ) {
+            func pieces(_ start: Int, _ size: Int, _ head: Int, _ tail: Int, _ length: Int) -> [(Int, Int, Int)] {
+                var result = [(start, head, 0)]
+                var at = head
+                while at < length - tail {
+                    let piece = min(size - head - tail, length - tail - at)
+                    result.append((start + head, piece, at))
+                    at += piece
+                }
+                return result + [(start + size - tail, tail, length - tail)]
+            }
+            for (sy, rows, dy) in pieces(source.y, source.h, edges.1, edges.3, h) {
+                for (sx, columns, dx) in pieces(source.x, source.w, edges.0, edges.2, w) {
+                    sprite(sheet, sx, sy, columns, rows, x + dx, y + dy)
+                }
+            }
         }
 
         /// A plant in the gap every other row leaves at its end, a tile clear of the islands, in rows with an

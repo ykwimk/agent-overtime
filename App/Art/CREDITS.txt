@@ -96,6 +96,12 @@ MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
    itself is not changed. Four desks face each other: the two far desks
    are the desk's top only, cut from the second row and drawn above the
    two near desks.
+-- Meeting table (drawn by the app, no image file)
+BASED ON: Objects/Furniture/Desk, Office.png, second row (LPC Revised:
+   Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling), entry above)
+NEW: by Agent Overtime contributors, 2026: the desk's top stretched into
+   a long table (its corners and edges kept, its plain middle repeated),
+   standing on two of the desk's legs. OGA-BY 3.0 like the original.
 
 -- Used here: Objects/Furniture/Planter.png
 Planter
@@ -105,12 +111,36 @@ Planter
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Lanea Zimmerman. Recolored by Eliza Wyatt.
 
+-- Used here: Objects/Furniture/TV, Widescreen.png and
+   Objects/Furniture/TV, Widescreen - No Service.png
+Tv, Widescreen; Tv, Widescreen - No Service display
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
 -- Used here: Objects/Furniture/Water Cooler.png
 Water Cooler
 -------------------
   ARTIST(S): Eliza Wyatt (DeathsDarling)
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Furniture/Rugs/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Furniture/Rugs/Credits.txt
+================================================================
+
+-- Used here: Objects/Furniture/Rugs/Diamond Rug, tiling.png
+Diamond Rug
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. A rug's corners and edges are kept and its
+   middle repeated, to the size of the floor it lies on.
 
 
 ================================================================
@@ -166,6 +196,13 @@ Paintings, Abstract
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
 
+-- Used here: Objects/Wall Items/Posters.png
+Posters
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
 
 ================================================================
 MetroCity Free Top Down Character Pack (the people)
@@ -199,8 +236,10 @@ Drawn in code for this app (no image files)
 ================================================================
 
 -- Office window (day and night views), office door (closed and open),
-   whiteboard, wall clock, skirting line, speech bubbles beside heads, text
-   lines on the laptop screens, lamp light and night shading
+   whiteboard, wall clock, skirting line, the meeting room's glass walls
+   and glass door (shut and open) and the shadow under its table, speech
+   bubbles beside heads, text lines on the laptop screens, lamp light and
+   night shading
 NEW: Original by Agent Overtime contributors, 2026, drawn in the style
      and colours of LPC Revised. Part of the app's code (App/OfficeArt.swift),
      MIT License like the rest of the code.

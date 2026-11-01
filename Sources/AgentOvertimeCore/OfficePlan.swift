@@ -89,8 +89,15 @@ public struct RoomLayout: Equatable {
 
     public var rows: Int { max(1, (slots + columns - 1) / columns) }
 
-    /// Pixels from the top of the wall to the bottom of the last row's name tags.
-    public var contentHeight: Int { Self.firstRow + (rows - 1) * Self.rowPitch + Self.islandDepth }
+    /// Pixels from the top of the wall to the bottom of the last row's name tags, or of the lounge when the
+    /// right-hand column reaches further.
+    public var contentHeight: Int {
+        let islands = Self.firstRow + (rows - 1) * Self.rowPitch + Self.islandDepth
+        return pillar == nil ? islands : max(islands, MeetingRoom.columnDepth)
+    }
+
+    /// The glass meeting room at the top of the right-hand column, or nil when the window has no column.
+    public var meetingRoom: MeetingRoom? { pillar.map(MeetingRoom.init(left:)) }
 
     /// The top-left corner of an island's place. Places fill rows left to right, starting next to the door.
     public func origin(of slot: Int) -> (x: Int, y: Int) {
@@ -132,4 +139,34 @@ public struct RoomLayout: Equatable {
         let aisle = Self.isAcross(seat) ? (row == 0 ? door : aisle(belowRow: row - 1)) : aisle(belowRow: row)
         return [(laneX, door), (laneX, aisle), (stand.x, aisle), stand]
     }
+}
+
+/// The right-hand column: a glass meeting room against the back wall, a lounge under it. Art pixels, from the
+/// column's left edge; the room reaches the window's right edge.
+public struct MeetingRoom {
+    /// The side glass, at the column's left edge.
+    public let left: Int
+    /// The foot of the front glass, and how tall the glass walls stand above their foot.
+    public static let front = RoomLayout.wall + 90
+    public static let glassHeight = 40
+    /// The glass door in the front glass: its left edge (from the column) and width.
+    public static let doorX = 20
+    public static let doorWidth = 24
+    /// The table for six: its top surface's top-left corner (from the column and the top of the room) and size.
+    public static let table = (x: 56, y: RoomLayout.wall + 28, width: 96, depth: 24)
+    /// How far down the lounge under the meeting room reaches.
+    public static let columnDepth = 340
+
+    public init(left: Int) { self.left = left }
+
+    /// Where the six sit, as their feet, left to right: 0–2 behind the table facing the room, 3–5 in front of it
+    /// with their backs to it. Named here for the walks to a meeting.
+    public var seats: [(x: Int, y: Int)] {
+        let t = Self.table
+        let middles = (0..<3).map { left + t.x + 16 + $0 * 32 }
+        return middles.map { ($0, t.y - 2) } + middles.map { ($0, t.y + 54) }
+    }
+
+    /// Just outside the glass door: where a walk to a meeting turns in.
+    public var doorstep: (x: Int, y: Int) { (left + Self.doorX + Self.doorWidth / 2, Self.front + 10) }
 }

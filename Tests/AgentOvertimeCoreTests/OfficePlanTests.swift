@@ -67,6 +67,29 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(narrow.columns, 2)
     }
 
+    /// The meeting room (and the lounge under it) lives in the right-hand column only, so the smallest window has
+    /// none. Its six seats are inside its glass, its door clears the table, and the room is never cut off: the
+    /// office is at least as tall as the column.
+    func testMeetingRoomOnlyInTheRightHandColumn() throws {
+        XCTAssertNil(RoomLayout(points: Double(RoomLayout.minWindow.width), slots: 1).meetingRoom)
+        XCTAssertNil(RoomLayout(points: 860, slots: 4).meetingRoom)
+
+        let standard = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        let room = try XCTUnwrap(standard.meetingRoom)
+        XCTAssertEqual(room.left, standard.pillar)
+        XCTAssertEqual(room.seats.count, 6)
+        for seat in room.seats {
+            XCTAssert((room.left + 4..<standard.width).contains(seat.x), "\(seat)")
+            XCTAssert((RoomLayout.wall..<MeetingRoom.front).contains(seat.y), "\(seat)")
+        }
+        XCTAssertLessThanOrEqual(MeetingRoom.doorX + MeetingRoom.doorWidth, MeetingRoom.table.x)
+        XCTAssertGreaterThan(room.doorstep.y, MeetingRoom.front, "outside the glass")
+        XCTAssertGreaterThanOrEqual(standard.contentHeight, MeetingRoom.columnDepth)
+        XCTAssertEqual(
+            RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 1).contentHeight,
+            MeetingRoom.columnDepth, "one island: the lounge still shows whole")
+    }
+
     /// Every other row moves right, so islands don't line up; side by side and row to row, a tile stays clear.
     func testIslandsStaggerAndKeepATileClear() {
         let room = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
