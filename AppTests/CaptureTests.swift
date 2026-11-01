@@ -153,6 +153,10 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(crowd.office.islands.count, 5)
         try capture(
             "office-many", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(crowd))
+        // The same room in a window tall enough to show all of it: the fifth island starts a third row.
+        try capture(
+            "office-many-all", size: CGSize(width: OfficeView.defaultSize.width, height: 1060),
+            OfficeView(fixedNow: today(14)).environmentObject(crowd))
 
         // Same names: a folder's second session, and two Plans at once.
         let twins = makeModel(connected: true)
