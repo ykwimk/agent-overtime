@@ -10,6 +10,8 @@ public struct Teammate: Equatable, Identifiable {
     public var name: String?
     public var state: WorkState
     public var since: Date
+    /// When it started while the app was listening; nil for one already at work, who sits down without walking in.
+    public var arrived: Date? = nil
 
     mutating func set(_ newState: WorkState, now: Date) {
         if state != newState { since = now }
@@ -23,6 +25,8 @@ public struct Session: Equatable, Identifiable {
     public var state: WorkState
     public var since: Date
     public var teammates: [Teammate] = []
+    /// When it started while the app was listening (SessionStart); nil for one opened before the app.
+    public var arrived: Date? = nil
 
     /// `since` only moves when the state changes, so "waiting · 3 min" counts from the first prompt.
     mutating func set(_ newState: WorkState, now: Date) {
@@ -110,7 +114,10 @@ public struct OfficeState: Equatable {
             if let newState { mates[i].set(newState, now: now) }
         case (_, nil):
             if mates.count < Self.maxTeammates {
-                mates.append(Teammate(id: agentID, name: event.agentType, state: newState ?? .working, since: now))
+                mates.append(
+                    Teammate(
+                        id: agentID, name: event.agentType, state: newState ?? .working, since: now,
+                        arrived: event.kind == .subagentStart ? now : nil))
             }
         }
         desks[d].sessions[s].teammates = mates
@@ -169,7 +176,10 @@ public struct OfficeState: Equatable {
             desksChanged = d != nil
         }
         guard let d else { return nil }
-        desks[d].sessions.append(Session(id: event.session, pid: event.pid, state: .resting, since: now))
+        desks[d].sessions.append(
+            Session(
+                id: event.session, pid: event.pid, state: .resting, since: now,
+                arrived: event.kind == .sessionStart ? now : nil))
         return (d, desks[d].sessions.count - 1)
     }
 

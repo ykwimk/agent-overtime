@@ -43,6 +43,16 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertFalse(office.apply(event(.stop), now: t0), "same desk, nothing to save")
     }
 
+    func testArrivedOnlyForThoseWhoStartWhileTheAppListens() {
+        var office = OfficeState()
+        office.apply(event(.sessionStart, "new"), now: t0)
+        office.apply(event(.preToolUse, "old"), now: t0)
+        office.apply(event(.subagentStart, "new", agent: "a1"), now: t0 + 1)
+        office.apply(event(.preToolUse, "new", agent: "a2"), now: t0 + 1)
+        XCTAssertEqual(office.desks[0].sessions.map(\.arrived), [t0, nil])
+        XCTAssertEqual(office.desks[0].sessions[0].teammates.map(\.arrived), [t0 + 1, nil])
+    }
+
     func testSecondSessionSitsAtTheSameDesk() {
         var office = OfficeState()
         office.apply(event(.sessionStart, "s1"), now: t0)

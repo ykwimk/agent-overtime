@@ -16,6 +16,7 @@ final class Stage: ObservableObject {
         let look: Look
         let pod: Int
         let desk: Int
+        let arrived: Date?
     }
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
@@ -39,7 +40,6 @@ final class Stage: ObservableObject {
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.
     func sync(_ office: OfficeState, width: Int, now: Date, animate: Bool) -> (pods: [Pod], layout: RoomLayout) {
         guard office != self.office || width != layout.width else { return (pods, layout) }
-        let first = self.office == nil
         let before = layout
         generation += 1
         self.office = office
@@ -49,31 +49,36 @@ final class Stage: ObservableObject {
         var seated: [String: Seated] = [:]
         for (index, pod) in pods.enumerated() {
             if pod.session != nil {
-                seated[OfficeScene.mainID(pod)] = Seated(look: OfficeScene.mainLook(pod), pod: index, desk: 0)
+                seated[OfficeScene.mainID(pod)] = Seated(
+                    look: OfficeScene.mainLook(pod), pod: index, desk: 0, arrived: pod.session?.arrived)
             }
             for (slot, mate) in pod.mates.enumerated() {
                 guard let mate else { continue }
                 seated[OfficeScene.mateID(mate)] = Seated(
-                    look: OfficeScene.mateLook(mate, desk: slot + 1), pod: index, desk: slot + 1)
+                    look: OfficeScene.mateLook(mate, desk: slot + 1), pod: index, desk: slot + 1,
+                    arrived: mate.arrived)
             }
         }
-        walks = walks.filter { now.timeIntervalSince($0.value.start) < $0.value.duration }
-        if animate, !first {
+        if animate {
+            // A walk in starts when the person arrived, not when the window first draws it: a window drawn late
+            // still shows the walk, or the person seated once it would be over.
             for (id, person) in seated where present[id] == nil {
-                walks[id] = walk(person.look, layout.route(pod: person.pod, desk: person.desk), now, false)
+                guard let arrived = person.arrived else { continue }
+                walks[id] = walk(person.look, layout.route(pod: person.pod, desk: person.desk), arrived, false)
             }
             for (id, person) in present where seated[id] == nil {
                 walks[id] = walk(person.look, before.route(pod: person.pod, desk: person.desk), now, true)
             }
         }
+        walks = walks.filter { now.timeIntervalSince($0.value.start) < $0.value.duration }
         present = seated
 
         busyUntil = walks.values.map { $0.start + $0.duration }.max() ?? .distantPast
         return (pods, layout)
     }
 
-    private func walk(_ look: Look, _ route: [(x: Int, y: Int)], _ now: Date, _ leaving: Bool) -> Walk {
-        Walk(look: look, route: route, start: now, duration: Self.length(route) / Self.speed, leaving: leaving)
+    private func walk(_ look: Look, _ route: [(x: Int, y: Int)], _ start: Date, _ leaving: Bool) -> Walk {
+        Walk(look: look, route: route, start: start, duration: Self.length(route) / Self.speed, leaving: leaving)
     }
 
     static func length(_ route: [(x: Int, y: Int)]) -> Double {

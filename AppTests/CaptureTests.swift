@@ -60,7 +60,7 @@ final class CaptureTests: XCTestCase {
         let helper = events.firstIndex { $0.kind == .subagentStart && $0.agentID == "demo-h" }!
         for event in events[..<helper] { model.receive(event, at: now - 200) }
         _ = stage.sync(model.office, width: width, now: now - 2, animate: !still)
-        for event in events[helper...] { model.receive(event, at: now - 200) }
+        for event in events[helper...] { model.receive(event, at: now - walked) }
         _ = stage.sync(model.office, width: width, now: now - walked, animate: !still)
         return (model, stage)
     }
@@ -361,6 +361,22 @@ final class CaptureTests: XCTestCase {
             frames += 1
         }
         XCTAssertGreaterThan(frames, 10)
+    }
+
+    /// Someone who starts after the app walks in even when the window first draws a moment later, and is seated
+    /// once the walk would be over. A session opened before the app sits down without walking.
+    func testWalkInCountsFromTheArrivalNotTheFirstDrawing() {
+        let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
+        let t0 = today(14)
+        var office = OfficeState()
+        office.apply(HookEvent(kind: .sessionStart, session: "new", cwd: "/x/new"), now: t0 + 1)
+        office.apply(HookEvent(kind: .preToolUse, session: "old", cwd: "/x/old"), now: t0 + 1)
+        let cases: [(drawn: TimeInterval, walking: [String])] = [(1.5, ["p:new"]), (10, [])]
+        for (drawn, walking) in cases {
+            let stage = Stage()
+            _ = stage.sync(office, width: width, now: t0 + drawn, animate: true)
+            XCTAssertEqual(stage.moment(at: t0 + drawn).away.sorted(), walking, "first drawn \(drawn) s in")
+        }
     }
 
     /// Four pods, every desk working, the window on screen and ticking: how much CPU the office takes.
