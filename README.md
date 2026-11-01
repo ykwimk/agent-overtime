@@ -68,7 +68,6 @@ swift run fake-events                        # 켜 둔 앱에 가짜 소식 보�
 ```
 
 ### 남은 일 (v0.1 공개 전)
-- 공개 저장소 주소 확정: 지금 `ykwimk/agent-overtime` 은 임시 (`App/AppModel.swift` 의 `repository` 한 곳과 이 README)
 - 실제 Claude Code 에 플러그인을 설치한 시험: 이벤트가 오는지, 퇴근 판정 (프로세스 번호) 이 맞는지
 - `.dmg`·ad-hoc 서명·`codesign --verify --deep --strict`·SHA-256, Apple 칩 맥 실기
 - 이 README 의 Open Anyway 캡처, 앱 아이콘

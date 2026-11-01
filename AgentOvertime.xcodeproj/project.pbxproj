@@ -430,7 +430,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.agentovertime.AgentOvertime;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ykwimk.AgentOvertime;
 				PRODUCT_NAME = AgentOvertime;
 			};
 			name = Debug;
@@ -447,7 +447,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.agentovertime.AgentOvertime;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ykwimk.AgentOvertime;
 				PRODUCT_NAME = AgentOvertime;
 			};
 			name = Release;
@@ -455,6 +455,9 @@
 		B20000000000000000000011 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ykwimk.AgentOvertime.hook;
 				PRODUCT_NAME = "agent-overtime-hook";
 				SKIP_INSTALL = YES;
 			};
@@ -463,6 +466,9 @@
 		B20000000000000000000012 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ykwimk.AgentOvertime.hook;
 				PRODUCT_NAME = "agent-overtime-hook";
 				SKIP_INSTALL = YES;
 			};
@@ -473,7 +479,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.agentovertime.AgentOvertimeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ykwimk.AgentOvertimeTests;
 				PRODUCT_NAME = AgentOvertimeTests;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentOvertime.app/Contents/MacOS/AgentOvertime";
 			};
@@ -484,7 +490,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = io.github.agentovertime.AgentOvertimeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.ykwimk.AgentOvertimeTests;
 				PRODUCT_NAME = AgentOvertimeTests;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AgentOvertime.app/Contents/MacOS/AgentOvertime";
 			};

@@ -61,7 +61,7 @@ final class AppModel: ObservableObject {
         static let welcomeDismissed = "welcomeDismissed"
     }
 
-    static let repository = "ykwimk/agent-overtime"  // shortcut: provisional until the public repo exists
+    static let repository = "ykwimk/agent-overtime"
     static var connectCommands: String {
         "/plugin marketplace add \(repository)\n/plugin install agent-overtime@agent-overtime"
     }
