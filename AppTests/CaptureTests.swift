@@ -50,8 +50,9 @@ final class CaptureTests: XCTestCase {
         Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: Date())!
     }
 
-    /// The fake scenario as of `now`, with the blog's helper still walking in from the door (unless `still`).
-    private func scenario(at now: Date, still: Bool = false) -> (AppModel, Stage) {
+    /// The fake scenario as of `now`, with the blog's helper `walked` seconds into its walk in from the door
+    /// (unless `still`).
+    private func scenario(at now: Date, still: Bool = false, walked: TimeInterval = 0.9) -> (AppModel, Stage) {
         let model = makeModel(connected: true)
         let stage = Stage()
         let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
@@ -60,7 +61,7 @@ final class CaptureTests: XCTestCase {
         for event in events[..<helper] { model.receive(event, at: now - 200) }
         _ = stage.sync(model.office, width: width, now: now - 2, animate: !still)
         for event in events[helper...] { model.receive(event, at: now - 200) }
-        _ = stage.sync(model.office, width: width, now: now - 0.9, animate: !still)
+        _ = stage.sync(model.office, width: width, now: now - walked, animate: !still)
         return (model, stage)
     }
 
@@ -76,6 +77,12 @@ final class CaptureTests: XCTestCase {
                 "office-min-\(time)", size: OfficeView.minSize,
                 OfficeView(fixedNow: now, stage: smallStage).environmentObject(small))
         }
+        // The helper passing web-app on its way to blog: under the name tags, not over the seated heads.
+        let (passing, passingStage) = scenario(at: today(14), walked: 1.5)
+        try capture(
+            "office-passing", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: today(14), stage: passingStage).environmentObject(passing))
+
         // Off duty: my-project's second session walks out; the door stands open as it gets there.
         let (leaving, leavingStage) = scenario(at: today(14), still: true)
         let width = Int(OfficeView.minSize.width) / RoomLayout.pointsPerPixel
