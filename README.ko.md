@@ -53,6 +53,9 @@ Claude Code 에 한 마디 보냅니다. 캐릭터가 사무실 문으로 걸어
 
 ## 자주 묻는 것
 
+**Homebrew 가 "untrusted tap" 이라고 해요.**
+설치 명령을 이름 그대로 다시 쳐 주세요: `brew install --cask ykwimk/tap/agent-overtime`. 이름을 다 쓰면 Homebrew 가 그 tap 을 믿고 설치합니다.
+
 **캐릭터가 안 나와요.**
 Claude Code 의 `/plugin` 목록에서 agent-overtime 이 켜져 있나요? 미리 켜 둔 세션인가요 (그 세션에서 `/reload-plugins` 를 한 번)? 앱이 응용 프로그램 폴더에 있나요? 설치한 뒤 Claude Code 에 한 마디 보냈나요?
 
