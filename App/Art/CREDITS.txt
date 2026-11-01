@@ -1,0 +1,164 @@
+Agent Overtime - Art credits
+
+The art in this folder is NOT under the MIT license that covers the code.
+See LICENSE.txt in this folder.
+
+Two packs, both kept as unmodified PNG files:
+- The room and its furniture (Structure/, Objects/): LPC Revised,
+  OGA-BY 3.0. Listed first.
+- The people (MetroCity/): MetroCity Free Top Down Character Pack,
+  CC0 1.0. Listed after LPC Revised.
+
+The LPC Revised files are copies from LPC Revised by Eliza Wyatt and
+contributors: https://github.com/ElizaWy/LPC (each folder there has a
+Credits.txt; the entries below are copied from them word for word).
+Licensed OGA-BY 3.0. The app crops these sheets and darkens and tints the
+picture at night while it draws; the files themselves are not changed.
+
+
+================================================================
+LPC Revised: Structure/Floor/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Structure/Floor/Credits.txt
+================================================================
+
+-- Used here: Structure/Floor/Wood Floor A.png
+Wood Floor A
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Edits and recolors by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Structure/Walls/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Structure/Walls/Credits.txt
+================================================================
+
+-- Used here: Structure/Walls/Painted Walls.png
+Painted Walls
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Furniture/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Furniture/Credits.txt
+================================================================
+
+-- Used here: Objects/Furniture/Cabinet.png
+Cabinet
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/Copy Machine.png
+Copy Machine
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/Desk, Office.png
+Desk, Office
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: 
+	Row 1: Desk made by Eliza Wyatt, using elements from Lanea Zimmerman's cabinets and countertops.
+	Row 2+: Original by Eliza Wyatt
+
+-- Used here: Objects/Furniture/Planter.png
+Planter
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman. Recolored by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/Water Cooler.png
+Water Cooler
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Furniture/Seating/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Furniture/Seating/Credits.txt
+================================================================
+
+-- Used here: Objects/Furniture/Seating/Chair, Office.png
+Chair, Office
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Small Items/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Small%20Items/Credits.txt
+================================================================
+
+-- Used here: Objects/Small Items/Laptop.png
+Laptop
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Lighting, Table.png
+Lighting, Tabletop
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: 
+	Top Row: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
+	Row 2+: Original by Eliza Wyatt.
+
+
+================================================================
+MetroCity Free Top Down Character Pack (the people)
+https://jik-a-4.itch.io/metrocity-free-topdown-character-pack
+================================================================
+
+MetroCity Free Top Down Character Pack by JIK-A-4, CC0 1.0 (no attribution
+required, credited anyway): https://creativecommons.org/publicdomain/zero/1.0/
+The files under MetroCity/ keep the pack's own folders; the ones under
+MetroCity/MetroCity 2.0/ come from its MetroCity 2.0 update.
+
+-- Used here:
+   MetroCity/CharacterModel/Character Model.png (bodies, six skin tones)
+   MetroCity/CharacterModel/Shadow.png
+   MetroCity/Hair/Hairs.png
+   MetroCity/Outfits/Outfit1.png, Outfit5.png, Outfit6.png
+   MetroCity/MetroCity 2.0/Hair.png, Suit.png, Suit1.png
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the files
+   themselves are not changed. The app stacks a body, clothes and hair;
+   seats people by cutting the back view under the shoulders and drawing a
+   chair's backrest over it; moves that cut down one pixel for nodding;
+   draws each pixel 1.5 times the size of the room's pixels; and moves the
+   colours a little toward the LPC Revised palette (near-black outlines one
+   step lighter, slightly less saturation and contrast).
+
+
+================================================================
+Drawn in code for this app (no image files)
+================================================================
+
+-- Office window (day and night views), office door (closed and open),
+   whiteboard, wall clock, speech bubbles above heads, text lines on the
+   laptop screens, lamp light and night shading
+NEW: Original by Agent Overtime contributors, 2026, drawn in the style
+     and colours of LPC Revised. Part of the app's code (App/OfficeArt.swift),
+     MIT License like the rest of the code.

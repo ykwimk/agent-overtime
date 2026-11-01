@@ -10,6 +10,8 @@ public struct Teammate: Equatable, Identifiable {
     public var name: String?
     public var state: WorkState
     public var since: Date
+    /// When it started while the app was listening; nil for one already at work, who sits down without walking in.
+    public var arrived: Date? = nil
 
     mutating func set(_ newState: WorkState, now: Date) {
         if state != newState { since = now }
@@ -23,6 +25,8 @@ public struct Session: Equatable, Identifiable {
     public var state: WorkState
     public var since: Date
     public var teammates: [Teammate] = []
+    /// When it started while the app was listening (SessionStart); nil for one opened before the app.
+    public var arrived: Date? = nil
 
     /// `since` only moves when the state changes, so "waiting · 3 min" counts from the first prompt.
     mutating func set(_ newState: WorkState, now: Date) {
@@ -54,8 +58,10 @@ public struct Desk: Equatable, Identifiable {
 
 public struct OfficeState: Equatable {
     public static let maxDesks = 24
-    public static let maxSessionsPerDesk = 4
-    public static let maxTeammates = 8
+    /// Guards against a runaway process flooding the socket, far above real use, so every real session and
+    /// teammate is counted in the summary and the menu bar. Teammates without a desk show as "+n".
+    public static let maxSessions = 64
+    public static let maxTeammates = 64
 
     public private(set) var desks: [Desk]
 
@@ -66,14 +72,17 @@ public struct OfficeState: Equatable {
 
     public var folders: [String] { desks.map(\.folder) }
 
-    /// The state a main session takes for an event, or nil when the event does not set one.
-    static func state(for event: HookEvent) -> WorkState? {
+    /// The state a session or teammate in `current` takes for an event, or nil when the event does not set one.
+    static func state(for event: HookEvent, from current: WorkState) -> WorkState? {
         switch event.kind {
         case .sessionStart, .stop: return .resting
         case .userPromptSubmit: return .working
         case .preToolUse: return event.asksUser ? .waiting : .working
         case .permissionRequest: return .waiting
-        case .notification: return event.notification == "idle_prompt" ? .resting : .waiting
+        case .notification:
+            guard event.notification == "idle_prompt" else { return .waiting }
+            // idle_prompt also comes while a question or permission prompt is still open: that stays a wait.
+            return current == .waiting ? nil : .resting
         case .sessionEnd, .subagentStart, .subagentStop: return nil
         }
     }
@@ -90,10 +99,10 @@ public struct OfficeState: Equatable {
             return false
         }
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
-        let newState = Self.state(for: event)
-
         guard let agentID = event.agentID else {
-            if let newState { desks[d].sessions[s].set(newState, now: now) }
+            if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
+                desks[d].sessions[s].set(newState, now: now)
+            }
             return desksChanged
         }
 
@@ -105,10 +114,14 @@ public struct OfficeState: Equatable {
         case (.subagentStop, nil):
             break
         case (_, let i?):
-            if let newState { mates[i].set(newState, now: now) }
+            if let newState = Self.state(for: event, from: mates[i].state) { mates[i].set(newState, now: now) }
         case (_, nil):
             if mates.count < Self.maxTeammates {
-                mates.append(Teammate(id: agentID, name: event.agentType, state: newState ?? .working, since: now))
+                mates.append(
+                    Teammate(
+                        id: agentID, name: event.agentType,
+                        state: Self.state(for: event, from: .working) ?? .working, since: now,
+                        arrived: event.kind == .subagentStart ? now : nil))
             }
         }
         desks[d].sessions[s].teammates = mates
@@ -152,19 +165,25 @@ public struct OfficeState: Equatable {
 
     /// Seats a session the office has not seen yet (a new one, or one started before the app).
     private mutating func seat(_ event: HookEvent, now: Date, desksChanged: inout Bool) -> (Int, Int)? {
-        if event.kind == .subagentStop { return nil }
+        if event.kind == .subagentStop || liveSessionCount >= Self.maxSessions { return nil }
         var d = desks.firstIndex { $0.folder == event.cwd }
         if d == nil {
-            if desks.count >= Self.maxDesks {
-                guard let oldestOff = desks.firstIndex(where: \.isOff) else { return nil }
-                desks.remove(at: oldestOff)
+            // A new folder takes over the off-duty desk nearest the door, so it is in view without scrolling.
+            // Other remembered desks keep their places. Only with no off-duty desk does it go at the end.
+            if let off = desks.firstIndex(where: \.isOff) {
+                desks[off] = Desk(folder: event.cwd)
+                d = off
+            } else if desks.count < Self.maxDesks {
+                desks.append(Desk(folder: event.cwd))
+                d = desks.count - 1
             }
-            desks.append(Desk(folder: event.cwd))
-            desksChanged = true
-            d = desks.count - 1
+            desksChanged = d != nil
         }
-        guard let d, desks[d].sessions.count < Self.maxSessionsPerDesk else { return nil }
-        desks[d].sessions.append(Session(id: event.session, pid: event.pid, state: .resting, since: now))
+        guard let d else { return nil }
+        desks[d].sessions.append(
+            Session(
+                id: event.session, pid: event.pid, state: .resting, since: now,
+                arrived: event.kind == .sessionStart ? now : nil))
         return (d, desks[d].sessions.count - 1)
     }
 

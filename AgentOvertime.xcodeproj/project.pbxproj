@@ -11,8 +11,8 @@
 		AC0000000000000000000102 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000102 /* AppModel.swift */; };
 		AC0000000000000000000103 /* Launcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000103 /* Launcher.swift */; };
 		AC0000000000000000000104 /* OfficeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* OfficeView.swift */; };
-		AC0000000000000000000105 /* DeskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000105 /* DeskView.swift */; };
-		AC0000000000000000000106 /* PixelArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000106 /* PixelArt.swift */; };
+		AC0000000000000000000105 /* OfficeRoom.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000105 /* OfficeRoom.swift */; };
+		AC0000000000000000000106 /* OfficeArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000106 /* OfficeArt.swift */; };
 		AC0000000000000000000107 /* MenuContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000107 /* MenuContent.swift */; };
 		AC0000000000000000000108 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000108 /* WelcomeView.swift */; };
 		AC0000000000000000000109 /* StartSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000109 /* StartSheet.swift */; };
@@ -20,12 +20,14 @@
 		AC000000000000000000010B /* Style.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010B /* Style.swift */; };
 		AC000000000000000000010C /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010C /* Localizable.xcstrings */; };
 		AC000000000000000000010D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010D /* Assets.xcassets */; };
+		AC000000000000000000010E /* Art in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000010E /* Art */; };
 		AC0000000000000000000201 /* EventSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000201 /* EventSocket.swift */; };
 		AC0000000000000000000202 /* FakeScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000202 /* FakeScenario.swift */; };
 		AC0000000000000000000203 /* HookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000203 /* HookEvent.swift */; };
 		AC0000000000000000000204 /* OfficeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000204 /* OfficeState.swift */; };
 		AC0000000000000000000205 /* Paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000205 /* Paths.swift */; };
 		AC0000000000000000000206 /* StartCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000206 /* StartCommand.swift */; };
+		AC0000000000000000000207 /* OfficePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000207 /* OfficePlan.swift */; };
 		AC0000000000000000000502 /* agent-overtime-hook in Embed Helper */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000502 /* agent-overtime-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		AD0000000000000000000201 /* EventSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000201 /* EventSocket.swift */; };
 		AD0000000000000000000203 /* HookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000203 /* HookEvent.swift */; };
@@ -70,8 +72,8 @@
 		AB0000000000000000000102 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		AB0000000000000000000103 /* Launcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Launcher.swift; sourceTree = "<group>"; };
 		AB0000000000000000000104 /* OfficeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeView.swift; sourceTree = "<group>"; };
-		AB0000000000000000000105 /* DeskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskView.swift; sourceTree = "<group>"; };
-		AB0000000000000000000106 /* PixelArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PixelArt.swift; sourceTree = "<group>"; };
+		AB0000000000000000000105 /* OfficeRoom.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeRoom.swift; sourceTree = "<group>"; };
+		AB0000000000000000000106 /* OfficeArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeArt.swift; sourceTree = "<group>"; };
 		AB0000000000000000000107 /* MenuContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuContent.swift; sourceTree = "<group>"; };
 		AB0000000000000000000108 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000109 /* StartSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartSheet.swift; sourceTree = "<group>"; };
@@ -79,12 +81,14 @@
 		AB000000000000000000010B /* Style.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Style.swift; sourceTree = "<group>"; };
 		AB000000000000000000010C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		AB000000000000000000010D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB000000000000000000010E /* Art */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Art; sourceTree = "<group>"; };
 		AB0000000000000000000201 /* EventSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventSocket.swift; sourceTree = "<group>"; };
 		AB0000000000000000000202 /* FakeScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FakeScenario.swift; sourceTree = "<group>"; };
 		AB0000000000000000000203 /* HookEvent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookEvent.swift; sourceTree = "<group>"; };
 		AB0000000000000000000204 /* OfficeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficeState.swift; sourceTree = "<group>"; };
 		AB0000000000000000000205 /* Paths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paths.swift; sourceTree = "<group>"; };
 		AB0000000000000000000206 /* StartCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartCommand.swift; sourceTree = "<group>"; };
+		AB0000000000000000000207 /* OfficePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficePlan.swift; sourceTree = "<group>"; };
 		AB0000000000000000000301 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AB0000000000000000000401 /* CaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000501 /* AgentOvertime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentOvertime.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -145,8 +149,8 @@
 				AB0000000000000000000102 /* AppModel.swift */,
 				AB0000000000000000000103 /* Launcher.swift */,
 				AB0000000000000000000104 /* OfficeView.swift */,
-				AB0000000000000000000105 /* DeskView.swift */,
-				AB0000000000000000000106 /* PixelArt.swift */,
+				AB0000000000000000000105 /* OfficeRoom.swift */,
+				AB0000000000000000000106 /* OfficeArt.swift */,
 				AB0000000000000000000107 /* MenuContent.swift */,
 				AB0000000000000000000108 /* WelcomeView.swift */,
 				AB0000000000000000000109 /* StartSheet.swift */,
@@ -154,6 +158,7 @@
 				AB000000000000000000010B /* Style.swift */,
 				AB000000000000000000010C /* Localizable.xcstrings */,
 				AB000000000000000000010D /* Assets.xcassets */,
+				AB000000000000000000010E /* Art */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -167,6 +172,7 @@
 				AB0000000000000000000204 /* OfficeState.swift */,
 				AB0000000000000000000205 /* Paths.swift */,
 				AB0000000000000000000206 /* StartCommand.swift */,
+				AB0000000000000000000207 /* OfficePlan.swift */,
 			);
 			name = AgentOvertimeCore;
 			path = Sources/AgentOvertimeCore;
@@ -294,6 +300,7 @@
 			files = (
 				AC000000000000000000010C /* Localizable.xcstrings in Resources */,
 				AC000000000000000000010D /* Assets.xcassets in Resources */,
+				AC000000000000000000010E /* Art in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -315,8 +322,8 @@
 				AC0000000000000000000102 /* AppModel.swift in Sources */,
 				AC0000000000000000000103 /* Launcher.swift in Sources */,
 				AC0000000000000000000104 /* OfficeView.swift in Sources */,
-				AC0000000000000000000105 /* DeskView.swift in Sources */,
-				AC0000000000000000000106 /* PixelArt.swift in Sources */,
+				AC0000000000000000000105 /* OfficeRoom.swift in Sources */,
+				AC0000000000000000000106 /* OfficeArt.swift in Sources */,
 				AC0000000000000000000107 /* MenuContent.swift in Sources */,
 				AC0000000000000000000108 /* WelcomeView.swift in Sources */,
 				AC0000000000000000000109 /* StartSheet.swift in Sources */,
@@ -328,6 +335,7 @@
 				AC0000000000000000000204 /* OfficeState.swift in Sources */,
 				AC0000000000000000000205 /* Paths.swift in Sources */,
 				AC0000000000000000000206 /* StartCommand.swift in Sources */,
+				AC0000000000000000000207 /* OfficePlan.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -385,7 +393,7 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -412,7 +420,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

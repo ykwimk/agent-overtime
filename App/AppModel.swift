@@ -77,12 +77,11 @@ final class AppModel: ObservableObject {
         static let welcomeDismissed = "welcomeDismissed"
     }
 
-    static let repository = "ykwimk/agent-overtime"
-    static var connectCommands: String {
-        "/plugin marketplace add \(repository)\n/plugin install agent-overtime@agent-overtime"
-    }
-    static let hooksURL = URL(string: "https://github.com/\(repository)/blob/main/plugin/hooks/hooks.json")!
-    static let repositoryURL = URL(string: "https://github.com/\(repository)")!
+    static let hooksURL = URL(
+        string: "https://github.com/\(Release.repository)/blob/\(Release.tag)/plugin/hooks/hooks.json")!
+    static let creditsURL = URL(
+        string: "https://github.com/\(Release.repository)/blob/\(Release.tag)/App/Art/CREDITS.txt")!
+    static let repositoryURL = URL(string: "https://github.com/\(Release.repository)")!
 
     init(supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath)
     {
@@ -148,7 +147,10 @@ final class AppModel: ObservableObject {
     }
 
     private func tick() {
-        office.endSessions { pid in kill(pid, 0) != 0 && errno == ESRCH }
+        // Assign only on a change: every assignment redraws everything that watches the office.
+        var checked = office
+        checked.endSessions { pid in kill(pid, 0) != 0 && errno == ESRCH }
+        if checked != office { office = checked }
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }

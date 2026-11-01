@@ -25,11 +25,7 @@ struct WelcomeView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            HStack(alignment: .top, spacing: 20) {
-                example(.working, seed: "my-app")
-                example(.waiting, seed: "api-server")
-                example(.resting, seed: "notes")
-            }
+            OfficeSlice()
 
             Divider()
 
@@ -39,14 +35,14 @@ struct WelcomeView: View {
                     "A small plugin lets Claude Code tell this app when it works. Paste these two lines into Claude Code. They apply to every Claude Code session on this Mac, and you can turn the plugin off or remove it in Claude Code at any time."
                 )
                 .fixedSize(horizontal: false, vertical: true)
-                Text(verbatim: AppModel.connectCommands)
+                Text(verbatim: Release.connectCommands)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Style.floor))
                     .accessibilityLabel(Text("Connect commands"))
-                    .accessibilityValue(Text(verbatim: AppModel.connectCommands))
+                    .accessibilityValue(Text(verbatim: Release.connectCommands))
                 Text(
                     "When Claude Code asks, choose Install for you. Sessions that were already open need /reload-plugins once."
                 )
@@ -66,7 +62,7 @@ struct WelcomeView: View {
                 .keyboardShortcut(.cancelAction)
                 Button("Copy Connect Commands") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(AppModel.connectCommands, forType: .string)
+                    NSPasteboard.general.setString(Release.connectCommands, forType: .string)
                     copiedAt = Date()
                     noNewsYet = false
                 }
@@ -81,15 +77,6 @@ struct WelcomeView: View {
             try? await Task.sleep(nanoseconds: 30_000_000_000)
             if !Task.isCancelled, !model.receivedThisRun { noNewsYet = true }
         }
-    }
-
-    private func example(_ state: WorkState, seed: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Workstation(pose: Pose(state), seed: seed, scale: 2.5)
-            Text(verbatim: seed).font(.caption.weight(.medium))
-            state.word.font(.caption).foregroundStyle(state.color)
-        }
-        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private var locationNote: some View {
@@ -131,5 +118,56 @@ struct WelcomeView: View {
         } else if copiedAt != nil {
             Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(.secondary)
         }
+    }
+}
+
+/// A slice of the office with three example people: one working, a teammate waiting, a teammate resting, and a
+/// fourth on the way home, facing out, so the example shows a face too. Always by day, whatever the clock says:
+/// the example is there to be seen clearly.
+struct OfficeSlice: View {
+    var now = Date()
+
+    private static let office: OfficeState = {
+        var office = OfficeState()
+        let folder = "/example/my-project"
+        let start = Date()
+        let events = [
+            HookEvent(kind: .userPromptSubmit, session: "example", cwd: folder),
+            HookEvent(kind: .subagentStart, session: "example", cwd: folder, agentID: "e1", agentType: "Explore"),
+            HookEvent(kind: .permissionRequest, session: "example", cwd: folder, agentID: "e1", agentType: "Explore"),
+            HookEvent(kind: .subagentStart, session: "example", cwd: folder, agentID: "e2", agentType: "Plan"),
+            HookEvent(
+                kind: .notification, session: "example", cwd: folder, agentID: "e2", agentType: "Plan",
+                notification: "idle_prompt"),
+        ]
+        for event in events { office.apply(event, now: start) }
+        return office
+    }()
+
+    var body: some View {
+        var plan = SeatPlan()
+        let pods = plan.pods(for: Self.office)
+        let scale = RoomLayout.pointsPerPixel
+        let top = 70
+        let crop = CGRect(
+            x: RoomLayout.lane - 4, y: top, width: RoomLayout.podWidth + 8,
+            height: RoomLayout.firstRow + RoomLayout.podDepth - top)
+        let layout = RoomLayout(width: RoomLayout.lane + RoomLayout.podWidth + RoomLayout.margin, podCount: 1)
+        let leaving = layout.standPoint(pod: 0, desk: 3)
+        let scene = OfficeScene(
+            layout: layout, height: RoomLayout.firstRow + RoomLayout.podDepth, pods: pods, darkness: 0, frame: 0,
+            now: now, walkers: [Walker(look: Look.all[1], x: leaving.x, y: leaving.y + 22, facing: .down, step: 1)])
+        let density = CGFloat(OfficeRenderer.density)
+        let pixels = CGRect(
+            x: crop.minX * density, y: crop.minY * density, width: crop.width * density, height: crop.height * density)
+        return ZStack(alignment: .topLeading) {
+            if let image = OfficeRenderer().render(scene)?.cropping(to: pixels) {
+                Image(decorative: image, scale: density / CGFloat(scale)).interpolation(.none).accessibilityHidden(true)
+            }
+            PodTags(pod: pods[0], now: now).offset(
+                x: CGFloat(4 * scale), y: CGFloat((RoomLayout.firstRow - top) * scale))
+        }
+        .frame(width: crop.width * CGFloat(scale), height: crop.height * CGFloat(scale), alignment: .topLeading)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }

@@ -10,6 +10,18 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     }
 
+    static let artists = ["Eliza Wyatt", "Lanea \"Sharm\" Zimmerman"]
+    static let artLicenseURL = URL(string: "https://static.opengameart.org/OGA-BY-3.0.txt")!
+    static let peopleURL = URL(string: "https://jik-a-4.itch.io/metrocity-free-topdown-character-pack")!
+
+    /// Opens a text file from the app's Art folder in the default text app (nothing is written or sent).
+    static func openBundled(_ name: String) {
+        guard let url = Bundle.main.resourceURL?.appendingPathComponent("Art").appendingPathComponent(name) else {
+            return
+        }
+        NSWorkspace.shared.open(url)
+    }
+
     var body: some View {
         Form {
             Section {
@@ -24,7 +36,7 @@ struct SettingsView: View {
                 }
                 Button("Copy Connect Commands") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(AppModel.connectCommands, forType: .string)
+                    NSPasteboard.general.setString(Release.connectCommands, forType: .string)
                     copied = true
                 }
                 if copied {
@@ -84,16 +96,54 @@ struct SettingsView: View {
                     Text("Version")
                 }
                 LabeledContent {
-                    Link(destination: AppModel.repositoryURL) { Text(verbatim: AppModel.repository) }
+                    Link(destination: AppModel.repositoryURL) { Text(verbatim: Release.repository) }
                 } label: {
                     Text("Source")
                 }
-                Text("MIT License. Pixel art drawn in code for this app (MIT).").font(.callout).foregroundStyle(
-                    .secondary)
+                Text("Code: MIT License.").font(.callout).foregroundStyle(.secondary)
                 Text("Works with Claude Code. Not affiliated with Anthropic.").font(.callout).foregroundStyle(
                     .secondary)
             } header: {
                 Text("About")
+            }
+
+            Section {
+                LabeledContent {
+                    Text(verbatim: "LPC Revised")
+                } label: {
+                    Text("Room")
+                }
+                LabeledContent {
+                    // No-break spaces inside each name, so lines only break after a comma.
+                    Text(
+                        verbatim: Self.artists.map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }.joined(
+                            separator: ", ")
+                    )
+                    .multilineTextAlignment(.trailing)
+                } label: {
+                    Text("Artists")
+                }
+                LabeledContent {
+                    Link(destination: Self.artLicenseURL) { Text(verbatim: "OGA-BY 3.0") }
+                } label: {
+                    Text("License")
+                }
+                LabeledContent {
+                    Link(destination: Self.peopleURL) { Text(verbatim: "MetroCity by JIK-A-4, CC0 1.0") }
+                } label: {
+                    Text("People")
+                }
+                Text(
+                    "The art is not MIT: the room is OGA-BY 3.0 and the people are CC0 1.0, cropped and combined for this app. Each file's artists are in the credits."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Button("Open Credits") { Self.openBundled("CREDITS.txt") }
+                    Link(destination: AppModel.creditsURL) { Text("Credits on GitHub") }
+                }
+            } header: {
+                Text("Art")
             }
         }
         .formStyle(.grouped)

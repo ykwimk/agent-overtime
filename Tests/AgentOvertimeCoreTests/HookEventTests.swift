@@ -68,19 +68,19 @@ final class HookEventTests: XCTestCase {
         let data = input([
             "hook_event_name": "SubagentStart", "session_id": "s", "cwd": "/Users/me/ev\u{202E}il\n",
             "agent_id": String(repeating: "a", count: 500),
-            "agent_type": "re\u{0}search\u{200B}er" + String(repeating: "x", count: 100),
+            "agent_type": "Ex\u{0}plo\u{200B}re" + String(repeating: "x", count: 100),
         ])
         let event = try XCTUnwrap(HookEvent.fromHookInput(data, pid: 1))
         XCTAssertEqual(event.cwd, "/Users/me/evil")
         XCTAssertEqual(event.agentID?.count, Limits.id)
         XCTAssertEqual(event.agentType?.unicodeScalars.count, Limits.agentType)
-        XCTAssertTrue(event.agentType!.hasPrefix("researcherxx"))
+        XCTAssertTrue(event.agentType!.hasPrefix("Explorexx"))
         XCTAssertNil(event.pid, "pid 1 (launchd) is never a session")
     }
 
     func testWireRoundTripAndRecheck() throws {
         let event = HookEvent(
-            kind: .subagentStart, session: "s", cwd: "/a/b", agentID: "x", agentType: "planner", pid: 77)
+            kind: .subagentStart, session: "s", cwd: "/a/b", agentID: "x", agentType: "Plan", pid: 77)
         XCTAssertEqual(HookEvent.fromWire(event.wireLine().dropLast()), event)
 
         // Anything on this Mac can write to the socket: the app checks again.

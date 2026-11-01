@@ -1,21 +1,28 @@
 import SwiftUI
 
-/// The office window: a bar with the summary and 출근, then the desk islands.
+/// The office window: a bar with the summary and 출근, then the room.
 struct OfficeView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Screenshots pin the clock and the animation frame.
     var fixedNow: Date?
+    /// Screenshots can hand in a stage with someone already walking.
+    var stage: Stage?
+    /// Only the CPU test sets these.
+    var ticksWhileHidden = false
+    var reducesMotion = false
 
-    static let defaultSize = CGSize(width: 1000, height: 640)
-    static let minSize = CGSize(width: 420, height: 430)
+    static let defaultSize = CGSize(width: RoomLayout.defaultWindow.width, height: RoomLayout.defaultWindow.height)
+    static let minSize = CGSize(width: RoomLayout.minWindow.width, height: RoomLayout.minWindow.height)
 
     var body: some View {
         VStack(spacing: 0) {
             OfficeBar()
             Divider()
-            content
+            OfficeRoom(
+                fixedNow: fixedNow, stage: stage, ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion
+            )
+            .overlay { emptyMessage }
         }
         .frame(minWidth: Self.minSize.width, minHeight: Self.minSize.height)
         .sheet(item: $model.sheet) { sheet in
@@ -26,7 +33,7 @@ struct OfficeView: View {
         }
     }
 
-    @ViewBuilder private var content: some View {
+    @ViewBuilder private var emptyMessage: some View {
         if !model.everConnected {
             EmptyOffice(
                 title: "Connection needed",
@@ -42,28 +49,6 @@ struct OfficeView: View {
             ) {
                 EmptyView()
             }
-        } else if let fixedNow {
-            grid(now: fixedNow, frame: 0)
-        } else {
-            // About 2.5 frames a second for the pixel motion; with Reduce Motion only the minutes update.
-            TimelineView(.periodic(from: .now, by: reduceMotion ? 30 : 0.4)) { context in
-                grid(
-                    now: context.date, frame: reduceMotion ? 0 : Int(context.date.timeIntervalSinceReferenceDate / 0.4))
-            }
-        }
-    }
-
-    private func grid(now: Date, frame: Int) -> some View {
-        ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: DeskView.width, maximum: 420), spacing: 12, alignment: .top)],
-                alignment: .leading, spacing: 12
-            ) {
-                ForEach(model.office.desks) { desk in
-                    DeskView(desk: desk, now: now, frame: frame)
-                }
-            }
-            .padding(20)
         }
     }
 }
@@ -146,18 +131,20 @@ struct OfficeBar: View {
     }
 }
 
+/// The empty-office message, on a plate in the middle of the empty room.
 struct EmptyOffice<Actions: View>: View {
     let title: LocalizedStringKey
     let detail: LocalizedStringKey
     @ViewBuilder let actions: () -> Actions
 
     var body: some View {
-        VStack(spacing: 14) {
-            Workstation(pose: .empty, seed: "", scale: 3)
+        VStack(spacing: 10) {
             Text(title).font(Style.title)
             Text(detail).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: 340)
             actions()
         }
+        .padding(24)
+        .background(RoundedRectangle(cornerRadius: 12).fill(.regularMaterial))
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
