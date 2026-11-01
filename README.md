@@ -77,7 +77,7 @@ Turn off or remove `agent-overtime` with `/plugin` in Claude Code. Then `brew un
 |---|---|---|---|---|---|---|
 | Agent Overtime | Claude Code sessions and subagents you already started, in four states; waiting count in the menu bar | Mac app (office window and menu bar), macOS 13+ | Homebrew cask or `.dmg`, then two plugin lines | Plugin hooks send to a socket on your Mac | None, no ports opened | MIT (art: OGA-BY 3.0 and CC0) |
 | [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) | Coding agents in your terminals as pixel characters in a small office; subagents and teammates as their own characters; bubbles when waiting for input or permission. Launches Claude Code from the office | VS Code extension, or a standalone CLI that serves the office to your browser. Windows, Linux, macOS | VS Code Marketplace or Open VSX, or `npx pixel-agents` (Node.js 20+) | Hooks; reads session transcripts when hooks are unavailable and for details not in an event. Also picks up sessions started outside it | Standalone CLI: local server on a free port, `127.0.0.1` by default | MIT |
-| [Outworked](https://github.com/outworked/outworked) | Claude as a team of AI employees: hire agents, describe a goal, and watch them write code, use the web, send messages and run scheduled tasks in an office | Desktop app (Electron), macOS first; release builds for Apple Silicon | Its own Homebrew tap, or `.dmg`; needs Claude Code installed and signed in | Runs its own agents through the Claude Code SDK. Showing sessions started elsewhere: — | Auto-updates; tunnels (downloads cloudflared on first use), webhook triggers, a built-in browser, Slack and iMessage | GPL-3.0 |
+| [Outworked](https://github.com/outworked/outworked) | Claude as a team of AI employees: hire agents, describe a goal, and watch them write code, use the web, send messages and run scheduled tasks in an office | Desktop app (Electron), macOS first; release builds for Apple Silicon | Its own Homebrew tap, or `.dmg`; needs Claude Code installed and signed in | Runs its own agents through the Claude Code SDK. Showing sessions started elsewhere: — | Yes, for its features: auto-updates; tunnels (downloads cloudflared on first use), webhook triggers, a built-in browser, Slack and iMessage | GPL-3.0 |
 
 From each project's README, November 2026. If something here is wrong, please open an issue.
 
@@ -108,7 +108,15 @@ Homebrew checks the same value from the cask on its own.
 
 - The app never checks for updates. To hear about new versions, use **Watch > Custom > Releases** on this repository.
 - Homebrew: `brew upgrade --cask agent-overtime`. `.dmg`: download the new one and replace the app in Applications.
-- Each release pins its own tag in the connect commands. After updating the app, paste the connect commands from its Settings > **Copy Connect Commands**.
+- Each release pins its own tag in the connect commands. To move the plugin to the new tag, run these in Claude Code in this order (`vX.Y.Z` is the new tag; the updated app's Settings > **Copy Connect Commands** has the last two lines filled in), then restart the Claude Code sessions you have open:
+
+```
+/plugin marketplace remove agent-overtime
+/plugin marketplace add ykwimk/agent-overtime#vX.Y.Z
+/plugin install agent-overtime@agent-overtime
+```
+
+`remove` also uninstalls the plugins installed from that marketplace; the last line installs agent-overtime again.
 
 ## Start Work
 

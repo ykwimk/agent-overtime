@@ -4,7 +4,7 @@
 
 **불 꺼지지 않는 에이전트 사무실.** Claude Code 세션과 서브에이전트가 일하는 모습을 픽셀 사무실로 보여 주는 작은 맥 앱입니다. 누가 일하고, 누가 내 답을 기다리고, 누가 쉬고, 누가 퇴근했는지 한눈에 봅니다.
 
-Claude Code 와 함께 써요. Anthropic 과 관계없는 오픈소스 앱입니다.
+Claude Code 와 함께 씁니다. Anthropic 과 관계없는 오픈소스 앱입니다.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
@@ -77,7 +77,7 @@ Claude Code 에서 `/plugin` 으로 `agent-overtime` 을 끄거나 지웁니다.
 |---|---|---|---|---|---|---|
 | Agent Overtime | 이미 켠 Claude Code 세션·서브에이전트의 네 가지 상태, 메뉴바에 답 기다림 수 | 맥 앱 (사무실 창 + 메뉴바), macOS 13 이상 | Homebrew cask 또는 `.dmg`, 그리고 플러그인 두 줄 | 플러그인 훅이 내 맥 안 소켓으로 보냄 | 없음, 포트도 열지 않음 | MIT (그림: OGA-BY 3.0, CC0) |
 | [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) | 터미널에서 도는 코딩 에이전트를 작은 사무실의 픽셀 캐릭터로. 서브에이전트·팀원도 따로, 입력·권한을 기다리면 말풍선. 사무실에서 Claude Code 를 켬 | VS Code 확장, 또는 단독 CLI 가 사무실을 브라우저로 띄움. Windows·Linux·macOS | VS Code 마켓·Open VSX, 또는 `npx pixel-agents` (Node.js 20 이상) | 훅. 훅이 안 되면, 그리고 이벤트에 없는 내용은 세션 기록 파일을 읽음. 밖에서 켠 세션도 잡음 | 단독 CLI: 빈 로컬 포트에 서버, 기본 `127.0.0.1` | MIT |
-| [Outworked](https://github.com/outworked/outworked) | Claude 를 "AI 직원 팀" 으로: 에이전트를 고용하고 목표를 쓰면, 코드·웹·메시지·예약 작업을 하는 모습을 사무실에서 봄 | 데스크톱 앱 (Electron), macOS 가 주 플랫폼, 릴리스는 Apple 칩용 | 자체 Homebrew tap 또는 `.dmg`, Claude Code 설치·로그인 필요 | Claude Code SDK 로 자기 에이전트를 직접 돌림. 밖에서 켠 세션 보기: — | 자동 업데이트, 터널 (첫 사용 때 cloudflared 내려받음), 웹훅 트리거, 내장 브라우저, Slack·iMessage | GPL-3.0 |
+| [Outworked](https://github.com/outworked/outworked) | Claude 를 "AI 직원 팀" 으로: 에이전트를 고용하고 목표를 쓰면, 코드·웹·메시지·예약 작업을 하는 모습을 사무실에서 봄 | 데스크톱 앱 (Electron), macOS 가 주 플랫폼, 릴리스는 Apple 칩용 | 자체 Homebrew tap 또는 `.dmg`, Claude Code 설치·로그인 필요 | Claude Code SDK 로 자기 에이전트를 직접 돌림. 밖에서 켠 세션 보기: — | 있음 (기능에 씀): 자동 업데이트, 터널 (첫 사용 때 cloudflared 내려받음), 웹훅 트리거, 내장 브라우저, Slack·iMessage | GPL-3.0 |
 
 각 프로젝트 README 기준, 2026년 11월. 틀린 곳이 있으면 이슈로 알려 주세요.
 
@@ -108,7 +108,15 @@ Homebrew 는 cask 에 적힌 같은 값으로 스스로 확인합니다.
 
 - 앱은 업데이트를 확인하지 않습니다. 새 판 소식은 이 저장소의 **Watch > Custom > Releases** 로 받으세요.
 - Homebrew: `brew upgrade --cask agent-overtime`. `.dmg`: 새 판을 받아 응용 프로그램 폴더의 앱을 바꿉니다.
-- 연결 명령은 판마다 그 판의 태그에 고정됩니다. 앱을 새 판으로 바꾼 뒤에는 설정 > **연결 명령 복사** 의 두 줄을 다시 붙여 넣으세요.
+- 연결 명령은 판마다 그 판의 태그에 고정됩니다. 플러그인을 새 태그로 옮기려면 Claude Code 에서 아래 세 줄을 차례로 실행하고 (`vX.Y.Z` 는 새 태그. 새 앱의 설정 > **연결 명령 복사** 에 뒤의 두 줄이 채워져 있습니다), 켜 둔 Claude Code 세션을 다시 시작하세요.
+
+```
+/plugin marketplace remove agent-overtime
+/plugin marketplace add ykwimk/agent-overtime#vX.Y.Z
+/plugin install agent-overtime@agent-overtime
+```
+
+`remove` 하면 그 마켓에서 설치한 플러그인도 지워집니다. 마지막 줄이 agent-overtime 을 다시 설치합니다.
 
 ## 출근 버튼
 
