@@ -46,6 +46,8 @@
     "Quit Agent Overtime" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Agent Overtime 끝내기" } } } },
     "Receiving" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "소식 받는 중" } } } },
     "Remembered desks" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "기억한 자리" } } } },
+    "Remove the start command?" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "출근 명령을 지울까요?" } } } },
+    "You can set it up again with Start Work at any time." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "[출근] 에서 언제든 다시 등록할 수 있어요." } } } },
     "Remove" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "지우기" } } } },
     "Resting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "쉬는 중" } } } },
     "Resting %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "쉼 %lld" } } } },

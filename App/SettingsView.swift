@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var editing = false
+    @State private var copied = false
+    @State private var confirmRemove = false
 
     private var version: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
@@ -23,6 +25,10 @@ struct SettingsView: View {
                 Button("Copy Connect Commands") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(AppModel.connectCommands, forType: .string)
+                    copied = true
+                }
+                if copied {
+                    Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(.secondary)
                 }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -38,7 +44,7 @@ struct SettingsView: View {
                     } label: { Text("Command") }
                     HStack {
                         Button("Change…") { editing = true }
-                        Button("Remove", role: .destructive) { model.clearStart() }
+                        Button("Remove", role: .destructive) { confirmRemove = true }
                     }
                 } else {
                     Text("No start command yet.").foregroundStyle(.secondary)
@@ -71,6 +77,12 @@ struct SettingsView: View {
         .fixedSize(horizontal: false, vertical: true)
         .sheet(isPresented: $editing) {
             StartSheet(sheet: .register)
+        }
+        .alert(Text("Remove the start command?"), isPresented: $confirmRemove) {
+            Button("Remove", role: .destructive) { model.clearStart() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You can set it up again with Start Work at any time.")
         }
     }
 }
