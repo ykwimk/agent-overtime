@@ -139,7 +139,7 @@ final class CaptureTests: XCTestCase {
         }
         let store = ArtStore()
         for look in Look.all {
-            for animation in ["Sitting", "Walk", "Emotes"] {
+            for animation in ["Sitting", "Walk"] {
                 for layer in look.layers(animation) {
                     XCTAssertNotNil(store.cell(layer.path, 0, 0, 64, 64), layer.path)
                 }

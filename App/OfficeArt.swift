@@ -396,21 +396,18 @@ struct OfficeRenderer {
 
             for desk in 0..<4 {
                 let cx = x0 + desk * step + 36
-                switch states[desk] {
-                case .some(.working), .some(.resting):
-                    let resting = states[desk] == .resting
-                    let nod = resting && scene.frame % 4 >= 2 ? 1 : 0
-                    person(looks[desk]!, "Sitting", column: resting ? 1 : 0, row: 0, cx - 32, y0 - 14, nod: nod)
-                    sprite(Sheet.chair, 0, 0, 32, 32, cx - 16, y0 + 28)
-                    marks.append((resting ? .zzz : .dots, cx, y0 + 10))
-                case .some(.waiting):
-                    sprite(Sheet.chair, 0, 40, 32, 48, cx + 6, y0 + 26)
-                    let wave = scene.frame % 2 == 0 ? 2 : 1
-                    person(looks[desk]!, "Emotes", column: wave, row: 2, cx - 38, y0 + 2)
-                    marks.append((.bang, cx - 6, y0 + 14))
-                case .none:
+                guard let state = states[desk], let look = looks[desk] else {
                     sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, y0 + 26)
+                    continue
                 }
+                // Everyone stays seated; the bubble tells the states apart.
+                let resting = state == .resting
+                let nod = resting && scene.frame % 4 >= 2 ? 1 : 0
+                person(look, "Sitting", column: resting ? 1 : 0, row: 0, cx - 32, y0 - 14, nod: nod)
+                sprite(Sheet.chair, 0, 0, 32, 32, cx - 16, y0 + 28)
+                // The "!" hops while waiting. With Reduce Motion the frame stays 0, so it holds still.
+                let hop = state == .waiting && scene.frame % 2 == 1 ? 2 : 0
+                marks.append((Mark(state), cx, y0 + 10 - hop))
             }
         }
 
