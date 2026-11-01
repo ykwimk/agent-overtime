@@ -34,8 +34,6 @@ Or download the `.dmg` from [Releases](https://github.com/ykwimk/agent-overtime/
 
 ### 2. First launch
 
-<img alt="System Settings, Privacy & Security, with the Open Anyway button" src="docs/images/open-anyway.png" width="560">
-
 The first launch is blocked because the app is not notarized by Apple. Open **System Settings > Privacy & Security**, click **Open Anyway** at the bottom, then **Open**. On macOS 13 and 14, right-click > **Open** in Finder also works; from macOS 15 the System Settings route is the only one.
 
 ### 3. Connect

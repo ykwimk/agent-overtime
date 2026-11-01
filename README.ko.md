@@ -34,8 +34,6 @@ brew install --cask ykwimk/tap/agent-overtime
 
 ### 2. 첫 실행
 
-<img alt="시스템 설정 > 개인정보 보호 및 보안 화면의 Open Anyway (그래도 열기) 버튼" src="docs/images/open-anyway.png" width="560">
-
 Apple 공증을 받지 않은 앱이라 처음 열면 맥이 막습니다. **시스템 설정 > 개인정보 보호 및 보안** 맨 아래의 **Open Anyway (그래도 열기)** 를 누르고, 다시 뜨는 창에서 **열기**. macOS 13·14 는 Finder 에서 우클릭 > **열기** 도 됩니다. macOS 15 부터는 시스템 설정 길 하나뿐입니다.
 
 ### 3. 연결
