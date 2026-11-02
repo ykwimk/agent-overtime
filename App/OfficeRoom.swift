@@ -622,7 +622,8 @@ final class Stage: ObservableObject {
 }
 
 /// The office as one picture at 1, 2 or 3 points per art pixel (`Zoom`), with system-font name tags on the floor in
-/// front of each desk. Pods fill rows from the door; more pods add rows and the room scrolls.
+/// front of each desk. Pods fill rows from the door; more pods add rows and the room scrolls, with a line at the
+/// edge for islands out of sight.
 struct OfficeRoom: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var systemReducesMotion
@@ -635,6 +636,8 @@ struct OfficeRoom: View {
     let ticksWhileHidden: Bool
     /// Only the CPU test sets this, to measure Reduce Motion without changing the Mac's setting.
     let reducesMotion: Bool
+    /// Points at the right covered by the side panel floating over the room: the "more teams" line stays left of it.
+    let covered: CGFloat
     private var reduceMotion: Bool { systemReducesMotion || reducesMotion }
     /// How far the room is scrolled, in points, and the first island in sight (kept in place across a zoom).
     @State private var scrollTop: CGFloat = 0
@@ -643,13 +646,14 @@ struct OfficeRoom: View {
 
     init(
         panel: SidePanel, focus: FocusState<OfficeFocus?>.Binding, fixedNow: Date? = nil, stage: Stage? = nil,
-        ticksWhileHidden: Bool = false, reducesMotion: Bool = false
+        ticksWhileHidden: Bool = false, reducesMotion: Bool = false, covered: CGFloat = 0
     ) {
         self.panel = panel
         self.focus = focus
         self.fixedNow = fixedNow
         self.ticksWhileHidden = ticksWhileHidden
         self.reducesMotion = reducesMotion
+        self.covered = covered
         _stage = StateObject(wrappedValue: stage ?? Stage())
     }
 
@@ -662,6 +666,8 @@ struct OfficeRoom: View {
                 model.office, width: Int(geometry.size.width) / scale, now: fixedNow ?? Date(), animate: animate)
             let height = max(synced.layout.contentHeight, Int(geometry.size.height) / scale)
             let slots = synced.pods.map(\.slot)
+            let sight = synced.layout.outOfSight(
+                slots, top: Int(scrollTop) / scale, height: Int(geometry.size.height) / scale)
             ScrollViewReader { proxy in
                 ScrollView(.vertical) {
                     ZStack(alignment: .topLeading) {
@@ -699,6 +705,12 @@ struct OfficeRoom: View {
                     scrollTop = top
                     topIsland = synced.layout.outOfSight(slots, top: Int(top) / scale, height: 0).below.first
                 }
+                .overlay(alignment: .topTrailing) {
+                    more(sight.above, below: false, synced.pods, proxy).padding(.trailing, covered)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    more(sight.below, below: true, synced.pods, proxy).padding(.trailing, covered)
+                }
                 // Keeps what was at the top in sight: the room's top while the first row was, else that island.
                 .onChange(of: zoom) { _ in
                     let row = topIsland.map { $0 / max(1, synced.layout.columns) } ?? 0
@@ -726,6 +738,39 @@ struct OfficeRoom: View {
         }
         .accessibilityHidden(true)
         .allowsHitTesting(false)
+    }
+
+    /// "2 more teams below · Waiting 1 ↓" in a right-hand corner, over the lounge when the window has one (else the
+    /// floor past the islands): the islands out of sight that way, and how many of them wait. Pressing it scrolls the
+    /// nearest into sight.
+    @ViewBuilder private func more(_ slots: [Int], below: Bool, _ pods: [Pod], _ proxy: ScrollViewProxy) -> some View {
+        if let nearest = slots.first {
+            let waiting = pods.filter { slots.contains($0.slot) && Self.waits($0) }.count
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut) {
+                    proxy.scrollTo("island \(nearest)", anchor: below ? .bottom : .top)
+                }
+            } label: {
+                (below ? Text("\(slots.count) more teams below") : Text("\(slots.count) more teams above"))
+                    + (waiting > 0 ? Text(verbatim: " · ") + Text("Waiting \(waiting)") : Text(verbatim: ""))
+                    + Text(verbatim: below ? " ↓" : " ↑")
+            }
+            .buttonStyle(.plain)
+            .font(.callout)
+            .foregroundStyle(Style.tagSecondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(Style.tagPlate))
+            .padding(10)
+        }
+    }
+
+    /// An island whose session waits for an answer, itself or for a teammate.
+    private static func waits(_ pod: Pod) -> Bool {
+        pod.seats.contains {
+            if case .session(let session, _) = $0 { return session.shown.state == .waiting }
+            return false
+        }
     }
 
     /// Name tags only change by the minute ("Waiting · 3 min"), so they tick slowly on their own.

@@ -276,7 +276,8 @@ struct OfficeView: View {
                 HStack(spacing: 0) {
                     OfficeRoom(
                         panel: panel, focus: $focus, fixedNow: fixedNow, stage: stage,
-                        ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion
+                        ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion,
+                        covered: !beside && panel.selection != nil ? SidePanelView.width : 0
                     )
                     .overlay {
                         // Centred on the floor left of the meeting room and lounge, when the window has them.
