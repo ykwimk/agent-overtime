@@ -77,6 +77,12 @@ extension Teammate {
         let base = name.map { Text(verbatim: $0) } ?? Text("Helper")
         return number > 1 ? base + Text(verbatim: " \(number)") : base
     }
+
+    /// The same name as plain text, to go inside a sentence.
+    var label: String {
+        let base = name ?? String(localized: "Helper")
+        return number > 1 ? "\(base) \(number)" : base
+    }
 }
 
 /// A row that behaves like a menu item inside the menu bar window.

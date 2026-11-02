@@ -685,16 +685,26 @@ struct SeatTag: View {
         let comma = Text(verbatim: ", ")
         switch seat {
         case .session(let session, let unseated):
-            var text = Text(verbatim: session.name) + comma + session.state.word
+            var text = Text(verbatim: session.name)
+            if !session.meets || session.state == .waiting { text = text + comma + session.state.word }
             let minutes = Int(now.timeIntervalSince(session.since) / 60)
             if session.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
-            if session.teammateWaiting { text = text + comma + Text("Teammate waiting") }
+            if session.meets {
+                // "my-project, In a meeting, 3 teammates, Explore waiting": who waits, by name.
+                text = text + comma + Text("In a meeting") + comma + Text("\(session.teammates.count) teammates")
+                for mate in session.teammates where mate.state == .waiting {
+                    text = text + comma + Text("\(mate.label) waiting")
+                }
+            } else if session.teammateWaiting {
+                text = text + comma + Text("Teammate waiting")
+            }
             if unseated > 0 { text = text + comma + Text("\(unseated) more teammates") }
             return text
         case .teammate(let mate, let session):
             var text = mate.displayName + comma + Text("teammate of \(session.name)") + comma + mate.state.word
             let minutes = Int(now.timeIntervalSince(mate.since) / 60)
             if mate.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
+            if session.meets { text = text + comma + Text("In a meeting") }
             return text
         case .off(let name, _):
             return Text(verbatim: name) + comma + Text("Off duty")

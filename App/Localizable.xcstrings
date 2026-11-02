@@ -1,7 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ waiting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 답 기다림" } } } },
     "%lld min" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%lld분째" } } } },
+    "%lld teammates" : { "localizations" : { "en" : { "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld teammate" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld teammates" } } } } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원 %lld명" } } } },
     "+%lld" : { "shouldTranslate" : false },
     "A small plugin lets Claude Code tell this app when it works. Paste these two lines into Claude Code. They apply to every Claude Code session on this Mac, and you can turn the plugin off or remove it in Claude Code at any time." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 가 일할 때 이 앱에 알리도록 플러그인을 하나 설치합니다. 아래 명령 두 줄을 Claude Code 에 붙여 넣어 주세요. 이 맥의 모든 Claude Code 세션에 적용되고, Claude Code 에서 언제든 끄거나 지웁니다." } } } },
     "About" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "정보" } } } },
@@ -28,6 +30,7 @@
     "Folder" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "폴더" } } } },
     "Clear Recent Folders" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "최근 폴더 지우기" } } } },
     "Helper" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "도우미" } } } },
+    "In a meeting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "회의 중" } } } },
     "In a meeting · %lld teammates" : { "localizations" : { "en" : { "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "In a meeting · %lld teammate" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "In a meeting · %lld teammates" } } } } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "회의 중 · 팀원 %lld" } } } },
     "Install the plugin so Claude Code tells this app when it works." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 가 일할 때 이 앱에 알리도록 플러그인을 설치해 주세요." } } } },
     "It opens a new Terminal window. The app never adds options to your command." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 터미널 창에서 열립니다. 앱은 명령에 옵션을 덧붙이지 않습니다." } } } },
