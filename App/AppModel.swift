@@ -150,6 +150,10 @@ final class AppModel: ObservableObject {
 
     var shouldShowWelcome: Bool { !everConnected && !welcomeDismissed }
 
+    /// People found on this Mac, but never any news: the plugin isn't connected yet, so the office bar says what
+    /// connecting adds.
+    var asksToConnect: Bool { !everConnected && office.liveSessionCount > 0 }
+
     func receive(_ event: HookEvent, at now: Date = Date()) {
         if office.apply(event, now: now) { save() }
         bookMeeting()

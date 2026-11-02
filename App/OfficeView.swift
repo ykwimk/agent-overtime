@@ -399,11 +399,13 @@ struct OfficeBar: View {
                     Button("Check connection") { openWindow(id: "welcome") }.buttonStyle(.link)
                 }
             case .idle, .starting:
-                // Sessions found on this Mac, but no news ever: the plugin isn't connected yet.
-                if !model.everConnected, model.office.liveSessionCount > 0 {
-                    message(Text("Connect to see waits and teammates too"), color: .secondary) {
+                // One line, so the bar keeps its height and the room doesn't scroll for it.
+                if model.asksToConnect {
+                    HStack(spacing: 8) {
+                        Text("Connect to see waits and teammates too").foregroundStyle(.secondary)
                         Button("Connect…") { openWindow(id: "welcome") }.buttonStyle(.link)
                     }
+                    .lineLimit(1)
                 }
             }
         }
