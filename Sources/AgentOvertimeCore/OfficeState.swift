@@ -386,13 +386,13 @@ public struct OfficeState: Equatable {
         return desksChanged
     }
 
-    /// The session's own work: a prompt, a tool that doesn't ask the user, a stop. Calling one more teammate is a
-    /// tool too, so it ends a meeting until the newcomer's `meetingDelay` has passed.
+    /// The session's own work: a prompt, a tool that doesn't ask the user, a stop. Calling or messaging teammates is
+    /// not: handing out more work keeps the meeting going.
     static func isOwnWork(_ event: HookEvent) -> Bool {
         guard event.agentID == nil else { return false }
         switch event.kind {
         case .userPromptSubmit, .stop: return true
-        case .preToolUse: return !event.asksUser
+        case .preToolUse: return !event.asksUser && event.toolKind != .team
         default: return false
         }
     }

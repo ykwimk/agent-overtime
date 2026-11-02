@@ -128,18 +128,21 @@ final class MeetingTests: XCTestCase {
         XCTAssertNil(ended.meeting)
     }
 
-    /// Calling one more teammate is a tool of the session's own, so for now it ends the meeting until the
-    /// newcomer's 10 s are up.
-    func testCallingOneMoreTeammateBreaksTheMeetingForNow() {
+    /// Calling one more teammate (or messaging one) is handing out work, not the session's own: the meeting goes on
+    /// and the newcomer joins it. Any other tool ends it.
+    func testCallingOneMoreTeammateKeepsTheMeeting() {
         var office = office(teammates: 2)
         office.advance(to: t0 + delay)
-        office.apply(event(.preToolUse), now: t0 + 20)
-        XCTAssertFalse(meets(office))
+        for kind: HookEvent.ToolKind in [.team, .team] {
+            office.apply(
+                HookEvent(kind: .preToolUse, session: "s1", cwd: "/Users/me/my-project", toolKind: kind), now: t0 + 20)
+        }
         office.apply(event(.subagentStart, agent: "s1-2"), now: t0 + 20.1)
-        office.advance(to: t0 + 20.1 + delay - 0.1)
-        XCTAssertFalse(meets(office))
-        office.advance(to: t0 + 20.1 + delay)
-        XCTAssertTrue(meets(office), "back together 10 s after the newcomer")
+        XCTAssertTrue(meets(office))
+        XCTAssertEqual(office.meeting?.members.count, 3, "the newcomer joins")
+        office.apply(
+            HookEvent(kind: .preToolUse, session: "s1", cwd: "/Users/me/my-project", toolKind: .read), now: t0 + 30)
+        XCTAssertFalse(meets(office), "reading files is the session's own work")
     }
 
     /// One meeting room: the session that met first has it. Another session in a meeting stays at its desk.
