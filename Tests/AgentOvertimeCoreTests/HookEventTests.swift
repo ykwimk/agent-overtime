@@ -91,14 +91,17 @@ final class HookEventTests: XCTestCase {
     /// that is not text are "other", and the name never crosses the socket.
     func testToolKindsComeFromAFixedListOfNames() throws {
         let kinds: [(Any?, HookEvent.ToolKind)] = [
-            ("Read", .read), ("Glob", .read), ("Grep", .read), ("LSP", .read), ("Edit", .edit), ("Write", .edit),
-            ("NotebookEdit", .edit), ("Bash", .command), ("PowerShell", .command), ("WebFetch", .web),
-            ("WebSearch", .web), ("Agent", .team), ("Task", .team), ("SendMessage", .team),
-            // (a) an MCP tool, with a server name in it
-            ("mcp__acme-payroll__read_file", .other),
+            ("Read", .read), ("NotebookRead", .read), ("Glob", .find), ("LS", .find), ("Grep", .grep), ("LSP", .lsp),
+            ("Edit", .edit), ("MultiEdit", .edit), ("NotebookEdit", .edit), ("Write", .write), ("Bash", .command),
+            ("PowerShell", .command), ("Monitor", .monitor), ("WebSearch", .web), ("WebFetch", .fetch),
+            ("Agent", .team), ("Task", .team), ("SendMessage", .talk), ("TodoWrite", .tasks),
+            ("TaskCreate", .tasks), ("TaskGet", .tasks), ("TaskUpdate", .tasks), ("TaskList", .tasks),
+            ("Skill", .skill),
+            // (a) MCP tools, with a server name in them, even one named like a built-in tool
+            ("mcp__acme-payroll__read_file", .other), ("mcp__srv__TodoWrite", .other),
             // (b) unknown and look-alike names
-            ("ReadX", .other), ("read", .other), ("Bash ", .other), ("SomethingNew", .other), (42, .other),
-            (NSNull(), .other), (nil, .other),
+            ("ReadX", .other), ("read", .other), ("todowrite", .other), ("Bash ", .other), ("SomethingNew", .other),
+            (42, .other), (NSNull(), .other), (nil, .other),
         ]
         for (name, kind) in kinds {
             let event = try XCTUnwrap(preToolUse(name), "\(String(describing: name))")
@@ -142,7 +145,12 @@ final class HookEventTests: XCTestCase {
             HookEvent.fromWire(Data(#"{"e":"PreToolUse","s":"s","d":"/x","k":"rm -rf ~/","a":"x"}"#.utf8)))
         XCTAssertNil(event.toolKind)
         XCTAssertEqual(event.agentID, "x")
-        XCTAssertEqual(HookEvent.ToolKind.allCases.count, 6)
+        // v0.3's six values still read the same.
+        for old in ["read", "edit", "command", "web", "team", "other"] {
+            let line = Data(#"{"e":"PreToolUse","s":"s","d":"/x","k":"\#(old)"}"#.utf8)
+            XCTAssertEqual(try XCTUnwrap(HookEvent.fromWire(line)).toolKind?.rawValue, old)
+        }
+        XCTAssertEqual(HookEvent.ToolKind.allCases.count, 15)
     }
 
     /// Values 2: the recipient is read only from a SendMessage's `to` (a); nothing else of its input crosses the
@@ -160,7 +168,7 @@ final class HookEventTests: XCTestCase {
                 ], agent: "e1"))
         XCTAssertTrue(message.sendsMessage)
         XCTAssertEqual(message.recipient, "Plan")
-        XCTAssertEqual(message.toolKind, .team)
+        XCTAssertEqual(message.toolKind, .talk)
         let wire = String(decoding: message.wireLine(), as: UTF8.self)
         for leaked in ["launch", "secret", "summary", "notify", "SendMessage", "message\""] {
             XCTAssertFalse(wire.contains(leaked), "(b) \(leaked) crossed the socket: \(wire)")
@@ -206,7 +214,7 @@ final class HookEventTests: XCTestCase {
         print("socket line:", String(decoding: line, as: UTF8.self), terminator: "")
         let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: line) as? [String: Any])
         XCTAssertEqual(Set(fields.keys), ["e", "s", "d", "a", "t", "q", "k", "m", "r", "p"])
-        XCTAssertEqual(fields["k"] as? String, "team")
+        XCTAssertEqual(fields["k"] as? String, "talk")
         XCTAssertEqual(fields["r"] as? String, "Plan")
     }
 

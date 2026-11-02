@@ -5,20 +5,31 @@ import Foundation
 /// derives only a coarse tool kind (and a SendMessage recipient) from them; nothing else crosses the socket.
 public struct HookEvent: Codable, Equatable {
     /// What a PreToolUse is about to do, from a fixed list of Claude Code's built-in tools. One short value on the
-    /// socket; the tool's name never is.
+    /// socket; the tool's name never is. The first six are v0.3's values, read the same; an app that doesn't know a
+    /// value reads none.
     public enum ToolKind: String, Codable, CaseIterable {
         case read, edit, command, web, team, other
+        case find, grep, lsp, write, monitor, fetch, talk, tasks, skill
 
         /// Compared letter for letter with the built-in tools' names (code.claude.com/docs/en/tools-reference).
         /// MCP tools (`mcp__server__tool`), names not on the list and anything that is not text are `.other`; no
         /// prefix or substring test, so a server's own naming never lands in a built-in kind.
         public static func of(_ toolName: Any?) -> ToolKind {
             switch toolName as? String {
-            case "Read", "Glob", "Grep", "LS", "LSP", "NotebookRead": return .read
-            case "Edit", "Write", "MultiEdit", "NotebookEdit": return .edit
-            case "Bash", "PowerShell", "Monitor": return .command
-            case "WebSearch", "WebFetch": return .web
-            case "Agent", "Task", "SendMessage": return .team
+            case "Read", "NotebookRead": return .read
+            case "Glob", "LS": return .find
+            case "Grep": return .grep
+            case "LSP": return .lsp
+            case "Edit", "MultiEdit", "NotebookEdit": return .edit
+            case "Write": return .write
+            case "Bash", "PowerShell": return .command
+            case "Monitor": return .monitor
+            case "WebSearch": return .web
+            case "WebFetch": return .fetch
+            case "Agent", "Task": return .team
+            case "SendMessage": return .talk
+            case "TodoWrite", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList": return .tasks
+            case "Skill": return .skill
             default: return .other
             }
         }

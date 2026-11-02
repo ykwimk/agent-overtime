@@ -166,7 +166,7 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(nonsense.office.nicknames, Nicknames())
     }
 
-    /// "What they're doing now": one of six fixed phrases, only while working; a kind the app doesn't know shows
+    /// "What they're doing now": one of the fixed phrases, only while working; a kind the app doesn't know shows
     /// nothing, and nothing received is ever shown.
     func testNowIsAFixedPhraseOnlyWhileWorking() throws {
         let model = model(in: folder())
@@ -192,8 +192,15 @@ final class PanelTests: XCTestCase {
         XCTAssertNil(SidePanel.doing(.session("s1"), in: model.office), "an unknown kind shows no line")
 
         let phrases = HookEvent.ToolKind.allCases.map(\.spoken)
-        XCTAssertEqual(Set(phrases).count, 6)
+        XCTAssertEqual(Set(phrases).count, HookEvent.ToolKind.allCases.count, "one fixed phrase a kind")
         for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
+        // Every phrase in both languages.
+        let korean = try XCTUnwrap(Bundle.main.path(forResource: "ko", ofType: "lproj").flatMap(Bundle.init(path:)))
+        for kind in HookEvent.ToolKind.allCases {
+            let ko = korean.localizedString(forKey: kind.phraseKey, value: "∅", table: nil)
+            XCTAssertNotEqual(ko, "∅", kind.phraseKey)
+            XCTAssertNotEqual(ko, kind.phraseKey, kind.phraseKey)
+        }
     }
 
     /// A session found on this Mac before any news: "Quiet" with no time, VoiceOver hears the same, and nothing

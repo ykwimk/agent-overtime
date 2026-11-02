@@ -125,28 +125,31 @@ extension WorkState {
 }
 
 extension HookEvent.ToolKind {
-    /// What someone working is doing now, in one of six fixed phrases: only these words ever show, never a tool's
+    /// What someone working is doing now, in one of these fixed phrases: only these words ever show, never a tool's
     /// name or anything received.
-    var phrase: Text {
-        switch self {
-        case .read: return Text("Reading files")
-        case .edit: return Text("Editing files")
-        case .command: return Text("Running a command")
-        case .web: return Text("Searching the web")
-        case .team: return Text("Calling teammates")
-        case .other: return Text("Using another tool")
-        }
-    }
+    var phrase: Text { Text(LocalizedStringKey(phraseKey)) }
 
     /// The same phrase for VoiceOver to say.
-    var spoken: String {
+    var spoken: String { String(localized: String.LocalizationValue(phraseKey)) }
+
+    /// Each key is in the string catalog (a test checks).
+    var phraseKey: String {
         switch self {
-        case .read: return String(localized: "Reading files")
-        case .edit: return String(localized: "Editing files")
-        case .command: return String(localized: "Running a command")
-        case .web: return String(localized: "Searching the web")
-        case .team: return String(localized: "Calling teammates")
-        case .other: return String(localized: "Using another tool")
+        case .read: return "Reading files"
+        case .find: return "Finding files"
+        case .grep: return "Searching code"
+        case .lsp: return "Looking at code structure"
+        case .edit: return "Editing files"
+        case .write: return "Writing files"
+        case .command: return "Running a command"
+        case .monitor: return "Watching a command"
+        case .web: return "Searching the web"
+        case .fetch: return "Reading a web page"
+        case .team: return "Calling teammates"
+        case .talk: return "Messaging a teammate"
+        case .tasks: return "Organizing tasks"
+        case .skill: return "Using a skill"
+        case .other: return "Using another tool"
         }
     }
 }

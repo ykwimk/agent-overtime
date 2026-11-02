@@ -470,7 +470,7 @@ public struct OfficeState: Equatable {
     static func isWork(_ event: HookEvent) -> Bool {
         switch event.kind {
         case .userPromptSubmit, .stop: return true
-        case .preToolUse: return !event.asksUser && event.toolKind != .team
+        case .preToolUse: return !event.asksUser && event.toolKind != .team && !event.sendsMessage
         default: return false
         }
     }
