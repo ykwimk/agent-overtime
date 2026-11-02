@@ -1086,8 +1086,11 @@ final class HelperTests: XCTestCase {
         XCTAssertLessThan(result.seconds, 1)
         wait(for: [received], timeout: 2)
         XCTAssertEqual(
-            event, HookEvent(kind: .preToolUse, session: "helper-test", cwd: "/Users/demo/work/shop", pid: getpid()),
-            "only state fields, and the parent process as the session")
+            event,
+            HookEvent(
+                kind: .preToolUse, session: "helper-test", cwd: "/Users/demo/work/shop", toolKind: .command,
+                pid: getpid()),
+            "only state fields and the tool's kind, and the parent process as the session")
     }
 
     func testQuietWithoutAppOrWithGarbage() throws {

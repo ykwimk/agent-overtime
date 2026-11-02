@@ -1,9 +1,29 @@
 import Foundation
 
 /// One status event, cut down to the fields the office needs.
-/// Claude Code's hook input also carries tool input, prompts, file paths and transcripts;
-/// none of that is read past `fromHookInput`, and none of it crosses the socket.
+/// Claude Code's hook input also carries tool names and input, prompts, file paths and transcripts. `fromHookInput`
+/// derives only a coarse tool kind (and a SendMessage recipient) from them; nothing else crosses the socket.
 public struct HookEvent: Codable, Equatable {
+    /// What a PreToolUse is about to do, from a fixed list of Claude Code's built-in tools. One short value on the
+    /// socket; the tool's name never is.
+    public enum ToolKind: String, Codable, CaseIterable {
+        case read, edit, command, web, team, other
+
+        /// Compared letter for letter with the built-in tools' names (code.claude.com/docs/en/tools-reference).
+        /// MCP tools (`mcp__server__tool`), names not on the list and anything that is not text are `.other`; no
+        /// prefix or substring test, so a server's own naming never lands in a built-in kind.
+        public static func of(_ toolName: Any?) -> ToolKind {
+            switch toolName as? String {
+            case "Read", "Glob", "Grep", "LS", "LSP", "NotebookRead": return .read
+            case "Edit", "Write", "MultiEdit", "NotebookEdit": return .edit
+            case "Bash", "PowerShell", "Monitor": return .command
+            case "WebSearch", "WebFetch": return .web
+            case "Agent", "Task", "SendMessage": return .team
+            default: return .other
+            }
+        }
+    }
+
     public enum Kind: String, Codable, CaseIterable {
         case sessionStart = "SessionStart"
         case sessionEnd = "SessionEnd"
@@ -29,6 +49,12 @@ public struct HookEvent: Codable, Equatable {
     public var notification: String?
     /// True only for PreToolUse of AskUserQuestion. The tool name itself is not kept.
     public var asksUser = false
+    /// The kind of tool a PreToolUse is about to run; nil for anything else and for AskUserQuestion.
+    public var toolKind: ToolKind?
+    /// True only for PreToolUse of SendMessage, and then its recipient (the `to` field, nothing else of its
+    /// input). The app matches the recipient against teammates at a desk and drops it.
+    public var sendsMessage = false
+    public var recipient: String?
     /// The Claude Code process, so the app can tell when a session is gone without a SessionEnd.
     public var pid: Int32?
 
@@ -40,12 +66,16 @@ public struct HookEvent: Codable, Equatable {
         case agentType = "t"
         case notification = "n"
         case asksUser = "q"
+        case toolKind = "k"
+        case sendsMessage = "m"
+        case recipient = "r"
         case pid = "p"
     }
 
     public init(
         kind: Kind, session: String, cwd: String, agentID: String? = nil, agentType: String? = nil,
-        notification: String? = nil, asksUser: Bool = false, pid: Int32? = nil
+        notification: String? = nil, asksUser: Bool = false, toolKind: ToolKind? = nil, sendsMessage: Bool = false,
+        recipient: String? = nil, pid: Int32? = nil
     ) {
         self.kind = kind
         self.session = session
@@ -54,9 +84,14 @@ public struct HookEvent: Codable, Equatable {
         self.agentType = agentType
         self.notification = notification
         self.asksUser = asksUser
+        self.toolKind = toolKind
+        self.sendsMessage = sendsMessage
+        self.recipient = recipient
         self.pid = pid
     }
 
+    /// A helper older than the app sends none of the newer fields, and they read as empty; a kind this app doesn't
+    /// know reads as none, the event itself stays. (An older app ignores fields it doesn't know.)
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kind = try c.decode(Kind.self, forKey: .kind)
@@ -66,6 +101,9 @@ public struct HookEvent: Codable, Equatable {
         agentType = try c.decodeIfPresent(String.self, forKey: .agentType)
         notification = try c.decodeIfPresent(String.self, forKey: .notification)
         asksUser = try c.decodeIfPresent(Bool.self, forKey: .asksUser) ?? false
+        toolKind = (try? c.decodeIfPresent(String.self, forKey: .toolKind)).flatMap { $0.flatMap(ToolKind.init) }
+        sendsMessage = (try? c.decodeIfPresent(Bool.self, forKey: .sendsMessage)) ?? false
+        recipient = try? c.decodeIfPresent(String.self, forKey: .recipient)
         pid = try c.decodeIfPresent(Int32.self, forKey: .pid)
     }
 
@@ -80,12 +118,19 @@ public struct HookEvent: Codable, Equatable {
             let session = object["session_id"] as? String,
             let cwd = object["cwd"] as? String
         else { return nil }
+        // Only a PreToolUse's tool is looked at (a PermissionRequest's tool name and input are not read), and only
+        // SendMessage's input is opened, for its `to` alone.
+        let tool = kind == .preToolUse ? object["tool_name"] : nil
+        let sendsMessage = tool as? String == "SendMessage"
         let event = HookEvent(
             kind: kind, session: session, cwd: cwd,
             agentID: object["agent_id"] as? String,
             agentType: object["agent_type"] as? String,
             notification: object["notification_type"] as? String,
-            asksUser: kind == .preToolUse && object["tool_name"] as? String == "AskUserQuestion",
+            asksUser: tool as? String == "AskUserQuestion",
+            toolKind: kind == .preToolUse ? ToolKind.of(tool) : nil,
+            sendsMessage: sendsMessage,
+            recipient: sendsMessage ? (object["tool_input"] as? [String: Any])?["to"] as? String : nil,
             pid: pid
         )
         return event.cleaned()
@@ -121,6 +166,16 @@ public struct HookEvent: Codable, Equatable {
         if kind == .notification {
             guard let type = notification, Self.notifications.contains(type) else { return nil }
             event.notification = type
+        }
+        if kind != .preToolUse || asksUser { event.toolKind = nil }
+        // A recipient only with a SendMessage about to go; hidden characters dropped, and one longer than an id is
+        // dropped whole rather than cut (a cut name could match another teammate).
+        event.sendsMessage = kind == .preToolUse && sendsMessage
+        event.recipient = nil
+        if event.sendsMessage, let to = recipient, let clean = Sanitize.clean(to, max: Limits.id + 1),
+            clean.unicodeScalars.count <= Limits.id
+        {
+            event.recipient = clean
         }
         if let pid, pid <= 1 { event.pid = nil }
         return event
