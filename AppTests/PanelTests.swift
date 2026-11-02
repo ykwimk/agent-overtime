@@ -174,11 +174,11 @@ final class PanelTests: XCTestCase {
         model.receive(HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit), at: t0 + 6)
         XCTAssertEqual(SidePanel.doing(.session("s1"), in: model.office), .edit)
         let spoken = try XCTUnwrap(SidePanel.spoken(.session("s1"), in: model.office, now: t0 + 7))
-        XCTAssertTrue(spoken.hasSuffix(HookEvent.ToolKind.edit.spoken + ", " + TimeSpan.just.lastingSpoken), spoken)
+        XCTAssertTrue(spoken.contains(HookEvent.ToolKind.edit.spoken + ", " + TimeSpan.just.lastingSpoken), spoken)
         model.receive(HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit), at: t0 + 7)
         XCTAssertEqual(model.office.toolSince(session: "s1"), t0 + 6, "still that work")
         let later = try XCTUnwrap(SidePanel.spoken(.session("s1"), in: model.office, now: t0 + 6 + 180))
-        XCTAssertTrue(later.hasSuffix(TimeSpan.minutes(3).lastingSpoken), later)
+        XCTAssertTrue(later.contains(HookEvent.ToolKind.edit.spoken + ", " + TimeSpan.minutes(3).lastingSpoken), later)
         XCTAssertEqual(SidePanel.doing(.teammate("a1"), in: model.office), nil, "a1 sent no kind")
 
         model.receive(HookEvent(kind: .permissionRequest, session: "s1", cwd: project), at: t0 + 8)
@@ -196,10 +196,10 @@ final class PanelTests: XCTestCase {
         for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
         // Every phrase in both languages.
         let korean = try XCTUnwrap(Bundle.main.path(forResource: "ko", ofType: "lproj").flatMap(Bundle.init(path:)))
-        for kind in HookEvent.ToolKind.allCases {
-            let ko = korean.localizedString(forKey: kind.phraseKey, value: "∅", table: nil)
-            XCTAssertNotEqual(ko, "∅", kind.phraseKey)
-            XCTAssertNotEqual(ko, kind.phraseKey, kind.phraseKey)
+        for key in HookEvent.ToolKind.allCases.flatMap({ [$0.phraseKey, $0.wordKey] }) {
+            let ko = korean.localizedString(forKey: key, value: "∅", table: nil)
+            XCTAssertNotEqual(ko, "∅", key)
+            XCTAssertNotEqual(ko, key, key)
         }
     }
 

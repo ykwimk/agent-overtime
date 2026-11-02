@@ -137,6 +137,15 @@ final class SidePanel: ObservableObject {
         if !doingWords.isEmpty, let since = doingSince(kind, in: office) {
             doingWords.append(TimeSpan(from: since, to: now).lastingSpoken)
         }
+        if let file = file(kind, in: office) { doingWords.append(file) }
+        if let detail = detail(kind, in: office) {
+            if detail.tasks.total > 0 {
+                doingWords.append(String(localized: "Tasks \(detail.tasks.done)/\(detail.tasks.total)"))
+                if let title = detail.tasks.title { doingWords.append(title) }
+            } else if detail.teamCalled > 0 {
+                doingWords.append(String(localized: "\(detail.teamDone) of \(detail.teamCalled) teammates done"))
+            }
+        }
         switch kind {
         case .session(let id):
             guard let session = office.session(id) else { return nil }
@@ -157,6 +166,22 @@ final class SidePanel: ObservableObject {
         case .session(let id): return office.toolSince(session: id)
         case .teammate(let id): return office.toolSince(teammate: id)
         }
+    }
+
+    /// Their side panel's details. Only the side panel reads them (a test checks), never a tag, menu or tooltip.
+    static func detail(_ kind: PanelSelection.Kind, in office: OfficeState) -> PersonDetail? {
+        switch kind {
+        case .session(let id): return office.detail(session: id)
+        case .teammate(let id): return office.detail(teammate: id)
+        }
+    }
+
+    /// The file of what they do now, when Show Details sent one.
+    static func file(_ kind: PanelSelection.Kind, in office: OfficeState) -> String? {
+        guard let doing = doing(kind, in: office), let step = detail(kind, in: office)?.steps.last,
+            step.kind == doing
+        else { return nil }
+        return step.file
     }
 
     /// A session's teammates in the panel's order: each teammate's own teammates under it, a step further in.
@@ -649,8 +674,10 @@ struct SidePanelView: View {
             Text("This session started before the app. Its exact state shows from its next news.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
+        let detail = SidePanel.detail(kind, in: office)
+        let doing = SidePanel.doing(kind, in: office)
         VStack(alignment: .leading, spacing: 4) {
-            if let doing = SidePanel.doing(kind, in: office) {
+            if let doing {
                 if let started = SidePanel.doingSince(kind, in: office) {
                     ticking(every: 30) { now in
                         doing.phrase + Text(verbatim: " · ") + TimeSpan(from: started, to: now).lasting
@@ -658,9 +685,81 @@ struct SidePanelView: View {
                 } else {
                     doing.phrase
                 }
+                if let file = SidePanel.file(kind, in: office) {
+                    Text(verbatim: file).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
             }
             if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
             if meets, !meeting { Text("In a meeting") }
+        }
+        if let detail { more(detail, doing: doing) }
+    }
+
+    /// Below what they do now, only what there is: progress, edits, the latest steps, the model. Received words
+    /// show as they are (`Text(verbatim:)`), never inside a sentence.
+    @ViewBuilder private func more(_ detail: PersonDetail, doing: HookEvent.ToolKind?) -> some View {
+        if detail.tasks.total > 0 {
+            progress(
+                done: detail.tasks.done, of: detail.tasks.total,
+                Text("Tasks \(detail.tasks.done)/\(detail.tasks.total)")
+                    + (detail.tasks.title.map { Text(verbatim: " · " + $0) } ?? Text(verbatim: "")))
+        } else if detail.teamCalled > 0 {
+            progress(
+                done: detail.teamDone, of: detail.teamCalled,
+                Text("\(detail.teamDone) of \(detail.teamCalled) teammates done"))
+        }
+        if !detail.edits.isEmpty {
+            let edits = detail.edits.sorted { $0.added + $0.removed > $1.added + $1.removed }
+            let others = edits.count - 3 + detail.moreEdits
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Edited").foregroundStyle(.secondary)
+                ForEach(edits.prefix(3), id: \.file) { edit in
+                    Text(verbatim: "\(edit.file) +\(edit.added)" + (edit.removed > 0 ? " −\(edit.removed)" : ""))
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                if others > 0 { Text("and \(others) more").foregroundStyle(.secondary) }
+            }
+        }
+        // The latest steps before the one going on now, newest first.
+        let steps = Array(detail.steps.dropLast(doing == nil ? 0 : 1).suffix(3).reversed())
+        if !steps.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Recently").foregroundStyle(.secondary)
+                ForEach(steps.indices, id: \.self) { index in
+                    let step = steps[index]
+                    HStack(spacing: 6) {
+                        step.kind.word
+                        if let file = step.file {
+                            Text(verbatim: file).lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer(minLength: 4)
+                        ticking(every: 30) { now in
+                            TimeSpan(from: step.at, to: now).ago.foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        if let model = detail.model {
+            Text(verbatim: model.hasPrefix("claude-") ? String(model.dropFirst(7)) : model)
+                .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+        }
+    }
+
+    /// "Tasks 2/3 · Fix the header" with a cell for each (only the numbers past eight).
+    private func progress(done: Int, of total: Int, _ text: Text) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            text.lineLimit(1).truncationMode(.tail)
+            if total <= 8 {
+                HStack(spacing: 3) {
+                    ForEach(0..<total, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(index < done ? Color.accentColor : Color.secondary.opacity(0.25))
+                            .frame(width: 14, height: 6)
+                    }
+                }
+                .accessibilityHidden(true)
+            }
         }
     }
 

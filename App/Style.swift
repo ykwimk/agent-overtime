@@ -132,6 +132,27 @@ extension HookEvent.ToolKind {
     /// The same phrase for VoiceOver to say.
     var spoken: String { String(localized: String.LocalizationValue(phraseKey)) }
 
+    /// One word for a step in the side panel's recent list ("Edit app.ts"); never what was searched or run.
+    var word: Text { Text(LocalizedStringKey(wordKey)) }
+
+    var wordKey: String {
+        switch self {
+        case .read: return "Read"
+        case .find, .grep: return "Find"
+        case .lsp: return "Code"
+        case .edit: return "Edit"
+        case .write: return "Write"
+        case .command, .monitor: return "Run"
+        case .web: return "Web search"
+        case .fetch: return "Web page"
+        case .team: return "Call"
+        case .talk: return "Message"
+        case .tasks: return "Tasks"
+        case .skill: return "Skill"
+        case .other: return "Other"
+        }
+    }
+
     /// Each key is in the string catalog (a test checks).
     var phraseKey: String {
         switch self {

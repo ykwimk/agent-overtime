@@ -35,3 +35,20 @@ final class LocalizationTests: XCTestCase {
         XCTAssertGreaterThan(checked, 50)
     }
 }
+
+/// File names, task titles and the model show only in the side panel: no other view of the app reads them, so they
+/// never reach the office floor, a tooltip, the menu, a notification or Start Work.
+final class DetailPlacementTests: XCTestCase {
+    func testOnlyTheSidePanelReadsDetails() throws {
+        let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("App")
+        var readers: [String] = []
+        for file in try FileManager.default.contentsOfDirectory(atPath: app.path) where file.hasSuffix(".swift") {
+            let source = try String(contentsOf: app.appendingPathComponent(file), encoding: .utf8)
+            if source.contains(".detail(") || source.contains("detail(session") || source.contains("detail(teammate") {
+                readers.append(file)
+            }
+        }
+        XCTAssertEqual(readers, ["OfficeView.swift"])
+    }
+}
