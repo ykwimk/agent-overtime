@@ -22,6 +22,9 @@ public struct Teammate: Equatable, Identifiable {
     /// The teammate that called it, when another teammate did (nil: the session itself). When the caller leaves,
     /// whoever called the caller takes its place.
     public internal(set) var calledBy: String? = nil
+    /// Working on its own: its caller went on with work of its own after it came, so it isn't waited on. It keeps
+    /// them on until it leaves, and doesn't meet.
+    public internal(set) var headphones = false
 
     mutating func set(_ newState: WorkState, now: Date) {
         if state != newState { since = now }
@@ -67,8 +70,8 @@ public struct Session: Equatable, Identifiable {
         meets = false
     }
 
-    /// The teammates the session called itself: the ones that meet with it.
-    public var direct: [Teammate] { teammates.filter { $0.calledBy == nil } }
+    /// The teammates the session called itself and waits on: the ones that meet with it (not those with headphones).
+    public var direct: [Teammate] { teammates.filter { $0.calledBy == nil && !$0.headphones } }
 
     /// After a teammate came or went. Coming counts again from the newcomer until the meeting starts; once it has,
     /// it goes on with one teammate and ends with none. Only the session's own teammates count.
@@ -366,9 +369,13 @@ public struct OfficeState: Equatable {
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
-            if Self.isOwnWork(event) { desks[d].sessions[s].endMeeting() }
+            if Self.isWork(event) {
+                desks[d].sessions[s].endMeeting()
+                putOnHeadphones(d, s, calledBy: nil)
+            }
             return desksChanged
         }
+        if Self.isWork(event) { putOnHeadphones(d, s, calledBy: agentID) }
 
         var mates = desks[d].sessions[s].teammates
         let index = mates.firstIndex { $0.id == agentID }
@@ -409,14 +416,20 @@ public struct OfficeState: Equatable {
         return desksChanged
     }
 
-    /// The session's own work: a prompt, a tool that doesn't ask the user, a stop. Calling or messaging teammates is
-    /// not: handing out more work keeps the meeting going.
-    static func isOwnWork(_ event: HookEvent) -> Bool {
-        guard event.agentID == nil else { return false }
+    /// Work of its own, for the session or a teammate that sends it: a prompt, a tool that doesn't ask the user, a
+    /// stop. Calling or messaging teammates is not: handing out more work keeps a meeting going.
+    static func isWork(_ event: HookEvent) -> Bool {
         switch event.kind {
         case .userPromptSubmit, .stop: return true
         case .preToolUse: return !event.asksUser && event.toolKind != .team
         default: return false
+        }
+    }
+
+    /// The teammates a caller (nil: the session) has out while it goes on with its own work work on their own.
+    private mutating func putOnHeadphones(_ d: Int, _ s: Int, calledBy caller: String?) {
+        for m in desks[d].sessions[s].teammates.indices where desks[d].sessions[s].teammates[m].calledBy == caller {
+            desks[d].sessions[s].teammates[m].headphones = true
         }
     }
 

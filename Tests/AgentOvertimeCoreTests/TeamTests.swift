@@ -55,6 +55,57 @@ final class TeamTests: XCTestCase {
         XCTAssertEqual(callers(office), ["b1": "-", "b2": "-", "c1": "-", "d1": "-"])
     }
 
+    private func work(
+        _ office: inout OfficeState, _ agent: String? = nil, _ kind: HookEvent.ToolKind = .read, at: TimeInterval = 0
+    ) {
+        office.apply(
+            HookEvent(kind: .preToolUse, session: "s1", cwd: folder, agentID: agent, toolKind: kind), now: t0 + at)
+    }
+
+    private func wearing(_ office: OfficeState) -> [String] {
+        office.desks[0].sessions[0].teammates.filter(\.headphones).map(\.id)
+    }
+
+    /// The caller goes on with work of its own after a teammate came: that teammate works on its own and puts on
+    /// headphones, until it leaves. Calling or messaging teammates is no such work. Headphones don't meet.
+    func testHeadphonesWhenTheCallerWorksOn() {
+        var office = OfficeState()
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder), now: t0)
+        start(&office, "a1")
+        start(&office, "a2")
+        work(&office, nil, .team, at: 1)
+        office.apply(
+            HookEvent(kind: .preToolUse, session: "s1", cwd: folder, toolKind: .team, sendsMessage: true), now: t0 + 1)
+        XCTAssertEqual(wearing(office), [], "calling and messaging teammates")
+        work(&office, nil, .edit, at: 2)
+        XCTAssertEqual(wearing(office), ["a1", "a2"])
+        XCTAssertEqual(office.desks[0].sessions[0].direct, [], "nobody to meet with")
+        office.advance(to: t0 + 60)
+        XCTAssertNil(office.meeting)
+
+        // A newcomer after that is waited on again; two of them meet.
+        start(&office, "a3")
+        start(&office, "a4")
+        office.advance(to: t0 + 60 + OfficeState.meetingDelay)
+        XCTAssertEqual(office.meeting?.members.map(\.id), ["a3", "a4"], "those with headphones stay at their desks")
+        // The session works again: the meeting ends and they put headphones on too, never both at once.
+        work(&office, nil, .command, at: 80)
+        XCTAssertNil(office.meeting)
+        XCTAssertEqual(wearing(office), ["a1", "a2", "a3", "a4"])
+    }
+
+    /// A teammate's own teammates: their caller's work puts headphones on them, not the session's.
+    func testATeammatesWorkPutsHeadphonesOnItsOwnTeammates() {
+        var office = OfficeState()
+        start(&office, "a1")
+        call(&office, from: "a1")
+        start(&office, "b1", "Plan")
+        work(&office, nil, .edit)
+        XCTAssertEqual(wearing(office), ["a1"], "the session's work: its own teammate")
+        work(&office, "a1", .read)
+        XCTAssertEqual(wearing(office), ["a1", "b1"])
+    }
+
     /// A caller that has already left when its newcomer comes: the session.
     func testACallerGoneBeforeItsNewcomerComesLeavesItToTheSession() {
         var office = OfficeState()

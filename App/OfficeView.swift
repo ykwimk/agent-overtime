@@ -620,6 +620,11 @@ struct SidePanelView: View {
                     HStack {
                         Text(verbatim: mate.label).lineLimit(1).truncationMode(.middle)
                             .padding(.leading, CGFloat(min(depth, 4)) * 14)
+                        if mate.headphones {
+                            Image(systemName: "headphones").font(.caption).foregroundStyle(.secondary)
+                                .help(Text("Working on its own"))
+                                .accessibilityLabel(Text("Working on its own"))
+                        }
                         Spacer(minLength: 8)
                         ticking(every: 30) { now in
                             mate.state.label(since: mate.since, now: now).foregroundStyle(mate.state.color)

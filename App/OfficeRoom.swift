@@ -78,8 +78,10 @@ final class Stage: ObservableObject {
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
     private(set) var busyUntil = Date.distantPast
-    /// Who wears headphones. Nothing decides it yet; screenshots set it to show the picture.
+    /// Who wears headphones: teammates working on their own, and anyone screenshots add.
     var headphones: Set<String> = []
+    private var wearing: Set<String> = []
+    private var allHeadphones: Set<String> { headphones.union(wearing) }
 
     private var office: OfficeState?
     private var layout = RoomLayout(width: 0, slots: 0)
@@ -123,6 +125,7 @@ final class Stage: ObservableObject {
         seatTalks.removeAll { $0.end <= now }
 
         let people = Self.people(pods, meeting: layout.meetingRoom == nil ? nil : office.meeting)
+        wearing = Set(office.desks.flatMap(\.teammates).filter(\.headphones).map { "m:" + $0.id })
         if animate {
             for (id, person) in people where present[id] == nil { arrive(id, person) }
             checkVisits(people, now)
@@ -496,7 +499,7 @@ final class Stage: ObservableObject {
             }
             moment.out.insert(id)
             moment.room.append(
-                RoomPerson(look: person.look, seat: seat, state: person.state, headphones: headphones.contains(id)))
+                RoomPerson(look: person.look, seat: seat, state: person.state, headphones: allHeadphones.contains(id)))
         }
         return moment
     }
@@ -509,7 +512,7 @@ final class Stage: ObservableObject {
         var scene = OfficeScene(
             layout: layout, height: height, pods: pods, darkness: darkness, frame: frame, now: now,
             walkers: moment.standing, away: moment.away, doorOpen: moment.doorOpen && !reduceMotion,
-            headphones: headphones)
+            headphones: allHeadphones)
         scene.out = moment.out
         scene.talks = moment.talks
         scene.room = moment.room.sorted { $0.seat < $1.seat }
@@ -543,7 +546,7 @@ final class Stage: ObservableObject {
             "\(scene.frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
             + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(scene.talks.map { "\($0.x),\($0.y)" }) \(height) "
             + "\(layout.width) \(generation) "
-            + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
+            + "\(allHeadphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
             + "\(scene.meetingLit)"
         if room?.key != roomKey {
             let drawn = OfficeRenderer().renderWithLights(scene)

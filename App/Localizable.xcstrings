@@ -48,6 +48,7 @@
     "Searching the web" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "검색·웹 보는 중" } } } },
     "Calling teammates" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원 부르는 중" } } } },
     "Using another tool" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "다른 도구 쓰는 중" } } } },
+    "Working on its own" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "따로 일하는 중" } } } },
     "Session" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "본 세션" } } } },
     "Teammate of %@" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 의 팀원" } } } },
     "Teammates" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원" } } } },
