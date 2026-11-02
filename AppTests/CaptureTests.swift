@@ -75,7 +75,7 @@ final class CaptureTests: XCTestCase {
     private func team(_ teammates: [Int], at now: Date) -> AppModel {
         let model = makeModel(connected: true)
         let names = ["Explore", "Plan", "code-reviewer", nil, "general-purpose"]
-        let folders = ["my-project", "web-app", "blog", "api", "docs", "design"]
+        let folders = ["my-project", "web-app", "blog", "api", "docs", "design", "shop", "mobile-app", "landing"]
         for (i, count) in teammates.enumerated() {
             let folder = FakeScenario.root + "/" + folders[i % folders.count]
             let session = "team-\(i)"
@@ -238,6 +238,60 @@ final class CaptureTests: XCTestCase {
         try capture(
             "office-min", size: OfficeView.minSize,
             OfficeView(fixedNow: today(14)).environmentObject(team([5, 1], at: today(14))))
+    }
+
+    /// Zoom: nine sessions in the default window at each step (small shows all nine); a window a little narrower
+    /// than the default with the side panel open, three sessions, one island a row: at normal "1 more team below"
+    /// over the lounge, left of the panel, and small shows all three; the − + buttons at each step.
+    func testCaptureZoom() throws {
+        let now = today(14)
+        for zoom in Zoom.allCases {
+            let nine = team([2, 1, 3, 0, 1, 2, 0, 1, 3], at: now)
+            nine.zoom = zoom
+            try capture(
+                "office-zoom-\(zoom)", size: OfficeView.defaultSize,
+                OfficeView(fixedNow: now).environmentObject(nine))
+        }
+
+        let narrow = makeModel(connected: true)
+        for name in ["my-project", "web-app"] {
+            let folder = FakeScenario.root + "/" + name
+            narrow.receive(HookEvent(kind: .userPromptSubmit, session: name, cwd: folder), at: now - 900)
+            narrow.receive(HookEvent(kind: .stop, session: name, cwd: folder), at: now - 600)
+        }
+        narrow.receive(
+            found: [
+                OfficeState.Found(pid: 9100, started: now - 3600, folder: FakeScenario.root + "/blog", busy: false)
+            ],
+            at: now - 300)
+        XCTAssertEqual(narrow.office.islands.map(\.slot), [0, 1, 2])
+        let size = CGSize(width: 1176, height: OfficeView.defaultSize.height)
+        XCTAssertFalse(SidePanelView.fitsBeside(width: size.width, zoom: .normal), "the panel floats over the room")
+        let bar: CGFloat = 58
+        XCTAssertEqual(
+            RoomLayout(points: size.width, slots: 3).outOfSight([0, 1, 2], top: 0, height: Int(size.height - bar) / 2)
+                .below, [2])
+        for zoom in [Zoom.normal, .small] {
+            narrow.zoom = zoom
+            try capture(
+                zoom == .normal ? "office-narrow-1176" : "office-narrow-1176-small", size: size,
+                OfficeView(fixedNow: now, panel: try panel(narrow, slot: 0, index: 0)).environmentObject(narrow))
+        }
+
+        let bars = Zoom.allCases.map { zoom -> AppModel in
+            let model = team([2, 0], at: now)
+            model.zoom = zoom
+            return model
+        }
+        try capture(
+            "topbar-zoom", size: CGSize(width: 720, height: 3 * 72),
+            VStack(spacing: 0) {
+                ForEach(bars.indices, id: \.self) { index in
+                    OfficeBar().environmentObject(bars[index])
+                    Divider()
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .top))
     }
 
     /// Sessions found on this Mac before any news: four quiet ones as the app opens; quiet, busy, one whose news has
@@ -1213,6 +1267,48 @@ final class CaptureTests: XCTestCase {
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
         XCTAssertLessThan(office, 5)
+    }
+
+    /// Nine sessions in the default window at normal and small (where the room's picture has four times the
+    /// pixels): still, then one teammate walking in. Written to captures/cpu-zoom.txt.
+    func testCPUAtNormalAndSmall() throws {
+        func cpuSeconds() -> Double {
+            var usage = rusage()
+            getrusage(RUSAGE_SELF, &usage)
+            return Double(usage.ru_utime.tv_sec + usage.ru_stime.tv_sec)
+                + Double(usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / 1_000_000
+        }
+        func percent(over seconds: TimeInterval) -> Double {
+            let (cpu, start) = (cpuSeconds(), Date())
+            RunLoop.main.run(until: Date() + seconds)
+            return (cpuSeconds() - cpu) / Date().timeIntervalSince(start) * 100
+        }
+        let idle = percent(over: 5)
+        var line = String(format: "CPU, 9 sessions, default window (test app alone %.2f%%):", idle)
+        var still: [Zoom: Double] = [:]
+        for zoom in [Zoom.normal, .small] {
+            let model = team([1, 0, 2, 0, 1, 0, 1, 0, 1], at: Date())
+            model.zoom = zoom
+            let window = NSWindow(
+                contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled],
+                backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: OfficeView(ticksWhileHidden: true).environmentObject(model))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: Date() + 3)
+            still[zoom] = percent(over: 10) - idle
+            let folder = FakeScenario.root + "/my-project"
+            model.receive(
+                HookEvent(kind: .subagentStart, session: "team-0", cwd: folder, agentID: "walker", agentType: "Plan"))
+            let walking = percent(over: 3) - idle
+            line += String(format: " %@: still %.2f%%, one walking %.2f%%;", "\(zoom)", still[zoom]!, walking)
+            window.close()
+            window.contentView = nil
+            RunLoop.main.run(until: Date() + 1)
+        }
+        print(line)
+        try (line + "\n").write(to: out.appendingPathComponent("cpu-zoom.txt"), atomically: true, encoding: .utf8)
+        XCTAssertLessThan(still[.small]!, still[.normal]! * 2, "small, still, well under four times normal")
     }
 
     func testCaptureOtherScreens() throws {
