@@ -34,6 +34,15 @@ enum Style {
 
 extension WorkState {
     /// "Working" / "Waiting" / "Resting" as one word, for summaries and VoiceOver.
+    /// The same word as text for VoiceOver to say.
+    var spoken: String {
+        switch self {
+        case .working: return String(localized: "Working")
+        case .waiting: return String(localized: "Waiting")
+        case .resting: return String(localized: "Resting")
+        }
+    }
+
     var word: Text {
         switch self {
         case .working: return Text("Working")
@@ -71,8 +80,51 @@ extension WorkState {
     }
 }
 
+extension HookEvent.ToolKind {
+    /// What someone working is doing now, in one of six fixed phrases: only these words ever show, never a tool's
+    /// name or anything received.
+    var phrase: Text {
+        switch self {
+        case .read: return Text("Reading files")
+        case .edit: return Text("Editing files")
+        case .command: return Text("Running a command")
+        case .web: return Text("Searching the web")
+        case .team: return Text("Calling teammates")
+        case .other: return Text("Using another tool")
+        }
+    }
+
+    /// The same phrase for VoiceOver to say.
+    var spoken: String {
+        switch self {
+        case .read: return String(localized: "Reading files")
+        case .edit: return String(localized: "Editing files")
+        case .command: return String(localized: "Running a command")
+        case .web: return String(localized: "Searching the web")
+        case .team: return String(localized: "Calling teammates")
+        case .other: return String(localized: "Using another tool")
+        }
+    }
+}
+
 extension Teammate {
-    var displayName: Text { name.map { Text(verbatim: $0) } ?? Text("Helper") }
+    /// "Explore", or "Explore 2" while another Explore works too; its nickname in place of its name if it has one.
+    var displayName: Text {
+        let base = (nickname ?? name).map { Text(verbatim: $0) } ?? Text("Helper")
+        return labelNumber > 1 ? base + Text(verbatim: " \(labelNumber)") : base
+    }
+
+    /// The same name as plain text, to go inside a sentence.
+    var label: String {
+        let base = nickname ?? name ?? String(localized: "Helper")
+        return labelNumber > 1 ? "\(base) \(labelNumber)" : base
+    }
+
+    /// The name it has without a nickname.
+    var autoName: Text {
+        let base = name.map { Text(verbatim: $0) } ?? Text("Helper")
+        return number > 1 ? base + Text(verbatim: " \(number)") : base
+    }
 }
 
 /// A row that behaves like a menu item inside the menu bar window.

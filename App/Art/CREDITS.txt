@@ -42,6 +42,25 @@ Painted Walls
   SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Lanea Zimmerman. Recolors by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. Only the plain paint is used, repeated over the
+   wall; the rail and moulding are left out.
+
+
+================================================================
+LPC Revised: Structure/Wall Borders/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Structure/Wall%20Borders/Credits.txt
+================================================================
+
+-- Used here: Structure/Wall Borders/Plain Smooth Border.png
+Plain Smooth Border
+-------------------
+  ARTIST(S): Eliza Wyatt
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. Only the top edge of one frame is used, repeated
+   along the top of the back wall.
 
 
 ================================================================
@@ -70,9 +89,19 @@ Desk, Office
   ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
   SOURCE: https://opengameart.org/content/lpc-modified-base-tiles
   LICENSE: OGA-BY 3.0
-  DETAILS: 
+  DETAILS:
 	Row 1: Desk made by Eliza Wyatt, using elements from Lanea Zimmerman's cabinets and countertops.
 	Row 2+: Original by Eliza Wyatt
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. Four desks face each other: the two far desks
+   are the desk's top only, cut from the second row and drawn above the
+   two near desks.
+-- Meeting table (drawn by the app, no image file)
+BASED ON: Objects/Furniture/Desk, Office.png, second row (LPC Revised:
+   Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling), entry above)
+NEW: by Agent Overtime contributors, 2026: the desk's top stretched into
+   a long table (its corners and edges kept, its plain middle repeated),
+   standing on two of the desk's legs. OGA-BY 3.0 like the original.
 
 -- Used here: Objects/Furniture/Planter.png
 Planter
@@ -82,12 +111,43 @@ Planter
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Lanea Zimmerman. Recolored by Eliza Wyatt.
 
+-- Used here: Objects/Furniture/Shelf.png
+Shelf
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Furniture/TV, Widescreen.png
+-- Used here: Objects/Furniture/TV, Widescreen - No Service.png
+Tv, Widescreen; Tv, Widescreen - No Service display
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
 -- Used here: Objects/Furniture/Water Cooler.png
 Water Cooler
 -------------------
   ARTIST(S): Eliza Wyatt (DeathsDarling)
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Furniture/Rugs/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Furniture/Rugs/Credits.txt
+================================================================
+
+-- Used here: Objects/Furniture/Rugs/Diamond Rug, tiling.png
+Diamond Rug
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. A rug's corners and edges are kept and its
+   middle repeated, to the size of the floor it lies on.
 
 
 ================================================================
@@ -102,11 +162,59 @@ Chair, Office
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
 
+-- Used here: Objects/Furniture/Seating/Loveseat, Small - Casual Solid A.png
+Loveseat, Casual (all)
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), BlueCarrot16, Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-upholstery
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman and BlueCarrot16. Side and back views by Eliza Wyatt. Recolors by Eliza Wyatt.
+ALSO: the original page asks to link https://opengameart.org/content/lpc-interior-castle-tiles
+
 
 ================================================================
 LPC Revised: Objects/Small Items/Credits.txt
 https://github.com/ElizaWy/LPC/blob/main/Objects/Small%20Items/Credits.txt
 ================================================================
+
+-- Used here: Objects/Small Items/Boxes.png
+Boxes
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Coffee Maker.png
+Coffee Maker
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Dishes A.png
+Dishes
+-------------------
+  ARTIST(S): Richard Kettering (Jetrel), BlueCarrot16, Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/rpg-item-set
+  SOURCE: https://opengameart.org/content/lpc-meals
+  LICENSE: OGA-BY 3.0 (Original art CC0)
+  DETAILS:
+	Top Row: Original by Richard Kettering. Recolored by BlueCarrot16 and Eliza Wyatt.
+	Second Row: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. A small plate is drawn under the Coffee Maker
+   sheet's mug, as a cup on its saucer.
+
+-- Used here: Objects/Small Items/Flowers.png
+Flowers
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Single flower, bouquet, large vase by Lanea Zimmerman. Potted shrub base, small vase by Eliza Wyatt. Recolored by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. A single flower is drawn standing in a small
+   vase.
 
 -- Used here: Objects/Small Items/Laptop.png
 Laptop
@@ -114,6 +222,10 @@ Laptop
   ARTIST(S): Eliza Wyatt (DeathsDarling)
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. The back of an open laptop, facing someone
+   across the desks, is the closed laptop's lid (last row) drawn standing
+   on the desk.
 
 -- Used here: Objects/Small Items/Lighting, Table.png
 Lighting, Tabletop
@@ -125,6 +237,57 @@ Lighting, Tabletop
   DETAILS: 
 	Top Row: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
 	Row 2+: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Loose Paper.png
+Loose Paper
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Pillows.png
+Pillows
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), BlueCarrot16
+  SOURCE: https://opengameart.org/content/lpc-upholstery
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Lanea Zimmerman and BlueCarrot16. Recolored by Eliza Wyatt.
+ALSO: the original page asks to link https://opengameart.org/content/lpc-interior-castle-tiles
+
+-- Used here: Objects/Small Items/Rotary Phones.png
+Rotary Phone
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Tabletop Portraits.png
+Tabletop Pictures
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Office portrait frames by Eliza Wyatt. Woman's Small Portrait by Lanea Zimmerman, recolored by Eliza Wyatt.
+
+
+================================================================
+LPC Revised: Objects/Wall Items/Credits.txt
+https://github.com/ElizaWy/LPC/blob/main/Objects/Wall%20Items/Credits.txt
+================================================================
+
+-- Used here: Objects/Wall Items/Paintings, Abstract.png
+Paintings, Abstract
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Wall Items/Posters.png
+Posters
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
 
 
 ================================================================
@@ -146,7 +309,9 @@ MetroCity/MetroCity 2.0/ come from its MetroCity 2.0 update.
 MODIFIED: by Agent Overtime contributors, 2026, while drawing; the files
    themselves are not changed. The app stacks a body, clothes and hair;
    seats people by cutting the back view under the shoulders and drawing a
-   chair's backrest over it; moves that cut down one pixel for nodding;
+   chair's backrest over it, or, facing the room, by cutting the first
+   front view at the chest and drawing a desk and laptop in front of it;
+   moves that cut down one pixel for nodding;
    draws each pixel 1.5 times the size of the room's pixels; and moves the
    colours a little toward the LPC Revised palette (near-black outlines one
    step lighter, slightly less saturation and contrast).
@@ -157,8 +322,11 @@ Drawn in code for this app (no image files)
 ================================================================
 
 -- Office window (day and night views), office door (closed and open),
-   whiteboard, wall clock, speech bubbles above heads, text lines on the
-   laptop screens, lamp light and night shading
+   whiteboard, wall clock, skirting line, the meeting room's glass walls
+   and glass door (shut and open) and the shadow under its table,
+   headphones (seen from the front and from the back, drawn over the
+   people's hair at their pixel size), speech bubbles beside heads, text
+   lines on the laptop screens, lamp light and night shading
 NEW: Original by Agent Overtime contributors, 2026, drawn in the style
      and colours of LPC Revised. Part of the app's code (App/OfficeArt.swift),
      MIT License like the rest of the code.

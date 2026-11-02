@@ -57,7 +57,7 @@ public enum HookCommand {
 /// hooks by itself. Both READMEs quote these commands; a test keeps them the same.
 public enum Release {
     public static let repository = "ykwimk/agent-overtime"
-    public static let tag = "v0.2.0"
+    public static let tag = "v0.3.0"
     public static var connectCommands: String {
         "/plugin marketplace add \(repository)#\(tag)\n/plugin install agent-overtime@agent-overtime"
     }

@@ -46,16 +46,14 @@ struct MenuContent: View {
 
     @ViewBuilder private var sessions: some View {
         let now = fixedNow ?? Date()
-        let rows = model.office.desks.flatMap { desk in
-            desk.sessions.enumerated().map { (desk: desk, index: $0.offset, session: $0.element) }
-        }
+        let rows = model.office.desks.flatMap(\.sessions)
         if !model.everConnected {
             MenuRow(title: "Not connected · Connect…") { show("welcome") }
         } else if rows.isEmpty {
             Text("No sessions running").foregroundStyle(.secondary).padding(.horizontal, 15).padding(.vertical, 3)
         } else {
-            ForEach(rows.prefix(Self.maxRows), id: \.session.id) { row in
-                let shown = row.session.shown  // waiting if a teammate waits, same rule as the counts
+            ForEach(rows.prefix(Self.maxRows)) { session in
+                let shown = session.shown  // waiting if a teammate waits, same rule as the counts
                 HStack(spacing: 8) {
                     Circle().fill(
                         shown.state == .waiting
@@ -63,8 +61,7 @@ struct MenuContent: View {
                     )
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
-                    Text(verbatim: row.index == 0 ? row.desk.name : "\(row.desk.name) \(row.index + 1)")
-                        .lineLimit(1).truncationMode(.middle)
+                    Text(verbatim: session.label).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 8)
                     shown.state.label(since: shown.since, now: now)
                         .foregroundStyle(shown.state.color)

@@ -34,6 +34,8 @@
 		AD0000000000000000000205 /* Paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000205 /* Paths.swift */; };
 		AD0000000000000000000301 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000301 /* main.swift */; };
 		AE0000000000000000000401 /* CaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000401 /* CaptureTests.swift */; };
+		AE0000000000000000000402 /* WalkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000402 /* WalkTests.swift */; };
+		AE0000000000000000000403 /* PanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000403 /* PanelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,6 +93,8 @@
 		AB0000000000000000000207 /* OfficePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficePlan.swift; sourceTree = "<group>"; };
 		AB0000000000000000000301 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AB0000000000000000000401 /* CaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000402 /* WalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000403 /* PanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000501 /* AgentOvertime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentOvertime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000502 /* agent-overtime-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "agent-overtime-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000503 /* AgentOvertimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentOvertimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -190,6 +194,8 @@
 			isa = PBXGroup;
 			children = (
 				AB0000000000000000000401 /* CaptureTests.swift */,
+				AB0000000000000000000402 /* WalkTests.swift */,
+				AB0000000000000000000403 /* PanelTests.swift */,
 			);
 			path = AppTests;
 			sourceTree = "<group>";
@@ -355,6 +361,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				AE0000000000000000000401 /* CaptureTests.swift in Sources */,
+				AE0000000000000000000402 /* WalkTests.swift in Sources */,
+				AE0000000000000000000403 /* PanelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -393,7 +401,7 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -420,7 +428,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

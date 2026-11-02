@@ -137,17 +137,31 @@ struct Look: Equatable {
         Look(2, ("MetroCity/Outfits/Outfit1.png", 0), (hairs, 2)),
     ]
 
-    /// The same name always gets the same person (FNV-1a: stable across launches, unlike hashValue). The salt
-    /// is one that gives every seat of the example office, and Explore, Plan, general-purpose and the default
-    /// helper side by side, different hair.
-    static func pick(_ seed: String) -> Look {
+    /// The same name always gets the same person. The salt is one that gives everyone in the example office, and
+    /// Explore, Plan, general-purpose and the default helper with the same number or the same name, different hair.
+    static func pick(_ seed: String) -> Look { all[Int(stableHash("120 " + seed) % UInt32(all.count))] }
+
+    /// FNV-1a: the same across launches, unlike hashValue.
+    static func stableHash(_ text: String) -> UInt32 {
         var hash: UInt32 = 2_166_136_261
-        for byte in ("1135 " + seed).utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
-        return all[Int(hash % UInt32(all.count))]
+        for byte in text.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+        return hash
     }
 
     /// Drawing order, bottom first.
     var layers: [Layer] { [Layer(sheet: Self.body, row: skin), clothes, hair] }
+}
+
+/// What stands on a desk beside the laptop: one or two small things, so the desk doesn't crowd. A name always
+/// gets the same one, picked like `Look.pick`: a session by its folder's name, a teammate by its own name.
+enum Prop: CaseIterable {
+    /// A desk lamp, a lampshade, flowers in a pot, a second screen, a mug on a saucer, a phone, a framed photo,
+    /// papers with a mug, a box, a small potted plant, one flower in a vase.
+    case lamp, shade, flowers, laptop, coffee, phone, photo, papers, box, plant, vase
+
+    static func pick(_ seed: String) -> Prop {
+        allCases[Int(Look.stableHash("prop " + seed) % UInt32(allCases.count))]
+    }
 }
 
 /// The symbol in a speech bubble above a head.
@@ -160,6 +174,58 @@ enum Mark {
         case .waiting: self = .bang
         case .resting: self = .zzz
         }
+    }
+}
+
+/// Headphones for a teammate working on its own, drawn in code at the people's pixel size to sit over any
+/// MetroCity hair: a band over the top of the head and a cup over each ear. Two pictures, seen from the front
+/// (teal cushions) and from the back (the cups' shells). Who wears them is decided elsewhere.
+enum Headphones {
+    /// The pictures' left edge in a person's 32-pixel cell; the front starts at row 1, the back at row 2.
+    static let left = 4
+    static let front = [
+        ".......oooooooooo.......",
+        ".....oohhhhhhhhhhoo.....",
+        "....obb..........bbo....",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "..ooo..............ooo..",
+        ".odcdo............odcdo.",
+        ".odcdo............odcdo.",
+        ".odcdo............odcdo.",
+        ".odcdo............odcdo.",
+        "..ooo..............ooo..",
+    ]
+    static let back = front.map { $0.replacingOccurrences(of: "c", with: "h") }
+    static let colors: [Character: UInt32] = [
+        "o": 0x2B2233, "b": 0x555A6B, "h": 0x8C93A6, "d": 0x3A3D4A, "c": 0x3E9FB0,
+    ]
+
+    /// One of the pictures, each pixel `scale` bitmap pixels square.
+    static func picture(_ rows: [String], scale: Int) -> CGImage? {
+        let width = (rows.first?.count ?? 0) * scale
+        let height = rows.count * scale
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: ArtStore.screenSpace, bitmapInfo: ArtStore.screenFormat)
+        else { return nil }
+        for (y, row) in rows.enumerated() {
+            for (x, key) in row.enumerated() {
+                guard let hex = colors[key] else { continue }
+                context.setFillColor(
+                    CGColor(
+                        srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+                        blue: CGFloat(hex & 0xFF) / 255, alpha: 1))
+                context.fill(CGRect(x: x * scale, y: height - (y + 1) * scale, width: scale, height: scale))
+            }
+        }
+        return context.makeImage()
     }
 }
 
@@ -189,6 +255,24 @@ struct Walker {
     var box: CGRect { CGRect(x: x - 24, y: y - 45, width: 48, height: 48) }
 }
 
+/// Someone sitting at the meeting table: seats 0–2 face the room from behind it, 3–5 have their backs to it.
+struct RoomPerson {
+    let look: Look
+    let seat: Int
+    let state: WorkState
+    let headphones: Bool
+}
+
+/// Where the night's light comes from in one picture of the office: a pool at every seat in use, a bulb in each
+/// lamp, a glow at each laptop, lamps and the meeting room's slide drawn again over the dark.
+struct Lights {
+    var pools: [(x: Int, y: Int)] = []
+    var bulbs: [(x: Int, y: Int)] = []
+    var screens: [(x: Int, y: Int)] = []
+    var litLamps: [(sx: Int, x: Int, y: Int, mirrored: Bool)] = []
+    var litSlide: (x: Int, y: Int)?
+}
+
 /// Everything one picture of the office needs. Sizes are art pixels.
 struct OfficeScene {
     var layout: RoomLayout
@@ -200,13 +284,64 @@ struct OfficeScene {
     var walkers: [Walker] = []
     /// People still walking in: their desks look empty until they arrive.
     var away: Set<String> = []
+    /// People away from their desks for a while: the chair stays in and the laptop on, unlike a desk someone
+    /// went home from.
+    var out: Set<String> = []
     var doorOpen = false
+    /// The meeting room's glass door, open while someone walks through.
+    var meetingDoorOpen = false
+    /// Who sits at the meeting table.
+    var room: [RoomPerson] = []
+    /// A meeting has the room: its TV is on, and at night its ceiling lights.
+    var meetingLit = false
+    /// Who wears headphones (ids as `id(_:)` gives them). Only screenshots set it for now.
+    var headphones: Set<String> = []
+    /// Where two people talk: the top-left corner of each speaking mark.
+    var talks: [(x: Int, y: Int)] = []
+    /// The lights of the whole picture, from the room drawn without walkers. With them a walker's box draws only
+    /// the islands it touches and still lights them as the whole picture does.
+    var lights: Lights?
     var calendar = Calendar.current
 
-    static func mainID(_ pod: Pod) -> String { "p:" + pod.id }
-    static func mateID(_ mate: Teammate) -> String { "m:" + mate.id }
-    static func mainLook(_ pod: Pod) -> Look { Look.pick(pod.name) }
-    static func mateLook(_ mate: Teammate, desk: Int) -> Look { Look.pick("\(mate.name ?? "helper") \(desk)") }
+    /// Who walks to and from a seat. Nobody walks for a seat someone went home from.
+    static func id(_ seat: Seat) -> String? {
+        switch seat {
+        case .session(let session, _): return "p:" + session.id
+        case .teammate(let mate, _): return "m:" + mate.id
+        case .off: return nil
+        }
+    }
+
+    /// The same name always gets the same person, and a second "Explore" looks different from the first.
+    static func look(_ seat: Seat) -> Look? {
+        switch seat {
+        case .session(let session, _): return Look.pick(session.name)
+        case .teammate(let mate, _): return Look.pick("\(mate.name ?? "helper") \(mate.number)")
+        case .off: return nil
+        }
+    }
+
+    static func state(_ seat: Seat) -> WorkState? {
+        switch seat {
+        case .session(let session, _): return session.state
+        case .teammate(let mate, _): return mate.state
+        case .off: return nil
+        }
+    }
+
+    /// A session's prop goes by its folder's name (without the number), and stays on its desk after it went home.
+    static func prop(_ seat: Seat) -> Prop {
+        switch seat {
+        case .session(let session, _):
+            let suffix = session.number > 1 ? " \(session.number)".count : 0
+            return Prop.pick(String(session.name.dropLast(suffix)))
+        case .teammate(let mate, _):
+            return Prop.pick(mate.name ?? "helper")
+        case .off(_, let folder):
+            let last = (folder as NSString).lastPathComponent
+            return Prop.pick(last.isEmpty ? folder : last)
+        }
+    }
 }
 
 /// Draws the office into one bitmap, in art-pixel coordinates at `density` bitmap pixels per art pixel, so
@@ -220,6 +355,22 @@ struct OfficeRenderer {
     private enum Sheet {
         static let floor = "Structure/Floor/Wood Floor A.png"
         static let wall = "Structure/Walls/Painted Walls.png"
+        static let border = "Structure/Wall Borders/Plain Smooth Border.png"
+        static let painting = "Objects/Wall Items/Paintings, Abstract.png"
+        static let posters = "Objects/Wall Items/Posters.png"
+        static let tv = "Objects/Furniture/TV, Widescreen.png"
+        static let noSignal = "Objects/Furniture/TV, Widescreen - No Service.png"
+        static let rug = "Objects/Furniture/Rugs/Diamond Rug, tiling.png"
+        static let loveseat = "Objects/Furniture/Seating/Loveseat, Small - Casual Solid A.png"
+        static let pillows = "Objects/Small Items/Pillows.png"
+        static let coffee = "Objects/Small Items/Coffee Maker.png"
+        static let shelf = "Objects/Furniture/Shelf.png"
+        static let dishes = "Objects/Small Items/Dishes A.png"
+        static let phones = "Objects/Small Items/Rotary Phones.png"
+        static let photos = "Objects/Small Items/Tabletop Portraits.png"
+        static let papers = "Objects/Small Items/Loose Paper.png"
+        static let boxes = "Objects/Small Items/Boxes.png"
+        static let flowers = "Objects/Small Items/Flowers.png"
         static let desk = "Objects/Furniture/Desk, Office.png"
         static let chair = "Objects/Furniture/Seating/Chair, Office.png"
         static let laptop = "Objects/Small Items/Laptop.png"
@@ -240,6 +391,16 @@ struct OfficeRenderer {
         }
     }
 
+    /// The whole office, and where its night light comes from (for the walkers' boxes).
+    func renderWithLights(_ scene: OfficeScene) -> (image: CGImage?, lights: Lights) {
+        var lights = Lights()
+        let image = Self.picture(width: scene.layout.width, height: scene.height, density: Self.density, art: art) {
+            $0.draw(scene)
+            lights = $0.lights
+        }
+        return (image, lights)
+    }
+
     /// A new bitmap `density` times the art size, painted in top-left art-pixel coordinates. Pictures reused
     /// inside the office (the empty room, glows, night views) stay at 1 and are scaled up without smoothing.
     private static func picture(
@@ -258,20 +419,25 @@ struct OfficeRenderer {
         context.interpolationQuality = .none
         context.setShouldAntialias(false)
         var canvas = Canvas(context: context, height: height, art: art)
+        canvas.clip = crop
         paint(&canvas)
         return context.makeImage()
     }
 
-    /// The glass of each window on the back wall, and whether the bookcase still fits beside them.
-    private static func wallPlan(width: Int) -> (glass: [CGRect], shelf: Bool) {
-        let shelf = width - 112 - 144 >= 76
+    /// The glass of each window on the back wall, whether the bookcase still fits beside them, and where the
+    /// painting hangs: between the last window and the right-hand column, when there is one. The column's
+    /// meeting room takes the bookcase's place.
+    private static func wallPlan(_ layout: RoomLayout) -> (glass: [CGRect], shelf: Bool, painting: Int?) {
+        let width = layout.width
+        let shelf = layout.pillar == nil && width - 112 - 144 >= 76
+        let end = layout.pillar.map { $0 - 52 } ?? width - (shelf ? 112 : 44)
         var glass: [CGRect] = []
         var x = 144
-        while x + 76 <= width - (shelf ? 112 : 44) {
+        while x + 76 <= end {
             glass.append(CGRect(x: x + 2, y: 19, width: 72, height: 36))
             x += 92
         }
-        return (glass, shelf)
+        return (glass, shelf, layout.pillar.map { $0 - 63 })
     }
 
     /// Drawing helpers in top-left pixel coordinates, plus what has to wait for the night pass.
@@ -279,20 +445,35 @@ struct OfficeRenderer {
         let context: CGContext
         let height: Int
         let art: ArtStore
-        var marks: [(Mark, Int, Int)] = []
-        var lamps: [(x: Int, y: Int)] = []
+        /// Bubbles go on last, over everything: symbol, top-left corner, tail.
+        var marks: [(Mark, Int, Int, Tail)] = []
+        enum Tail { case down, left, right }
+        /// Centres of the night light: a pool at every seat someone works at, a bulb in each lamp, a laptop's glow.
+        var pools: [(x: Int, y: Int)] = []
+        var bulbs: [(x: Int, y: Int)] = []
         var screens: [(x: Int, y: Int)] = []
+        /// Lamps drawn again, lit, over the night shade: sheet cell, place, mirrored.
+        var litLamps: [(sx: Int, x: Int, y: Int, mirrored: Bool)] = []
+        /// The meeting room's slide, drawn again over the night shade while a meeting is on.
+        var litSlide: (x: Int, y: Int)?
+        /// The only part of the office the bitmap keeps (a walker's box). Anything wholly outside it is skipped
+        /// before it reaches Core Graphics: a box is drawn 30 times a second.
+        var clip: CGRect?
+
+        /// The light sources gathered so far.
+        var lights: Lights {
+            get { Lights(pools: pools, bulbs: bulbs, screens: screens, litLamps: litLamps, litSlide: litSlide) }
+            set {
+                pools = newValue.pools
+                bulbs = newValue.bulbs
+                screens = newValue.screens
+                litLamps = newValue.litLamps
+                litSlide = newValue.litSlide
+            }
+        }
         /// Bitmap pixels per MetroCity pixel, and art pixels per bitmap pixel.
         static let personScale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
         static let bitmapPixel = 1 / CGFloat(OfficeRenderer.density)
-
-        /// Someone in a chair: `cx` is the middle of the desk, `top` the desk's top edge.
-        struct Seat {
-            let look: Look
-            let cx: Int
-            let top: Int
-            let nod: Bool
-        }
 
         init(context: CGContext, height: Int, art: ArtStore) {
             self.context = context
@@ -301,6 +482,10 @@ struct OfficeRenderer {
         }
 
         // MARK: primitives
+
+        func visible(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> Bool {
+            clip.map { $0.intersects(CGRect(x: x, y: y, width: w, height: h)) } ?? true
+        }
 
         func image(_ image: CGImage?, _ x: Int, _ y: Int, mirrored: Bool = false) {
             self.image(image, CGFloat(x), CGFloat(y), mirrored: mirrored)
@@ -311,6 +496,7 @@ struct OfficeRenderer {
             guard let image else { return }
             let w = CGFloat(image.width) * pixel
             let h = CGFloat(image.height) * pixel
+            guard visible(x, y, w, h) else { return }
             let rect = CGRect(x: x, y: CGFloat(height) - y - h, width: w, height: h)
             guard mirrored else { return context.draw(image, in: rect) }
             context.saveGState()
@@ -323,6 +509,7 @@ struct OfficeRenderer {
         func sprite(
             _ sheet: String, _ sx: Int, _ sy: Int, _ w: Int, _ h: Int, _ x: Int, _ y: Int, mirrored: Bool = false
         ) {
+            guard visible(CGFloat(x), CGFloat(y), CGFloat(w), CGFloat(h)) else { return }
             let density = OfficeRenderer.density
             image(
                 art.cell(sheet, sx, sy, w, h, scale: density), CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(density),
@@ -330,6 +517,7 @@ struct OfficeRenderer {
         }
 
         func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ hex: UInt32, _ alpha: CGFloat = 1) {
+            guard visible(CGFloat(x), CGFloat(y), CGFloat(w), CGFloat(h)) else { return }
             context.setFillColor(Self.color(hex, alpha))
             context.fill(CGRect(x: x, y: height - y - h, width: w, height: h))
         }
@@ -346,9 +534,22 @@ struct OfficeRenderer {
                 colors: [color(hex, alpha), color(hex, alpha * 0.35), color(hex, 0)] as CFArray, locations: [0, 0.4, 1])
         }
 
-        /// A picture kept at the office's own density, so stamping it copies pixels one to one.
+        /// A picture kept at the office's own density, so stamping it copies pixels one to one. Inside a walker's
+        /// box only that piece of it is drawn (the room and the night shade are the whole office).
         func stamp(_ picture: CGImage?, _ x: Int, _ y: Int) {
-            image(picture, CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(OfficeRenderer.density))
+            guard let picture else { return }
+            let density = OfficeRenderer.density
+            let whole = CGRect(x: x, y: y, width: picture.width / density, height: picture.height / density)
+            guard let clip, !clip.contains(whole) else {
+                return image(picture, CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(density))
+            }
+            let part = whole.intersection(clip.integral)
+            guard !part.isEmpty,
+                let piece = picture.cropping(
+                    to: part.offsetBy(dx: CGFloat(-x), dy: CGFloat(-y)).applying(
+                        CGAffineTransform(scaleX: CGFloat(density), y: CGFloat(density))))
+            else { return }
+            image(piece, part.minX, part.minY, pixel: 1 / CGFloat(density))
         }
 
         /// A soft round light, drawn once per colour and strength and then stamped where it shines.
@@ -380,31 +581,63 @@ struct OfficeRenderer {
         mutating func draw(_ scene: OfficeScene) {
             let width = scene.layout.width
             let height = self.height
-            let plan = OfficeRenderer.wallPlan(width: width)
-            let room = art.picture("room \(width)x\(height) open:\(scene.doorOpen)") { [art] in
+            let plan = OfficeRenderer.wallPlan(scene.layout)
+            let key = "room \(width)x\(height) open:\(scene.doorOpen) lit:\(scene.meetingLit)"
+            let room = art.picture(key) { [art] in
                 OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
                     room in
                     room.floor(width: width)
                     room.wall(width: width, plan: plan)
                     room.door(open: scene.doorOpen)
+                    if let meeting = scene.layout.meetingRoom {
+                        room.meetingRoomBack(meeting, lit: scene.meetingLit)
+                        room.lounge(meeting.left)
+                    }
                 }
             }
             stamp(room, 0, 0)
             clock(center: (123, 21), scene.now, scene.calendar)
-            props(scene)
-            for (index, pod) in scene.pods.enumerated() {
-                self.pod(pod, origin: scene.layout.origin(of: index), scene: scene)
+            plants(scene)
+            // A walker's box with the whole picture's lights at hand draws only what it touches: the lights of the
+            // rest come from that list, so the night looks the same.
+            let skips = clip != nil && scene.lights != nil
+            var walkers = scene.walkers.sorted { $0.y < $1.y }[...]
+            if let meeting = scene.layout.meetingRoom {
+                let inside = { (walker: Walker) in walker.x >= meeting.left && walker.y < MeetingRoom.front }
+                let column = CGRect(
+                    x: meeting.left - 16, y: 0, width: width - meeting.left + 16, height: MeetingRoom.front + 20)
+                if !skips || visible(column.minX, column.minY, column.width, column.height) {
+                    meetingRoomFront(meeting, scene, walkers: walkers.filter(inside))
+                }
+                walkers.removeAll(where: inside)
             }
-            for walker in scene.walkers.sorted(by: { $0.y < $1.y }) {
-                // The feet are 30 sheet pixels down the cell; the pack's shadow cell sits under them.
-                let x = walker.box.minX
-                let y = walker.box.minY
-                image(art.cell(Look.shadow, 0, 0, 32, 32, scale: Self.personScale), x, y, pixel: Self.bitmapPixel)
-                person(
-                    walker.look, column: walker.facing.column + walker.step % 6, x, y, mirrored: walker.facing == .left)
+            // Back to front: someone walking behind an island's far seats is drawn before the island.
+            for pod in scene.pods {
+                let origin = scene.layout.origin(of: pod.slot)
+                while let walker = walkers.first, walker.y < origin.y + RoomLayout.farDesk {
+                    self.walker(walker)
+                    walkers.removeFirst()
+                }
+                // Bubbles and props reach a little past the island.
+                let reach = CGRect(
+                    x: origin.x - 32, y: origin.y - 32, width: RoomLayout.islandWidth + 64,
+                    height: RoomLayout.islandDepth + 64)
+                guard !skips || visible(reach.minX, reach.minY, reach.width, reach.height) else { continue }
+                self.pod(pod, origin: origin, scene: scene)
             }
+            for walker in walkers { self.walker(walker) }
+            if skips, let lights = scene.lights { self.lights = lights }
             night(scene, glass: plan.glass)
-            for (mark, x, top) in marks { bubble(mark, x, top) }
+            for (mark, x, y, tail) in marks { bubble(mark, x, y, tail) }
+            for talk in scene.talks { self.talk(talk.x, talk.y) }
+        }
+
+        private func walker(_ walker: Walker) {
+            // The feet are 30 sheet pixels down the cell; the pack's shadow cell sits under them.
+            let x = walker.box.minX
+            let y = walker.box.minY
+            image(art.cell(Look.shadow, 0, 0, 32, 32, scale: Self.personScale), x, y, pixel: Self.bitmapPixel)
+            person(walker.look, column: walker.facing.column + walker.step % 6, x, y, mirrored: walker.facing == .left)
         }
 
         private func floor(width: Int) {
@@ -413,120 +646,419 @@ struct OfficeRenderer {
             }
         }
 
-        private func wall(width: Int, plan: (glass: [CGRect], shelf: Bool)) {
+        /// A bright plain wall: the pack's paint without its rail and moulding, a thin top edge, and a pale
+        /// skirting line where it meets the floor.
+        private func wall(width: Int, plan: (glass: [CGRect], shelf: Bool, painting: Int?)) {
+            let top = 8
             for x in stride(from: 0, to: width, by: 32) {
-                sprite(Sheet.wall, 224, 128 - RoomLayout.wall, 32, RoomLayout.wall, x, 0)
+                sprite(Sheet.border, 48, 0, 32, top, x, 0)
+                for y in stride(from: top, to: RoomLayout.wall, by: 32) {
+                    sprite(Sheet.wall, 224, 16, 32, min(32, RoomLayout.wall - y), x, y)
+                }
             }
+            fill(0, RoomLayout.wall - 3, width, 1, 0xD9D9CF)
+            fill(0, RoomLayout.wall - 2, width, 2, 0xC2C1B4)
             whiteboard(50, 14)
             for glass in plan.glass { window(Int(glass.minX) - 2, 8, 76, 50) }
-            if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
-            sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
+            if let x = plan.painting {
+                sprite(Sheet.painting, 136, 0, 48, 32, x - 5, 21)
+            } else {
+                // Without the right-hand column; with it, the water cooler stands in the lounge.
+                if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
+                sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
+            }
         }
 
-        /// Plants and the copier go wherever no pod and no walking route is.
-        private func props(_ scene: OfficeScene) {
+        // MARK: the right-hand column
+
+        /// The back of the meeting room, drawn once with the room: the TV (showing no signal unless a meeting is on),
+        /// a poster, the rug and the chairs behind the table.
+        private func meetingRoomBack(_ room: MeetingRoom, lit: Bool) {
+            let x0 = room.left
+            let t = MeetingRoom.table
+            let middle = x0 + t.x + t.width / 2
+            sprite(Sheet.tv, 224, 0, 96, 64, middle - 47, 17)
+            if lit { slide(middle - 29, 35) } else { sprite(Sheet.noSignal, 224, 0, 96, 64, middle - 47, 17) }
+            sprite(Sheet.posters, 128, 64, 32, 32, x0 + 158, 27)
+            stretch(Sheet.rug, (192, 96, 96, 96), edges: (32, 32, 32, 32), middle - 72, t.y - 20, 144, 80)
+            for seat in room.seats.prefix(3) { sprite(Sheet.chair, 0, 40, 32, 48, seat.x - 16, t.y - 17) }
+        }
+
+        /// The rest of the meeting room, back to front, with the people at the table and anyone walking inside:
+        /// those facing the room behind the table (the table hides them from the chest), the table, those with
+        /// their backs to the room in front of it and their chairs, the glass with its door, and the pots along it.
+        private mutating func meetingRoomFront(_ room: MeetingRoom, _ scene: OfficeScene, walkers: [Walker]) {
+            let t = MeetingRoom.table
+            let nod = scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
+            if scene.meetingLit {
+                // At night: the TV's glow and two pools of light over the table, like the desks' lamps.
+                let middle = room.left + t.x + t.width / 2
+                litSlide = (middle - 29, 35)
+                screens.append((middle, 45))
+                pools.append((middle - 28, t.y + 8))
+                pools.append((middle + 28, t.y + 8))
+            }
+            for person in scene.room where person.seat < 3 {
+                let x = CGFloat(room.seats[person.seat].x - 24)
+                let y = CGFloat(t.y - 28) + (person.state == .resting ? nod : 0)
+                self.person(person.look, column: 0, rows: 28, x, y)
+                if person.headphones { headphones(front: true, x, y) }
+            }
+            for walker in walkers where walker.y < t.y + 10 { self.walker(walker) }
+            table(room.left + t.x, t.y, t.width, t.depth)
+            // As at an island's near desks: the back of the head over the table's near edge, below the faces
+            // across, the shoulders under it, and the chair's back over the rest.
+            for person in scene.room where person.seat >= 3 {
+                let x = CGFloat(room.seats[person.seat].x - 24)
+                let y = CGFloat(t.y + 10) + (person.state == .resting ? nod : 0)
+                self.person(person.look, column: 12, rows: 24, x, y)
+                if person.headphones { headphones(front: false, x, y) }
+            }
+            for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 36) }
+            for walker in walkers where walker.y >= t.y + 10 { self.walker(walker) }
+            // Bubbles as at the desks: beside the head facing the room, at the shoulder with the back to it (the
+            // outer side at the ends, under the name tag over the glass door). Someone waiting stays seated with a
+            // hopping "!", and the glass door shows one too, for a room seen from across the office.
+            let hop = scene.frame % 2 == 1 ? 2 : 0
+            for person in scene.room {
+                let x = room.seats[person.seat].x
+                let y = person.state == .waiting ? -hop : 0
+                switch person.seat {
+                case 0..<3: marks.append((Mark(person.state), x + 9, t.y - 25 + y, .down))
+                case 3: marks.append((Mark(person.state), x - 27, t.y + 33 + y, .right))
+                default: marks.append((Mark(person.state), x + 14, t.y + 33 + y, .left))
+                }
+            }
+            if scene.room.contains(where: { $0.state == .waiting }) {
+                let top = MeetingRoom.front - MeetingRoom.glassHeight
+                marks.append((.bang, room.left + MeetingRoom.doorX + 5, top + 6 - hop, .down))
+            }
+            glass(left: room.left, right: scene.layout.width, doorOpen: scene.meetingDoorOpen)
+            // Pots along the glass: a tall one left of the door, low ones taking turns to its right.
+            for (index, pot) in room.planters.enumerated() {
+                if index == 0 {
+                    sprite(Sheet.planter, 128, 32, 32, 64, pot.x - 16, pot.y - 47)
+                } else {
+                    sprite(Sheet.planter, index % 2 == 1 ? 96 : 128, 0, 32, 32, pot.x - 16, pot.y - 31)
+                }
+            }
+        }
+
+        /// The lounge under the meeting room, nobody in it: two loveseats facing each other on a rug, a coffee
+        /// counter, the water cooler and a plant.
+        private func lounge(_ x0: Int) {
+            stretch(Sheet.rug, (0, 0, 96, 96), edges: (32, 32, 32, 32), x0 + 8, 214, 112, 96)
+            let sofa = x0 + 32
+            sprite(Sheet.loveseat, 0, 0, 64, 32, sofa, 214)
+            sprite(Sheet.pillows, 256, 224, 32, 32, sofa - 1, 211)
+            sprite(Sheet.pillows, 288, 224, 32, 32, sofa + 33, 211)
+            sprite(Sheet.loveseat, 0, 159, 64, 33, sofa, 272)
+            sprite(Sheet.shelf, 0, 40, 64, 24, x0 + 130, 238)
+            sprite(Sheet.coffee, 0, 0, 32, 32, x0 + 130, 220)
+            sprite(Sheet.coffee, 64, 0, 32, 32, x0 + 150, 233)
+            sprite(Sheet.planter, 128, 32, 32, 64, x0 + 128, 270)
+            sprite(Sheet.cooler, 32, 0, 32, 64, x0 + 160, 255)
+        }
+
+        /// The office desk's top stretched into a long table (its corners and edges as they are, its plain middle
+        /// repeated), on two of its legs, with a soft shadow under it.
+        private func table(_ x: Int, _ y: Int, _ w: Int, _ depth: Int) {
+            let h = depth + 6
+            fill(x + 2, y + h, w - 4, 12, 0x2B2233, 0.16)
+            stretch(Sheet.desk, (67, 80, 58, 18), edges: (4, 4, 6, 6), x, y, w, h)
+            sprite(Sheet.desk, 120, 98, 5, 14, x + w - 5, y + h)
+            sprite(Sheet.desk, 120, 98, 5, 14, x, y + h, mirrored: true)
+        }
+
+        /// Glass seen from the room: the side glass along its length from the back wall to the front, the front
+        /// glass face on. Thin dark frames, a pale blue tint and a sheen, and the door near the left end.
+        private func glass(left: Int, right: Int, doorOpen: Bool) {
+            let ink: UInt32 = 0x2B2A33
+            let tint: UInt32 = 0xCFE8F3
+            let foot = MeetingRoom.front
+            let top = foot - MeetingRoom.glassHeight
+            let sideTop = RoomLayout.wall - MeetingRoom.glassHeight
+            // Panes rather than a post: the same tint and slanted sheen as the front, framed on both sides, capped
+            // on top, with rails where it meets the floor at the back wall and halfway to the front.
+            let side = 10
+            fill(left, sideTop, side, foot - sideTop, tint, 0.45)
+            for streak in stride(from: sideTop + 16, to: foot - 8, by: 22) {
+                for k in 0..<5 { fill(left + 2 + k, streak - k * 2, 2, 2, 0xFFFFFF, 0.45) }
+            }
+            fill(left, sideTop, 1, foot - sideTop, ink)
+            fill(left + side - 1, sideTop, 1, foot - sideTop, ink)
+            fill(left, sideTop - 2, side, 2, ink)
+            fill(left + 1, sideTop, side - 2, 1, 0xF4FAFD, 0.8)
+            for rail in [RoomLayout.wall - 1, (RoomLayout.wall + foot) / 2] { fill(left + 1, rail, side - 2, 1, ink) }
+
+            let doorX = left + MeetingRoom.doorX
+            let doorRight = doorX + MeetingRoom.doorWidth
+            for (from, to) in [(left + side, doorX), (doorRight, right)] {
+                fill(from, top, to - from, foot - top, tint, 0.28)
+                // A sheen: two pale streaks on each pane.
+                for pane in stride(from: from, to: to - 20, by: 44) {
+                    for k in 0..<12 { fill(pane + 8 + k, foot - 10 - k * 2, 2, 2, 0xFFFFFF, 0.35) }
+                    for k in 0..<7 { fill(pane + 18 + k, foot - 10 - k * 2, 1, 2, 0xFFFFFF, 0.3) }
+                }
+                var mullion = from + 44
+                while mullion < to - 8 {
+                    fill(mullion, top, 1, foot - top, ink)
+                    mullion += 44
+                }
+            }
+            fill(left, top - 2, right - left, 2, ink)
+            fill(left, top, right - left, 1, 0xF4FAFD, 0.8)
+            fill(left, foot - 2, right - left, 2, ink)
+            glassDoor(doorX, top, foot, open: doorOpen)
+        }
+
+        /// The meeting room's glass door, shut or standing open (swung in against its hinge on the left).
+        private func glassDoor(_ x: Int, _ top: Int, _ foot: Int, open: Bool) {
+            let ink: UInt32 = 0x2B2A33
+            let w = MeetingRoom.doorWidth
+            let h = foot - top
+            if open {
+                fill(x + 1, top - 6, 5, h, 0xCFE8F3, 0.55)
+                fill(x + 1, top - 6, 5, 1, ink)
+                fill(x + 5, top - 6, 1, h, ink)
+            } else {
+                fill(x + 1, top, w - 2, h, 0xCFE8F3, 0.42)
+                for k in 0..<9 { fill(x + 5 + k, foot - 8 - k * 3, 2, 2, 0xFFFFFF, 0.35) }
+                fill(x + w - 6, top + 15, 2, 11, ink)
+                fill(x + w - 6, top + 16, 1, 9, 0xD5DAE0)
+            }
+            fill(x, top, 2, h, ink)
+            fill(x + w - 2, top, 2, h, ink)
+        }
+
+        /// A piece of a sheet stretched to `w` × `h` without scaling: its edges as they are (left, top, right,
+        /// bottom widths), its middle repeated.
+        private func stretch(
+            _ sheet: String, _ source: (x: Int, y: Int, w: Int, h: Int), edges: (Int, Int, Int, Int), _ x: Int,
+            _ y: Int, _ w: Int, _ h: Int
+        ) {
+            func pieces(_ start: Int, _ size: Int, _ head: Int, _ tail: Int, _ length: Int) -> [(Int, Int, Int)] {
+                var result = [(start, head, 0)]
+                var at = head
+                while at < length - tail {
+                    let piece = min(size - head - tail, length - tail - at)
+                    result.append((start + head, piece, at))
+                    at += piece
+                }
+                return result + [(start + size - tail, tail, length - tail)]
+            }
+            for (sy, rows, dy) in pieces(source.y, source.h, edges.1, edges.3, h) {
+                for (sx, columns, dx) in pieces(source.x, source.w, edges.0, edges.2, w) {
+                    sprite(sheet, sx, sy, columns, rows, x + dx, y + dy)
+                }
+            }
+        }
+
+        /// A plant in the gap every other row leaves at its end, a tile clear of the islands, in rows with an
+        /// island.
+        private func plants(_ scene: OfficeScene) {
             let layout = scene.layout
-            var busy = (0..<scene.pods.count).map { index -> CGRect in
-                let o = layout.origin(of: index)
-                return CGRect(
-                    x: o.x - 6, y: o.y - 24, width: RoomLayout.podWidth + 12, height: RoomLayout.podDepth + 24)
-            }
-            let lastTurn =
-                scene.pods.isEmpty ? RoomLayout.firstRow : layout.route(pod: scene.pods.count - 1, desk: 0)[1].y
-            busy.append(
-                CGRect(x: 0, y: RoomLayout.wall, width: RoomLayout.lane, height: lastTurn + 4 - RoomLayout.wall))
-            let width = layout.width
-            let candidates: [(CGRect, () -> Void)] = [
-                (
-                    CGRect(x: 4, y: height - 66, width: 32, height: 64),
-                    { sprite(Sheet.planter, 128, 32, 32, 64, 4, height - 66) }
-                ),
-                (
-                    CGRect(x: width - 104, y: height - 64, width: 64, height: 62),
-                    { sprite(Sheet.copier, 0, 0, 64, 64, width - 104, height - 66) }
-                ),
-                (
-                    CGRect(x: width - 38, y: height - 98, width: 32, height: 96),
-                    { sprite(Sheet.planter, 64, 0, 32, 96, width - 38, height - 100) }
-                ),
-            ]
-            for (rect, draw) in candidates
-            where rect.minY >= CGFloat(RoomLayout.wall) - 10 && !busy.contains(where: { $0.intersects(rect) }) {
-                draw()
-                busy.append(rect)
+            for row in Set(scene.pods.map { $0.slot / layout.columns }) {
+                let end = RoomLayout.lane + layout.columns * (RoomLayout.islandWidth + RoomLayout.gap)
+                let x = row % 2 == 1 ? RoomLayout.lane : end
+                sprite(Sheet.planter, 128, 32, 32, 64, x, RoomLayout.firstRow + row * RoomLayout.rowPitch + 44)
             }
         }
 
-        // MARK: pods
+        // MARK: islands
 
+        /// One island, back to front: across the desks the chairs, the people facing the room (the pack's front
+        /// view, cut at the chest; the far desks hide the rest), the far desks and what stands on them; then the
+        /// near desks, their laptops and props, and the people with their backs to the room.
         private mutating func pod(_ pod: Pod, origin: (x: Int, y: Int), scene: OfficeScene) {
             let (x0, y0) = origin
-            let step = RoomLayout.deskWidth
-            for desk in 0..<4 { sprite(Sheet.desk, 67, 72, step, 56, x0 + desk * step, y0) }
-
-            // Who is at each desk right now (people still walking in are not there yet).
-            var states: [WorkState?] = []
-            var looks: [Look?] = []
-            if let session = pod.session, !scene.away.contains(OfficeScene.mainID(pod)) {
-                states.append(session.state)
-                looks.append(OfficeScene.mainLook(pod))
-            } else {
-                states.append(nil)
-                looks.append(nil)
+            let far = y0 + RoomLayout.farDesk
+            let near = y0 + RoomLayout.nearDesk
+            // Who is at each seat right now: people still walking in are not there yet.
+            let here = pod.seats.map { seat -> (look: Look, state: WorkState, headphones: Bool)? in
+                guard let seat, let id = OfficeScene.id(seat), !scene.away.contains(id), !scene.out.contains(id),
+                    let look = OfficeScene.look(seat), let state = OfficeScene.state(seat)
+                else { return nil }
+                return (look, state, scene.headphones.contains(id))
             }
-            for (index, mate) in pod.mates.enumerated() {
-                if let mate, !scene.away.contains(OfficeScene.mateID(mate)) {
-                    states.append(mate.state)
-                    looks.append(OfficeScene.mateLook(mate, desk: index + 1))
+            let out = pod.seats.map { seat in seat.flatMap(OfficeScene.id).map(scene.out.contains) ?? false }
+            let wentHome = pod.seats.map { seat -> Bool in
+                if case .off? = seat { return true }
+                return false
+            }
+
+            for seat in [1, 3] {
+                let cx = x0 + RoomLayout.personX(seat)
+                let top = far - 28
+                // A chair someone went home from is pushed back from the desk.
+                if wentHome[seat] {
+                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 13, top + 3)
                 } else {
-                    states.append(nil)
-                    looks.append(nil)
+                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, top + 11)
+                }
+                if let person = here[seat] {
+                    let nod = person.state == .resting && scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
+                    self.person(person.look, column: 0, rows: 28, CGFloat(cx - 24), CGFloat(top) + nod)
+                    if person.headphones { headphones(front: true, CGFloat(cx - 24), CGFloat(top) + nod) }
+                }
+            }
+            for seat in [1, 3] {
+                sprite(Sheet.desk, 67, 80, RoomLayout.deskWidth, 16, x0 + RoomLayout.deskX(seat), far)
+            }
+            let lit = scene.darkness > 0
+            for seat in [1, 3] {
+                let cx = x0 + RoomLayout.personX(seat)
+                // The back of the open laptop (the closed lid, standing), its logo lit while the screen is on.
+                if here[seat] != nil || out[seat] {
+                    sprite(Sheet.laptop, here[seat]?.state == .resting ? 0 : 32, 96, 32, 32, cx - 15, far - 6)
+                    if here[seat]?.state != .resting { screens.append((cx, far + 4)) }
+                    pools.append((cx - 3, far - 4))
+                } else if wentHome[seat] {
+                    sprite(Sheet.laptop, 0, 96, 32, 32, cx - 15, far - 4)
+                }
+                if let occupant = pod.seats[seat] {
+                    let x = x0 + RoomLayout.deskX(seat)
+                    prop(
+                        OfficeScene.prop(occupant), x: x, base: far + 6, across: true,
+                        lit: lit && (here[seat] != nil || out[seat]))
                 }
             }
 
-            for desk in 0..<4 {
-                let dx = x0 + desk * step
-                let state = states[desk]
-                // Laptop: closed at a desk someone left, dark while resting, on (and typing) while working.
-                if desk == 0, pod.isOff {
-                    sprite(Sheet.laptop, 0, 96, 32, 32, dx + 2, y0 - 6)
-                } else if let state {
-                    sprite(Sheet.laptop, state == .resting ? 0 : 32, 0, 32, 32, dx + 2, y0 - 8)
-                    if state != .resting { screens.append((dx + 18, y0 + 2)) }
-                    if state == .working { typing(dx + 2, y0 - 8, frame: scene.frame + desk) }
+            for seat in [0, 2] {
+                sprite(Sheet.desk, 67, 72, RoomLayout.deskWidth, 56, x0 + RoomLayout.deskX(seat), near)
+            }
+            for seat in [0, 2] {
+                let dx = x0 + RoomLayout.deskX(seat)
+                // Laptop: closed where someone went home, dark while resting, on (and typing) while working.
+                if wentHome[seat] {
+                    sprite(Sheet.laptop, 0, 96, 32, 32, dx + 2, near - 6)
+                } else if here[seat] != nil || out[seat] {
+                    let state = here[seat]?.state
+                    sprite(Sheet.laptop, state == .resting ? 0 : 32, 0, 32, 32, dx + 2, near - 8)
+                    if state != .resting { screens.append((dx + 18, near + 2)) }
+                    if state == .working { typing(dx + 2, near - 8, frame: scene.frame + seat) }
+                    pools.append((dx + 44, near + 21))
                 }
-                // The desk lamp is off by day and at empty desks; at night it is drawn again, lit, over the dark.
-                sprite(Sheet.lamp, 224, 32, 32, 32, dx + 34, y0 - 5, mirrored: true)
-                if state != nil, scene.darkness > 0 { lamps.append((dx + 34, y0 - 5)) }
+                if let occupant = pod.seats[seat] {
+                    prop(
+                        OfficeScene.prop(occupant), x: dx, base: near + 17, across: false,
+                        lit: lit && (here[seat] != nil || out[seat]))
+                }
+            }
+            for seat in [0, 2] {
+                let cx = x0 + RoomLayout.personX(seat)
+                if let person = here[seat] {
+                    sit(
+                        person.look, cx: cx, top: near, nod: person.state == .resting && scene.frame % 4 >= 2,
+                        headphones: person.headphones)
+                } else if wentHome[seat] {
+                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 13, near + 33)
+                } else {
+                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, near + 26)
+                }
             }
 
-            for desk in 0..<4 {
-                let cx = x0 + desk * step + 36
-                guard let state = states[desk], let look = looks[desk] else {
-                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, y0 + 26)
-                    continue
+            // Everyone stays seated; the bubble tells the states apart. The "!" hops while waiting; with Reduce
+            // Motion the frame stays 0, so it holds still. Across the desks the bubble sits beside the head, so
+            // the name tag above it stays clear. With the back to the room it sits at shoulder height beside the
+            // chair, on the island's outer side, pointing in: above the head it floated right under the face
+            // across the desk and read as that person's.
+            for seat in 0..<Island.size {
+                guard let person = here[seat] else { continue }
+                let hop = person.state == .waiting && scene.frame % 2 == 1 ? 2 : 0
+                let cx = x0 + RoomLayout.personX(seat)
+                if RoomLayout.isAcross(seat) {
+                    marks.append((Mark(person.state), cx + 9, far - 25 - hop, .down))
+                } else if seat == 0 {
+                    marks.append((Mark(person.state), cx - 27, near + 25 - hop, .right))
+                } else {
+                    marks.append((Mark(person.state), cx + 14, near + 25 - hop, .left))
                 }
-                // Everyone stays seated; the bubble tells the states apart. Resting heads nod.
-                let seat = Seat(look: look, cx: cx, top: y0, nod: state == .resting && scene.frame % 4 >= 2)
-                sit(seat)
-                // The "!" hops while waiting. With Reduce Motion the frame stays 0, so it holds still.
-                let hop = state == .waiting && scene.frame % 2 == 1 ? 2 : 0
-                marks.append((Mark(state), cx, y0 + 8 - hop))
             }
+        }
+
+        /// A desk prop: on a near desk right of the person, across the desks left of the person. A lamp is off by
+        /// day and where nobody works; at night it is drawn again, lit, over the dark.
+        private mutating func prop(_ prop: Prop, x dx: Int, base: Int, across: Bool, lit: Bool) {
+            switch prop {
+            case .lamp:
+                let x = across ? dx : dx + 34
+                sprite(Sheet.lamp, 224, 32, 32, 32, x, base - 22, mirrored: !across)
+                if lit {
+                    litLamps.append((192, x, base - 22, !across))
+                    bulbs.append(across ? (x + 17, base - 17) : (x + 12, base - 10))
+                }
+            case .shade:
+                let x = across ? dx + 1 : dx + 38
+                sprite(Sheet.lamp, 160, 32, 32, 32, x, base - 28)
+                if lit {
+                    litLamps.append((128, x, base - 28, false))
+                    bulbs.append((x + 12, base - 18))
+                }
+            case .flowers:
+                sprite(Sheet.planter, 128, 0, 32, 32, across ? dx - 1 : dx + 34, base - 31)
+            case .laptop:
+                if across {
+                    sprite(Sheet.laptop, 64, 96, 32, 32, dx - 4, base - 12)
+                } else {
+                    sprite(Sheet.laptop, 64, 0, 32, 32, dx + 36, base - 25)
+                }
+            case .coffee:
+                small(Sheet.dishes, (0, 0), middle: 16, foot: 22, dx: dx, base: base, across: across)
+                small(Sheet.coffee, (64, 0), middle: 15, foot: 19, dx: dx, base: base - 4, across: across)
+            case .phone:
+                small(Sheet.phones, (32, 32), middle: 15, foot: 29, dx: dx, base: base, across: across)
+            case .photo:
+                small(Sheet.photos, (32, 32), middle: 16, foot: 19, dx: dx, base: base, across: across)
+            case .papers:
+                small(Sheet.papers, (32, 64), middle: 15, foot: 25, dx: dx - 3, base: base - 1, across: across)
+                small(Sheet.coffee, (64, 0), middle: 15, foot: 19, dx: dx + 7, base: base + 2, across: across)
+            case .box:
+                small(Sheet.boxes, (32, 32), middle: 16, foot: 24, dx: dx, base: base, across: across)
+            case .plant:
+                small(Sheet.flowers, (128, 64), middle: 15, foot: 28, dx: dx, base: base, across: across)
+            case .vase:
+                small(Sheet.flowers, (192, 0), middle: 15, foot: 23, dx: dx, base: base, across: across)
+                small(Sheet.flowers, (96, 64), middle: 15, foot: 23, dx: dx, base: base, across: across)
+            }
+        }
+
+        /// One small thing from a sheet's 32-pixel cell, its `middle` column and `foot` row (cell pixels) put
+        /// where desk props stand: left of someone facing the room, right of someone with their back to it.
+        private func small(
+            _ sheet: String, _ cell: (x: Int, y: Int), middle: Int, foot: Int, dx: Int, base: Int, across: Bool
+        ) {
+            sprite(sheet, cell.x, cell.y, 32, 32, dx + (across ? 10 : 51) - middle, base - foot)
         }
 
         /// The pack has no sitting pose: the back of a standing person, cut under the shoulders (sheet row 24),
         /// behind the chair's backrest. Shoulders (row 20) sit 4 art pixels below the top of the backrest.
-        private func sit(_ seat: Seat) {
-            let nod = seat.nod ? OfficeRenderer.personPixel : 0
-            person(seat.look, column: 12, rows: 24, CGFloat(seat.cx) - 24, CGFloat(seat.top) + 2 + nod)
-            sprite(Sheet.chair, 0, 0, 32, 32, seat.cx - 16, seat.top + 28)
+        private func sit(_ look: Look, cx: Int, top: Int, nod: Bool, headphones: Bool) {
+            let y = CGFloat(top) + 2 + (nod ? OfficeRenderer.personPixel : 0)
+            person(look, column: 12, rows: 24, CGFloat(cx) - 24, y)
+            if headphones { self.headphones(front: false, CGFloat(cx) - 24, y) }
+            sprite(Sheet.chair, 0, 0, 32, 32, cx - 16, top + 28)
+        }
+
+        /// Headphones over the hair of a person drawn at `x`, `y` (the corner of their cell), at the people's own
+        /// pixel size: seen from the front or from the back.
+        private func headphones(front: Bool, _ x: CGFloat, _ y: CGFloat) {
+            let rows = front ? Headphones.front : Headphones.back
+            let picture = art.picture("headphones \(front)") {
+                Headphones.picture(rows, scale: Self.personScale)
+            }
+            let pixel = OfficeRenderer.personPixel
+            image(
+                picture, x + CGFloat(Headphones.left) * pixel, y + CGFloat(front ? 1 : 2) * pixel,
+                pixel: Self.bitmapPixel)
         }
 
         /// The top `rows` of one cell of every layer of a person, at `x`, `y` in art pixels.
         private func person(
             _ look: Look, column: Int, rows: Int = 32, _ x: CGFloat, _ y: CGFloat, mirrored: Bool = false
         ) {
+            let pixel = OfficeRenderer.personPixel
+            guard visible(x, y, 32 * pixel, CGFloat(rows) * pixel) else { return }
             for layer in look.layers {
                 image(
                     art.cell(layer.sheet, column * 32, layer.row * 32, 32, rows, scale: Self.personScale), x, y,
@@ -607,6 +1139,21 @@ struct OfficeRenderer {
             }
         }
 
+        /// A slide on the meeting room's TV while a meeting has the room (the pack's TV is either off or shows no
+        /// signal): a title and a small bar chart.
+        private func slide(_ x: Int, _ y: Int) {
+            fill(x, y, 60, 32, 0xF2F4F7)
+            fill(x + 5, y + 4, 24, 3, 0x2B3A55)
+            fill(x + 5, y + 9, 16, 1, 0x8E95A0)
+            for (i, height) in [8, 13, 10, 17].enumerated() {
+                fill(x + 30 + i * 7, y + 27 - height, 5, height, i == 3 ? 0xD04A3A : 0x3D6FD1)
+            }
+            fill(x + 5, y + 14, 20, 1, 0xB8BEC8)
+            fill(x + 5, y + 18, 18, 1, 0xB8BEC8)
+            fill(x + 5, y + 22, 21, 1, 0xB8BEC8)
+            fill(x + 28, y + 27, 29, 1, 0x3A3F47)
+        }
+
         private func whiteboard(_ x: Int, _ y: Int) {
             let w = 56
             let h = 32
@@ -654,18 +1201,26 @@ struct OfficeRenderer {
             line(Double(cx), Double(cy), Double(cx) + sin(hr) * 2.6, Double(cy) - cos(hr) * 2.6, 0xC24A3A)
         }
 
-        /// A pixel speech bubble (13 × 10) with a symbol, its tail pointing at the head below.
-        private func bubble(_ mark: Mark, _ cx: Int, _ top: Int) {
+        /// A pixel speech bubble (13 × 10) with a symbol, its top-left corner at `x`, `y`, its tail pointing at
+        /// the person: down at a head below, or sideways at a shoulder.
+        private func bubble(_ mark: Mark, _ x: Int, _ y: Int, _ tail: Tail) {
             let w = 13
             let h = 10
-            let x = cx - w / 2
-            let y = top - h - 4
-            fill(x, y + 1, w, h - 2, 0x2B2233)
-            fill(x + 1, y, w - 2, h, 0x2B2233)
-            fill(x + 1, y + 1, w - 2, h - 2, mark == .bang ? 0xFFD23F : 0xFFFFFF)
-            fill(x + 5, y + h, 3, 1, 0x2B2233)
-            fill(x + 6, y + h + 1, 1, 1, 0x2B2233)
             let ink: UInt32 = 0x2B2233
+            fill(x, y + 1, w, h - 2, ink)
+            fill(x + 1, y, w - 2, h, ink)
+            fill(x + 1, y + 1, w - 2, h - 2, mark == .bang ? 0xFFD23F : 0xFFFFFF)
+            switch tail {
+            case .down:
+                fill(x + 5, y + h, 3, 1, ink)
+                fill(x + 6, y + h + 1, 1, 1, ink)
+            case .left:
+                fill(x - 1, y + 4, 1, 3, ink)
+                fill(x - 2, y + 5, 1, 1, ink)
+            case .right:
+                fill(x + w, y + 4, 1, 3, ink)
+                fill(x + w + 1, y + 5, 1, 1, ink)
+            }
             switch mark {
             case .dots:
                 for dx in [3, 6, 9] { fill(x + dx, y + 5, 1, 1, ink) }
@@ -681,9 +1236,25 @@ struct OfficeRenderer {
             }
         }
 
+        /// Two small empty speech bubbles, the second over the first's lower right (16 × 12, corner at `x`, `y`):
+        /// two people talking. No words in them, since the app never knows what was said; the state symbols are
+        /// one bubble with a symbol, so the two don't mix up.
+        private func talk(_ x: Int, _ y: Int) {
+            let ink: UInt32 = 0x2B2233
+            for (bx, by, tail) in [(x, y, x + 1), (x + 6, y + 3, x + 13)] {
+                fill(bx + 1, by, 8, 1, ink)
+                fill(bx + 1, by + 6, 8, 1, ink)
+                fill(bx, by + 1, 1, 5, ink)
+                fill(bx + 9, by + 1, 1, 5, ink)
+                fill(bx + 1, by + 1, 8, 5, 0xFFFFFF)
+                fill(tail, by + 7, 2, 1, ink)
+                fill(tail + (tail == bx + 1 ? 0 : 1), by + 8, 1, 1, ink)
+            }
+        }
+
         // MARK: night
 
-        /// The room dims, the windows show the city at night, and only desks with someone at them glow.
+        /// The room dims, the windows show the city at night, and only seats with someone at them glow.
         private func night(_ scene: OfficeScene, glass: [CGRect]) {
             let d = CGFloat(scene.darkness)
             guard d > 0 else { return }
@@ -691,7 +1262,7 @@ struct OfficeRenderer {
             // and keep about half their daytime colours, so the lamp shows who sits there.
             let width = scene.layout.width
             let height = self.height
-            let pools = lamps.map { CGPoint(x: $0.x + 10, y: height - $0.y - 26) }
+            let pools = self.pools.map { CGPoint(x: $0.x, y: height - $0.y) }
             let key = pools.map { "\(Int($0.x)),\(Int($0.y))" }.joined(separator: " ")
             let shade = art.picture("shade \(width)x\(height) \(Int(d * 100)) \(key)") { [art] in
                 OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
@@ -732,13 +1303,12 @@ struct OfficeRenderer {
             let pool = glow(0xFFB15C, 0.5 * d, radius: 46)
             let bulb = glow(0xFFE2A8, 0.6 * d, radius: 12)
             for screen in screens { stamp(screenLight, screen.x - 22, screen.y - 22) }
-            for lamp in lamps {
-                stamp(pool, lamp.x + 10 - 46, lamp.y + 26 - 46)
-                stamp(bulb, lamp.x, lamp.y)
-            }
+            for center in self.pools { stamp(pool, center.x - 46, center.y - 46) }
+            for center in bulbs { stamp(bulb, center.x - 12, center.y - 12) }
             context.setBlendMode(.normal)
             context.setAlpha(d)
-            for lamp in lamps { sprite(Sheet.lamp, 192, 32, 32, 32, lamp.x, lamp.y, mirrored: true) }
+            for lamp in litLamps { sprite(Sheet.lamp, lamp.sx, 32, 32, 32, lamp.x, lamp.y, mirrored: lamp.mirrored) }
+            if let litSlide { slide(litSlide.x, litSlide.y) }
             context.setAlpha(1)
         }
 

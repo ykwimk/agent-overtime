@@ -10,7 +10,8 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     }
 
-    static let artists = ["Eliza Wyatt", "Lanea \"Sharm\" Zimmerman"]
+    /// Everyone named on an ARTIST(S) line of the credits; a test keeps the two in step.
+    static let artists = ["Eliza Wyatt", "Lanea \"Sharm\" Zimmerman", "BlueCarrot16", "Richard \"Jetrel\" Kettering"]
     static let artLicenseURL = URL(string: "https://static.opengameart.org/OGA-BY-3.0.txt")!
     static let peopleURL = URL(string: "https://jik-a-4.itch.io/metrocity-free-topdown-character-pack")!
 
@@ -79,14 +80,35 @@ struct SettingsView: View {
                 LabeledContent {
                     Text(verbatim: "\(model.office.desks.count)")
                 } label: {
-                    Text("Remembered desks")
+                    Text("Recent folders")
                 }
-                Button("Forget Empty Desks") { model.forgetEmptyDesks() }
+                Button("Clear Recent Folders") { model.forgetIdleFolders() }
                     .disabled(!model.office.desks.contains(where: \.isOff))
-                Text("Desks are the folders sessions ran in, kept only on this Mac.").font(.callout).foregroundStyle(
-                    .secondary)
+                Text(
+                    "Folders sessions ran in, to pick from when you set up Start Work. Kept only on this Mac; folders with a session running stay."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
             } header: {
-                Text("Desks")
+                Text("Recent Folders")
+            }
+
+            Section {
+                let count = model.office.nicknames.folders.count + model.office.nicknames.agents.count
+                LabeledContent {
+                    Text(verbatim: "\(count)")
+                } label: {
+                    Text("Saved nicknames")
+                }
+                Button("Clear All Nicknames") { model.forgetNicknames() }
+                    .disabled(count == 0)
+                Text(
+                    "Names you gave sessions and teammates with the pencil button next to the name in the side panel. Kept only on this Mac."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
+            } header: {
+                Text("Nicknames")
             }
 
             Section {

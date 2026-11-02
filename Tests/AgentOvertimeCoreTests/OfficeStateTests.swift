@@ -85,6 +85,32 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks[0].sessions.map(\.id), ["s1", "s2"])
     }
 
+    /// Same names get numbers in arrival order. Nobody is renumbered when someone leaves; a newcomer takes the
+    /// smallest free number. Folders elsewhere with the same name count as the same name.
+    func testSameNamesGetNumbersInArrivalOrder() {
+        var office = OfficeState()
+        office.apply(event(.sessionStart, "s1"), now: t0)
+        office.apply(event(.sessionStart, "s2"), now: t0)
+        office.apply(event(.sessionStart, "s3", cwd: "/elsewhere/shop"), now: t0)
+        func names() -> [String] { office.desks.flatMap(\.sessions).map(\.name) }
+        XCTAssertEqual(names(), ["shop", "shop 2", "shop 3"])
+        office.apply(event(.sessionEnd, "s1"), now: t0)
+        XCTAssertEqual(names(), ["shop 2", "shop 3"], "the others keep their numbers")
+        office.apply(event(.sessionStart, "s4"), now: t0)
+        office.apply(event(.sessionStart, "s5"), now: t0)
+        XCTAssertEqual(names(), ["shop 2", "shop", "shop 4", "shop 3"], "smallest free number first")
+
+        for (id, type) in [("a1", "Plan"), ("a2", "Plan"), ("a3", nil), ("a4", nil)] {
+            office.apply(event(.subagentStart, "s2", agent: id, type: type), now: t0)
+        }
+        office.apply(event(.subagentStart, "s4", agent: "a5", type: "Plan"), now: t0)
+        func mates() -> [String] { office.desks.flatMap(\.teammates).map { "\($0.name ?? "helper") \($0.number)" } }
+        XCTAssertEqual(mates(), ["Plan 1", "Plan 2", "helper 1", "helper 2", "Plan 3"], "across sessions too")
+        office.apply(event(.subagentStop, "s2", agent: "a1"), now: t0)
+        office.apply(event(.subagentStart, "s2", agent: "a6", type: "Plan"), now: t0)
+        XCTAssertEqual(mates(), ["Plan 2", "helper 1", "helper 2", "Plan 1", "Plan 3"])
+    }
+
     func testWaitingSinceCountsFromTheFirstPrompt() {
         var office = OfficeState()
         office.apply(event(.permissionRequest), now: t0)
@@ -197,12 +223,14 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks.map(\.isOff), [true, false, false], "no pid means no guess")
     }
 
-    func testRememberedDesksStartOffAndCanBeForgotten() {
+    /// Recent folders (for Start Work) can be cleared; a folder with a session running stays.
+    func testRecentFoldersCanBeCleared() {
         var office = OfficeState(folders: ["/a/one", "/a/two"])
         XCTAssertEqual(office.desks.map(\.isOff), [true, true])
         office.apply(event(.sessionStart, cwd: "/a/two"), now: t0)
-        office.forgetEmptyDesks()
+        office.forgetIdleFolders()
         XCTAssertEqual(office.folders, ["/a/two"])
+        XCTAssertEqual(office.islands.count, 1, "seats are untouched")
     }
 
     /// A new folder sits where it is seen first, not below every remembered desk.
@@ -249,11 +277,8 @@ final class OfficeStateTests: XCTestCase {
         for i in 1...9 { office.apply(event(.subagentStart, "s1", agent: "a\(i)"), now: t0) }
         office.apply(event(.permissionRequest, "s1", agent: "a9"), now: t0)
         XCTAssertEqual(office.count(.waiting), 2, "so does the 9th teammate's")
-        var plan = SeatPlan()
-        let pods = plan.pods(for: office)
-        XCTAssertEqual(pods.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
-        XCTAssertEqual(pods[0].extra, 6, "three at desks, six as +6")
-        XCTAssertTrue(pods[0].teammateWaiting)
+        XCTAssertEqual(office.desks[0].sessions.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
+        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 14, "everyone has a seat")
     }
 
     func testCounts() {
@@ -272,5 +297,46 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertFalse(office.hasLiveSession(in: FakeScenario.root + "/prototype"))
         XCTAssertTrue(office.hasLiveSession(in: FakeScenario.root), "a start script may open sessions in subfolders")
         XCTAssertFalse(office.hasLiveSession(in: FakeScenario.root + "/web"), "a name prefix is not a subfolder")
+    }
+
+    /// The latest kind of tool stays in memory for the side panel until the turn ends, and goes with the session or
+    /// teammate. It changes nothing drawn, so the office stays equal.
+    func testTheLatestToolKindIsKeptInMemoryOnly() {
+        var office = OfficeState()
+        office.apply(event(.userPromptSubmit), now: t0)
+        let before = office
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .edit), now: t0 + 1)
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .command), now: t0 + 2)
+        XCTAssertEqual(office.toolKind(session: "s1"), .command)
+        XCTAssertEqual(office, before, "the same picture")
+        office.apply(
+            HookEvent(kind: .preToolUse, session: "s1", cwd: shop, agentID: "a1", toolKind: .read), now: t0 + 3)
+        XCTAssertEqual(office.toolKind(teammate: "a1"), .read)
+        office.apply(event(.permissionRequest), now: t0 + 4)
+        XCTAssertEqual(office.toolKind(session: "s1"), .command, "a wait keeps it")
+        office.apply(event(.stop), now: t0 + 5)
+        XCTAssertNil(office.toolKind(session: "s1"), "the turn ended")
+        office.apply(event(.subagentStop, agent: "a1"), now: t0 + 6)
+        XCTAssertNil(office.toolKind(teammate: "a1"))
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .web), now: t0 + 7)
+        office.apply(event(.sessionEnd), now: t0 + 8)
+        XCTAssertNil(office.toolKind(session: "s1"))
+    }
+
+    /// Messages from ids nobody seated leave no news or tool kind behind: memory doesn't grow with them.
+    func testMessagesFromStrangersLeaveNothingInMemory() {
+        var office = OfficeState()
+        office.apply(event(.userPromptSubmit), now: t0)
+        for i in 0..<100 {
+            office.apply(
+                HookEvent(
+                    kind: .preToolUse, session: "s1", cwd: shop, agentID: "x\(i)", toolKind: .team, sendsMessage: true,
+                    recipient: "main"), now: t0 + Double(i))
+        }
+        for i in 0..<100 {
+            XCTAssertNil(office.lastNews(teammate: "x\(i)"))
+            XCTAssertNil(office.toolKind(teammate: "x\(i)"))
+        }
+        XCTAssertEqual(office.desks[0].sessions[0].teammates, [], "nobody new sat down")
     }
 }

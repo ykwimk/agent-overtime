@@ -33,100 +33,230 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(Daylight.darkness(at: at(7, 0, 3), calendar: seoul), 0)
     }
 
-    /// The default window holds four pods without scrolling; the smallest holds one whole pod.
-    func testWindowSizesFitThePods() {
-        let topBar = 64  // the summary bar is about 57 pt; the capture test measures the real one
-        let standard = RoomLayout(points: Double(RoomLayout.defaultWindow.width), podCount: 4)
+    /// The default window holds four islands (16 people) and the right-hand column without scrolling, inside a
+    /// 1280 × 800 screen; the smallest holds one whole island.
+    func testWindowSizesFitTheIslands() throws {
+        let topBar = 58  // the summary bar and its divider; the capture test measures the real one
+        XCTAssertLessThanOrEqual(RoomLayout.defaultWindow.width, 1280)
+        XCTAssertLessThanOrEqual(RoomLayout.defaultWindow.height, 800)
+
+        let standard = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
         XCTAssertEqual(standard.columns, 2)
         XCTAssertEqual(standard.rows, 2)
         XCTAssertLessThanOrEqual(
             standard.contentHeight * RoomLayout.pointsPerPixel + topBar, RoomLayout.defaultWindow.height)
-        let right = standard.origin(of: 3).x + RoomLayout.podWidth
-        XCTAssertLessThanOrEqual(right, standard.width - RoomLayout.margin)
+        let pillar = try XCTUnwrap(standard.pillar)
+        for slot in 0..<4 {
+            XCTAssertLessThanOrEqual(standard.origin(of: slot).x + RoomLayout.islandWidth + RoomLayout.gap, pillar)
+        }
+        XCTAssertEqual(pillar + RoomLayout.pillarWidth + RoomLayout.margin, standard.width)
 
-        let smallest = RoomLayout(points: Double(RoomLayout.minWindow.width), podCount: 1)
+        let smallest = RoomLayout(points: Double(RoomLayout.minWindow.width), slots: 1)
         XCTAssertEqual(smallest.columns, 1)
-        XCTAssertLessThanOrEqual(smallest.origin(of: 0).x + RoomLayout.podWidth, smallest.width)
+        XCTAssertNil(smallest.pillar, "too narrow for the meeting room column")
+        XCTAssertLessThanOrEqual(smallest.origin(of: 1).x + RoomLayout.islandWidth, smallest.width - RoomLayout.margin)
         XCTAssertLessThanOrEqual(
             smallest.contentHeight * RoomLayout.pointsPerPixel + topBar, RoomLayout.minWindow.height)
 
-        let many = RoomLayout(points: Double(RoomLayout.defaultWindow.width), podCount: 9)
-        XCTAssertEqual(many.rows, 5, "more pods only add rows; the art keeps its size")
-        XCTAssertEqual(RoomLayout(points: 2000, podCount: 9).columns, 3)
+        XCTAssertEqual(
+            RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 9).rows, 5,
+            "more islands only add rows; the art keeps its size")
+        XCTAssertEqual(RoomLayout(points: 2000, slots: 9).columns, 4)
+        let narrow = RoomLayout(points: 860, slots: 4)
+        XCTAssertNil(narrow.pillar)
+        XCTAssertEqual(narrow.columns, 2)
     }
 
-    func testRouteGoesDownTheLaneThenAlongTheRowBehindTheChairs() {
-        let layout = RoomLayout(points: 1080, podCount: 4)
-        let route = layout.route(pod: 3, desk: 2)
-        let stand = layout.standPoint(pod: 3, desk: 2)
-        XCTAssertEqual(route.count, 4)
-        XCTAssertEqual(route[0].x, route[1].x, "straight down from the door")
-        XCTAssertLessThan(route[0].x, RoomLayout.lane, "the lane is left of every pod")
-        XCTAssertEqual(route[1].y, route[2].y, "then along the row")
-        XCTAssertGreaterThanOrEqual(route[1].y - stand.y, 24, "below the seated heads, not over them")
-        XCTAssertLessThan(route[1].y, layout.origin(of: 3).y + RoomLayout.podDepth, "inside the pod's own row")
-        XCTAssertEqual(route[2].x, stand.x)
-        XCTAssertEqual(route[3].x, stand.x, "then up to the chair")
-        XCTAssertEqual(route[3].y, stand.y)
+    /// The meeting room (and the lounge under it) lives in the right-hand column only, so the smallest window has
+    /// none. Its six seats are inside its glass, its door clears the table, and the room is never cut off: the
+    /// office is at least as tall as the column.
+    func testMeetingRoomOnlyInTheRightHandColumn() throws {
+        XCTAssertNil(RoomLayout(points: Double(RoomLayout.minWindow.width), slots: 1).meetingRoom)
+        XCTAssertNil(RoomLayout(points: 860, slots: 4).meetingRoom)
+
+        let standard = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        let room = try XCTUnwrap(standard.meetingRoom)
+        XCTAssertEqual(room.left, standard.pillar)
+        XCTAssertEqual(room.seats.count, 6)
+        for seat in room.seats {
+            XCTAssert((room.left + 4..<standard.width).contains(seat.x), "\(seat)")
+            XCTAssert((RoomLayout.wall..<MeetingRoom.front).contains(seat.y), "\(seat)")
+        }
+        XCTAssertLessThanOrEqual(MeetingRoom.doorX + MeetingRoom.doorWidth, MeetingRoom.table.x)
+        XCTAssertGreaterThan(room.doorstep.y, MeetingRoom.front, "outside the glass")
+        XCTAssertGreaterThanOrEqual(standard.contentHeight, MeetingRoom.columnDepth)
+        XCTAssertEqual(
+            RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 1).contentHeight,
+            MeetingRoom.columnDepth, "one island: the lounge still shows whole")
     }
 
-    private func event(
-        _ kind: HookEvent.Kind, _ session: String, cwd: String = "/Users/me/my-project", agent: String? = nil,
-        type: String? = nil
-    ) -> HookEvent {
-        HookEvent(kind: kind, session: session, cwd: cwd, agentID: agent, agentType: type)
+    /// The pots along the meeting room's glass keep clear of every walk to a seat, of the islands, and of the glass
+    /// door and the floor in front of it, at any window width with a right-hand column.
+    func testPlantersKeepWalksIslandsAndTheDoorClear() throws {
+        typealias Box = (x: Int, y: Int, width: Int, height: Int)
+        func overlap(_ a: Box, _ b: Box) -> Bool {
+            a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        }
+        for points in [Double(RoomLayout.defaultWindow.width), 1440, 2000] {
+            let layout = RoomLayout(points: points, slots: 9)
+            let room = try XCTUnwrap(layout.meetingRoom, "\(points)")
+            let pots = room.planters.map(MeetingRoom.footprint)
+            XCTAssertGreaterThanOrEqual(pots.count, 4)
+            var clear: [Box] = [
+                (
+                    room.left + MeetingRoom.doorX, MeetingRoom.front, MeetingRoom.doorWidth,
+                    room.doorstep.y + 8 - MeetingRoom.front
+                )
+            ]
+            for slot in 0..<9 {
+                let o = layout.origin(of: slot)
+                clear.append((o.x, o.y, RoomLayout.islandWidth, RoomLayout.islandDepth))
+                for seat in 0..<Island.size {
+                    let route = layout.route(slot: slot, seat: seat)
+                    // Each leg of a walk, as wide as the walker's feet and shadow.
+                    for (a, b) in zip(route, route.dropFirst()) {
+                        clear.append((min(a.x, b.x) - 8, min(a.y, b.y) - 2, abs(a.x - b.x) + 16, abs(a.y - b.y) + 4))
+                    }
+                }
+            }
+            for pot in pots {
+                for box in clear { XCTAssertFalse(overlap(pot, box), "\(points) pt: pot \(pot) blocks \(box)") }
+            }
+        }
     }
 
-    /// A folder's second session gets its own pod, and teammates sit only with the session that called them.
-    func testEachSessionHasItsOwnPodAndTeammates() {
+    /// Every other row moves right, so islands don't line up; side by side and row to row, a tile stays clear.
+    func testIslandsStaggerAndKeepATileClear() {
+        let room = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        XCTAssertEqual(room.origin(of: 2).x - room.origin(of: 0).x, RoomLayout.stagger)
+        XCTAssertEqual(room.origin(of: 3).x - room.origin(of: 2).x, RoomLayout.islandWidth + RoomLayout.gap)
+        XCTAssertGreaterThanOrEqual(RoomLayout.gap, 32)
+        XCTAssertGreaterThanOrEqual(RoomLayout.stagger - RoomLayout.gap, 32, "a plant's room past the clear tile")
+        XCTAssertGreaterThanOrEqual(room.origin(of: 2).y - room.origin(of: 0).y, RoomLayout.islandDepth)
+        XCTAssertGreaterThanOrEqual(room.origin(of: 0).x, RoomLayout.lane, "the lane stays clear")
+    }
+
+    func testRouteGoesDownTheLaneThenAlongTheAisleToTheSeat() {
+        let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        for slot in 0..<4 {
+            for seat in 0..<Island.size {
+                let route = layout.route(slot: slot, seat: seat)
+                let stand = layout.standPoint(slot: slot, seat: seat)
+                let o = layout.origin(of: slot)
+                let name = "island \(slot) seat \(seat): \(route)"
+                XCTAssertEqual(route[0].x, route[1].x, "straight down from the door")
+                XCTAssertLessThan(route[0].x, RoomLayout.lane, "the lane is left of every island")
+                XCTAssertEqual(route.last!.x, stand.x)
+                XCTAssertEqual(route.last!.y, stand.y)
+                for (p, q) in zip(route, route.dropFirst()) { XCTAssert(p.x == q.x || p.y == q.y, name) }
+                XCTAssertFalse(
+                    route.dropFirst().contains { $0.y == RoomLayout.wall + 2 },
+                    "never along the foot of the wall, under the first row's name tags: \(name)")
+                if RoomLayout.isAcross(seat) {
+                    XCTAssertLessThan(stand.y, o.y + RoomLayout.farDesk, "behind the far desk")
+                    let end = route[route.count - 2]
+                    XCTAssertEqual(end.y, stand.y, "in from the island's end: \(name)")
+                    XCTAssert(end.x < o.x || end.x > o.x + RoomLayout.islandWidth, "past the island's end: \(name)")
+                    if slot >= layout.columns {
+                        XCTAssert((o.y - 6...o.y).contains(route[1].y), "between the rows: \(name)")
+                    } else {
+                        XCTAssert(
+                            route.dropFirst().allSatisfy { $0.y >= stand.y }, "the first row: from below: \(name)")
+                    }
+                } else {
+                    XCTAssertEqual(route.count, 4, name)
+                    XCTAssertGreaterThanOrEqual(route[1].y - stand.y, 20, "below the seated heads, not over them")
+                    XCTAssertLessThan(route[1].y, o.y + RoomLayout.islandDepth, "inside the island's own row")
+                }
+            }
+        }
+        // The first island's end is the lane: straight down to the seat's line, not down and back up.
+        XCTAssertEqual(layout.route(slot: 0, seat: 1).count, 3)
+    }
+
+    /// Talking with someone across the desks: standing at the island's end, on clear floor. The body and the
+    /// speaking mark over the head stay off every name tag (a tag can be as wide as its desk, three lines tall).
+    func testVisitsAcrossTheDesksStandClearOfNameTags() {
+        typealias Box = (x: Int, y: Int, width: Int, height: Int)
+        func overlap(_ a: Box, _ b: Box) -> Bool {
+            a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        }
+        let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        let tags: [Box] = (0..<4).flatMap { slot in
+            (0..<Island.size).map { seat -> Box in
+                let o = layout.origin(of: slot)
+                let x = o.x + RoomLayout.deskX(seat)
+                let y = RoomLayout.isAcross(seat) ? o.y : o.y + RoomLayout.islandDepth - 23
+                return (x, y, RoomLayout.deskWidth, 23)
+            }
+        }
+        for slot in 0..<4 {
+            for seat in [1, 3] {
+                let spot = layout.besideSpot(slot: slot, seat: seat)
+                let feet = spot.tail.last!
+                let o = layout.origin(of: slot)
+                XCTAssert(feet.x < o.x || feet.x > o.x + RoomLayout.islandWidth, "at the island's end")
+                XCTAssertLessThan(abs(feet.y - 41 - (o.y + 24)), 12, "heads about level")
+                let standing: Box = (feet.x - 16, feet.y - 53, 32, 53)
+                for tag in tags { XCTAssertFalse(overlap(standing, tag), "island \(slot) seat \(seat): \(tag)") }
+                let walk = layout.path(from: layout.deskSpot(slot: 0, seat: 0), to: spot)
+                XCTAssertFalse(walk.contains { $0.y == RoomLayout.wall + 2 }, "not along the foot of the wall")
+            }
+        }
+    }
+
+    /// From any seat to beside any other: straight lines only, along aisles (never across an island), between
+    /// rows by the lane or the passage beside the right-hand column, whichever is shorter. Only the step behind
+    /// a far desk to or from a seat across the desks leaves the aisles.
+    func testWalksBetweenSeatsKeepToTheAislesAndPassages() {
+        let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        let passage = layout.pillar! - 20
+        let aisles = Set((0..<4).flatMap { slot in (0..<Island.size).map { layout.aisle(slot: slot, seat: $0) } })
+        for a in 0..<16 {
+            for b in 0..<16 where a != b {
+                let from = layout.deskSpot(slot: a / 4, seat: a % 4)
+                let to = layout.besideSpot(slot: b / 4, seat: b % 4)
+                let path = layout.path(from: from, to: to)
+                let end = to.tail.last ?? (to.x, to.aisle)
+                XCTAssertEqual(path.first!.x, from.tail.last!.x)
+                XCTAssertEqual(path.first!.y, from.tail.last!.y)
+                XCTAssertEqual(path.last!.x, end.x)
+                XCTAssertEqual(path.last!.y, end.y)
+                for (index, (p, q)) in zip(path, path.dropFirst()).enumerated() {
+                    XCTAssert(p.x == q.x || p.y == q.y, "\(a) → \(b): \(path)")
+                    if p.y == q.y, index > 0 || from.tail.count < 2 {
+                        XCTAssert(aisles.contains(p.y), "along an aisle: \(a) → \(b): \(path)")
+                    }
+                    if p.x == q.x, p.x != from.x, p.x != to.x {
+                        XCTAssert([RoomLayout.laneX, passage].contains(p.x), "\(a) → \(b): \(path)")
+                    }
+                }
+            }
+        }
+        let far = layout.path(from: layout.deskSpot(slot: 3, seat: 2), to: layout.besideSpot(slot: 1, seat: 3))
+        XCTAssert(far.contains { $0.x == passage }, "the right-hand islands use the passage, not the lane")
+    }
+
+    /// A teammate keeps its seat while others come and go around it.
+    func testTeammatesKeepTheirSeats() {
         var office = OfficeState()
-        office.apply(event(.userPromptSubmit, "s1"), now: t0)
-        office.apply(event(.userPromptSubmit, "s2"), now: t0)
-        office.apply(event(.subagentStart, "s2", agent: "a1", type: "Explore"), now: t0)
-        office.apply(event(.sessionStart, "s3", cwd: "/Users/me/web-app"), now: t0)
-        office.apply(event(.sessionEnd, "s3", cwd: "/Users/me/web-app"), now: t0)
-        var plan = SeatPlan()
-        let pods = plan.pods(for: office)
-        XCTAssertEqual(pods.map(\.name), ["my-project", "my-project 2", "web-app"])
-        XCTAssertEqual(pods[0].mates.compactMap { $0?.name }, [])
-        XCTAssertEqual(pods[1].mates.compactMap { $0?.name }, ["Explore"])
-        XCTAssertTrue(pods[2].isOff)
-        XCTAssertEqual(pods[2].occupied, [false, false, false, false], "no lamp at an empty desk")
-        XCTAssertEqual(pods[1].occupied, [true, true, false, false], "lamps only where someone is")
-    }
-
-    func testTeammatesKeepTheirDesksAndExtrasCount() {
-        var office = OfficeState()
-        var plan = SeatPlan()
-        office.apply(event(.userPromptSubmit, "s1"), now: t0)
-        for id in ["a", "b", "c", "d", "e"] { office.apply(event(.subagentStart, "s1", agent: id), now: t0) }
-        var pod = plan.pods(for: office)[0]
-        XCTAssertEqual(pod.mates.map { $0?.id }, ["a", "b", "c"])
-        XCTAssertEqual(pod.extra, 2)
-
-        office.apply(event(.subagentStop, "s1", agent: "a"), now: t0)
-        pod = plan.pods(for: office)[0]
-        XCTAssertEqual(pod.mates.map { $0?.id }, ["d", "b", "c"], "b and c stay put; the next one takes the free desk")
-        XCTAssertEqual(pod.extra, 1)
-
-        office.apply(event(.subagentStop, "s1", agent: "b"), now: t0)
-        office.apply(event(.subagentStop, "s1", agent: "e"), now: t0)
-        pod = plan.pods(for: office)[0]
-        XCTAssertEqual(pod.mates.map { $0?.id }, ["d", nil, "c"])
-        XCTAssertEqual(pod.extra, 0)
-    }
-
-    /// The main desk says "working", but the summary counts a waiting teammate: the name tag says so too.
-    func testTeammateWaitingIsShownOnTheMainDesk() {
-        var office = OfficeState()
-        var plan = SeatPlan()
-        office.apply(event(.userPromptSubmit, "s1"), now: t0)
-        office.apply(event(.subagentStart, "s1", agent: "a1", type: "Plan"), now: t0)
-        XCTAssertFalse(plan.pods(for: office)[0].teammateWaiting)
-        office.apply(event(.permissionRequest, "s1", agent: "a1", type: "Plan"), now: t0)
-        XCTAssertTrue(plan.pods(for: office)[0].teammateWaiting)
-        XCTAssertEqual(office.count(.waiting), 1)
-        office.apply(event(.permissionRequest, "s1"), now: t0)
-        XCTAssertFalse(plan.pods(for: office)[0].teammateWaiting, "the session waits itself: its own label says so")
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: "/me/shop"), now: t0)
+        for id in ["a", "b", "c"] {
+            office.apply(HookEvent(kind: .subagentStart, session: "s1", cwd: "/me/shop", agentID: id), now: t0)
+        }
+        func seats() -> [String?] {
+            office.pods[0].seats.map { seat in
+                switch seat {
+                case .session(let s, _)?: return s.id
+                case .teammate(let m, _)?: return m.id
+                case .off?, nil: return nil
+                }
+            }
+        }
+        XCTAssertEqual(seats(), ["s1", "a", "b", "c"])
+        office.apply(HookEvent(kind: .subagentStop, session: "s1", cwd: "/me/shop", agentID: "a"), now: t0)
+        XCTAssertEqual(seats(), ["s1", nil, "b", "c"], "b and c stay put")
+        office.apply(HookEvent(kind: .subagentStart, session: "s1", cwd: "/me/shop", agentID: "d"), now: t0)
+        XCTAssertEqual(seats(), ["s1", "d", "b", "c"], "the next one takes the free seat")
     }
 }
