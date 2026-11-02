@@ -149,6 +149,7 @@ final class WalkTests: XCTestCase {
         send(.subagentStart, agent: "a2", type: "Plan", at: 1)
         meet(at: 11)
         XCTAssertEqual(stage.moment(at: t0 + 11.5).walkers.count, 3)
+        XCTAssert(stride(from: 11.0, to: 25, by: 0.05).contains { stage.moment(at: t0 + $0).meetingDoorOpen })
         let seated = stage.moment(at: t0 + 25)
         XCTAssertEqual(seated.walkers.count, 0)
         XCTAssertEqual(seated.room.map(\.seat).sorted(), [0, 1, 2], "the session in the middle, facing the room")
