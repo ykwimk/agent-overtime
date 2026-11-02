@@ -27,15 +27,26 @@ public struct Pod: Equatable, Identifiable {
     public var id: Int { slot }
 }
 
-/// Where things sit in the office, in art pixels. The art is drawn at a fixed 2 points per pixel, so a wider
-/// window fits more islands in a row and nothing is ever scaled by a fraction.
+/// How big the office is drawn: an art pixel as 1, 2 or 3 points. Whole numbers only, so the pixel art stays sharp
+/// (on a Retina screen every step lands on whole screen pixels). Normal is the size the room was laid out for.
+public enum Zoom: Int, CaseIterable {
+    case small = 1
+    case normal, large
+
+    public var bigger: Zoom? { Zoom(rawValue: rawValue + 1) }
+    public var smaller: Zoom? { Zoom(rawValue: rawValue - 1) }
+}
+
+/// Where things sit in the office, in art pixels. The art is drawn at a whole number of points per pixel (`Zoom`),
+/// so a wider window fits more islands in a row and nothing is ever scaled by a fraction.
 ///
 /// An island from its top down: the name tags of the two seats across the desks (people facing the room), their
 /// heads behind the far desks, the near desks, the chairs of the two seats with their backs to the room, and
 /// their name tags. Rows of islands sit one after another; every other row is moved right, so islands don't
 /// line up in columns.
 public struct RoomLayout: Equatable {
-    public static let pointsPerPixel = 2
+    /// Points per art pixel at normal zoom, and the room picture's own bitmap pixels per art pixel at every zoom.
+    public static let pointsPerPixel = Zoom.normal.rawValue
     /// The back wall, door at its left end.
     public static let wall = 96
     public static let deskWidth = 58
@@ -83,8 +94,8 @@ public struct RoomLayout: Equatable {
     }
 
     /// Room width for a window (or scroll view) this many points wide.
-    public init(points: Double, slots: Int) {
-        self.init(width: Int(points) / Self.pointsPerPixel, slots: slots)
+    public init(points: Double, slots: Int, zoom: Zoom = .normal) {
+        self.init(width: Int(points) / zoom.rawValue, slots: slots)
     }
 
     public var rows: Int { max(1, (slots + columns - 1) / columns) }
@@ -94,6 +105,14 @@ public struct RoomLayout: Equatable {
     public var contentHeight: Int {
         let islands = Self.firstRow + (rows - 1) * Self.rowPitch + Self.islandDepth
         return pillar == nil ? islands : max(islands, MeetingRoom.columnDepth)
+    }
+
+    /// The islands out of sight in a view of the room from `top` down, `height` art pixels tall: those whose middle
+    /// is above it and those whose middle is below it, nearest first.
+    public func outOfSight(_ slots: [Int], top: Int, height: Int) -> (above: [Int], below: [Int]) {
+        let middle = { (slot: Int) in origin(of: slot).y + Self.islandDepth / 2 }
+        let sorted = slots.sorted()
+        return (sorted.filter { middle($0) < top }.reversed(), sorted.filter { middle($0) > top + height })
     }
 
     /// The glass meeting room at the top of the right-hand column, or nil when the window has no column.

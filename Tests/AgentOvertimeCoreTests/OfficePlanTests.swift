@@ -67,6 +67,57 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(narrow.columns, 2)
     }
 
+    /// Three zoom steps, an art pixel as 1, 2 or 3 points. In the default window small seats six islands a row and
+    /// shows nine sessions without scrolling, normal is the room as it was, large two islands a row without the
+    /// meeting room column.
+    func testZoomStepsAndTheirLayouts() {
+        XCTAssertEqual(Zoom.allCases.map(\.rawValue), [1, 2, 3])
+        XCTAssertEqual(Zoom.normal.rawValue, RoomLayout.pointsPerPixel)
+        XCTAssertEqual([Zoom.small.bigger, Zoom.normal.bigger, Zoom.large.bigger], [.normal, .large, nil])
+        XCTAssertEqual([Zoom.small.smaller, Zoom.normal.smaller, Zoom.large.smaller], [nil, .small, .normal])
+
+        let window = Double(RoomLayout.defaultWindow.width)
+        let office = RoomLayout.defaultWindow.height - 58  // under the top bar
+        for (zoom, columns, column, rowsInSight) in [
+            (Zoom.small, 6, true, 4), (.normal, 2, true, 2), (.large, 2, false, 1),
+        ] {
+            let layout = RoomLayout(points: window, slots: 9, zoom: zoom)
+            XCTAssertEqual(layout.width, RoomLayout.defaultWindow.width / zoom.rawValue)
+            XCTAssertEqual(layout.columns, columns, "\(zoom)")
+            XCTAssertEqual(layout.pillar != nil, column, "\(zoom)")
+            XCTAssertEqual(layout.rows, (9 + columns - 1) / columns, "\(zoom)")
+            XCTAssertEqual(layout.origin(of: columns).y, RoomLayout.firstRow + RoomLayout.rowPitch, "\(zoom)")
+            let inSight = Array(0..<min(9, columns * rowsInSight))
+            XCTAssertEqual(layout.outOfSight(inSight, top: 0, height: office / zoom.rawValue).below, [], "\(zoom)")
+            XCTAssertEqual(
+                layout.outOfSight(Array(0..<9), top: 0, height: office / zoom.rawValue).below.count,
+                9 - inSight.count, "\(zoom)")
+        }
+    }
+
+    /// "1 more team below": the islands whose middle is out of the view, nearest first; pressing it scrolls to the
+    /// first. Three sessions in a window a little narrower than the default (one island a row), five and nine in
+    /// the default window, at two heights and scrolled down a row.
+    func testIslandsOutOfSight() {
+        let narrow = RoomLayout(points: 1176, slots: 3)
+        XCTAssertEqual(narrow.columns, 1)
+        XCTAssertEqual(narrow.outOfSight([0, 1, 2], top: 0, height: 702 / 2).below, [2])
+        XCTAssertEqual(narrow.outOfSight([0, 1, 2], top: 0, height: 942 / 2).below, [])
+        XCTAssertEqual(
+            RoomLayout(points: 1176, slots: 3, zoom: .small).outOfSight([0, 1, 2], top: 0, height: 702).below, [])
+
+        let five = RoomLayout(points: 1216, slots: 5)
+        XCTAssertEqual(five.outOfSight(Array(0..<5), top: 0, height: 351).below, [4])
+        XCTAssertEqual(five.outOfSight(Array(0..<5), top: 0, height: 942 / 2).below, [])
+
+        let nine = RoomLayout(points: 1216, slots: 9)
+        XCTAssertEqual(nine.outOfSight(Array(0..<9), top: 0, height: 351).below, [4, 5, 6, 7, 8])
+        let scrolled = nine.outOfSight(Array(0..<9), top: RoomLayout.rowPitch, height: 351)
+        XCTAssertEqual(scrolled.above, [1, 0], "nearest first")
+        XCTAssertEqual(scrolled.below, [6, 7, 8])
+        XCTAssertEqual(nine.outOfSight([0, 3, 8], top: 0, height: 351).below, [8], "only islands in use")
+    }
+
     /// The meeting room (and the lounge under it) lives in the right-hand column only, so the smallest window has
     /// none. Its six seats are inside its glass, its door clears the table, and the room is never cut off: the
     /// office is at least as tall as the column.

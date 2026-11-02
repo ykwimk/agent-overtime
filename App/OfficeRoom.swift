@@ -621,8 +621,8 @@ final class Stage: ObservableObject {
     }
 }
 
-/// The office as one picture at 2 points per art pixel, with system-font name tags on the floor in front of
-/// each desk. Pods fill rows from the door; more pods add rows and the room scrolls.
+/// The office as one picture at 1, 2 or 3 points per art pixel (`Zoom`), with system-font name tags on the floor in
+/// front of each desk. Pods fill rows from the door; more pods add rows and the room scrolls.
 struct OfficeRoom: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var systemReducesMotion
@@ -636,6 +636,10 @@ struct OfficeRoom: View {
     /// Only the CPU test sets this, to measure Reduce Motion without changing the Mac's setting.
     let reducesMotion: Bool
     private var reduceMotion: Bool { systemReducesMotion || reducesMotion }
+    /// How far the room is scrolled, in points, and the first island in sight (kept in place across a zoom).
+    @State private var scrollTop: CGFloat = 0
+    @State private var topIsland: Int?
+    private static let space = "office"
 
     init(
         panel: SidePanel, focus: FocusState<OfficeFocus?>.Binding, fixedNow: Date? = nil, stage: Stage? = nil,
@@ -651,77 +655,129 @@ struct OfficeRoom: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let scale = RoomLayout.pointsPerPixel
+            let zoom = model.zoom
+            let scale = zoom.rawValue
             let animate = fixedNow == nil && !reduceMotion
             let synced = stage.sync(
                 model.office, width: Int(geometry.size.width) / scale, now: fixedNow ?? Date(), animate: animate)
             let height = max(synced.layout.contentHeight, Int(geometry.size.height) / scale)
-            ScrollView(.vertical) {
-                ZStack(alignment: .topLeading) {
-                    OfficePicture(
-                        stage: stage, height: height, reduceMotion: reduceMotion, fixedNow: fixedNow,
-                        ticksWhileHidden: ticksWhileHidden
-                    )
-                    .frame(width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale))
-                    .accessibilityHidden(true)
-                    // Pressing a character opens its panel, at a desk or at the meeting table.
-                    .onTapGesture { location in
-                        let point = (x: Int(location.x) / scale, y: Int(location.y) / scale)
-                        guard let at = stage.seat(at: point, now: fixedNow ?? Date()),
-                            let seat = synced.pods.first(where: { $0.slot == at.slot })?.seats[at.index]
-                        else { return }
-                        panel.open(PanelSelection(seat, at: .seat(slot: at.slot, index: at.index)))
+            let slots = synced.pods.map(\.slot)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    ZStack(alignment: .topLeading) {
+                        OfficePicture(
+                            stage: stage, width: synced.layout.width, height: height, zoom: zoom,
+                            reduceMotion: reduceMotion, fixedNow: fixedNow,
+                            ticksWhileHidden: ticksWhileHidden
+                        )
+                        .frame(width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale))
+                        .accessibilityHidden(true)
+                        // Pressing a character opens its panel, at a desk or at the meeting table.
+                        .onTapGesture { location in
+                            let point = (x: Int(location.x) / scale, y: Int(location.y) / scale)
+                            guard let at = stage.seat(at: point, now: fixedNow ?? Date()),
+                                let seat = synced.pods.first(where: { $0.slot == at.slot })?.seats[at.index]
+                            else { return }
+                            panel.open(PanelSelection(seat, at: .seat(slot: at.slot, index: at.index)))
+                        }
+                        tags(synced.pods, synced.layout, meeting: model.office.meeting, zoom: zoom)
+                        marks(slots, synced.layout, scale: scale)
                     }
-                    tags(synced.pods, synced.layout, meeting: model.office.meeting)
+                    .frame(
+                        width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale),
+                        alignment: .topLeading
+                    )
+                    .background {
+                        GeometryReader { content in
+                            Color.clear.preference(
+                                key: ScrollTop.self, value: -content.frame(in: .named(Self.space)).minY)
+                        }
+                    }
                 }
-                .frame(
-                    width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale),
-                    alignment: .topLeading)
+                .coordinateSpace(name: Self.space)
+                .onPreferenceChange(ScrollTop.self) { top in
+                    scrollTop = top
+                    topIsland = synced.layout.outOfSight(slots, top: Int(top) / scale, height: 0).below.first
+                }
+                // Keeps what was at the top in sight: the room's top while the first row was, else that island.
+                .onChange(of: zoom) { _ in
+                    let row = topIsland.map { $0 / max(1, synced.layout.columns) } ?? 0
+                    let mark = row == 0 ? "room top" : "island \(topIsland ?? 0)"
+                    DispatchQueue.main.async { proxy.scrollTo(mark, anchor: .top) }
+                }
             }
         }
+    }
+
+    /// Where the room can scroll to: its top, and each island from its far name tags to its near ones.
+    private func marks(_ slots: [Int], _ layout: RoomLayout, scale: Int) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear.frame(width: 1, height: 1).id("room top")
+            ForEach(slots, id: \.self) { slot in
+                let origin = layout.origin(of: slot)
+                Color.clear
+                    .frame(
+                        width: CGFloat(RoomLayout.islandWidth * scale), height: CGFloat(RoomLayout.islandDepth * scale)
+                    )
+                    .padding(.leading, CGFloat(origin.x * scale))
+                    .padding(.top, CGFloat(origin.y * scale))
+                    .id("island \(slot)")
+            }
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 
     /// Name tags only change by the minute ("Waiting · 3 min"), so they tick slowly on their own.
-    @ViewBuilder private func tags(_ pods: [Pod], _ layout: RoomLayout, meeting: OfficeState.Meeting?) -> some View {
+    @ViewBuilder private func tags(_ pods: [Pod], _ layout: RoomLayout, meeting: OfficeState.Meeting?, zoom: Zoom)
+        -> some View
+    {
         if let fixedNow {
-            tagLayer(pods, layout, meeting: meeting, now: fixedNow)
+            tagLayer(pods, layout, meeting: meeting, zoom: zoom, now: fixedNow)
         } else {
             TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 30)) { context in
-                tagLayer(pods, layout, meeting: meeting, now: context.date)
+                tagLayer(pods, layout, meeting: meeting, zoom: zoom, now: context.date)
             }
         }
     }
 
-    private func tagLayer(_ pods: [Pod], _ layout: RoomLayout, meeting: OfficeState.Meeting?, now: Date) -> some View {
-        ZStack(alignment: .topLeading) {
+    private func tagLayer(
+        _ pods: [Pod], _ layout: RoomLayout, meeting: OfficeState.Meeting?, zoom: Zoom, now: Date
+    ) -> some View {
+        let pixel = CGFloat(zoom.rawValue)
+        let desk = CGFloat(RoomLayout.deskWidth) * pixel
+        return ZStack(alignment: .topLeading) {
             if let meeting, let room = layout.meetingRoom {
-                let pixel = CGFloat(RoomLayout.pointsPerPixel)
                 let door = CGFloat(room.left + MeetingRoom.doorX + MeetingRoom.doorWidth / 2) * pixel
                 let top = CGFloat(MeetingRoom.front - MeetingRoom.glassHeight - 1) * pixel
-                MeetingTag(name: meeting.session.label, more: meeting.more)
-                    .frame(width: SeatTag.deskPoints, height: 40, alignment: .bottom)
-                    .offset(x: door - SeatTag.deskPoints / 2, y: top - 40)
+                MeetingTag(name: meeting.session.label, more: meeting.more, zoom: zoom)
+                    .frame(width: desk, height: 20 * pixel, alignment: .bottom)
+                    .offset(x: door - desk / 2, y: top - 20 * pixel)
             }
             ForEach(pods) { pod in
                 let origin = layout.origin(of: pod.slot)
                 ForEach(0..<Island.size, id: \.self) { index in
                     if let seat = pod.seats[index] {
                         let place = OfficeFocus.seat(slot: pod.slot, index: index)
-                        SeatTag(seat: seat, across: RoomLayout.isAcross(index), now: now)
+                        SeatTag(seat: seat, across: RoomLayout.isAcross(index), now: now, zoom: zoom)
                             .focused(focus, equals: place)
                             .onTapGesture { panel.open(PanelSelection(seat, at: place)) }
                             .accessibilityAddTraits(.isButton)
                             .accessibilityAction { panel.open(PanelSelection(seat, at: place)) }
                             .offset(
-                                x: CGFloat((origin.x + RoomLayout.deskX(index)) * RoomLayout.pointsPerPixel),
-                                y: CGFloat(
-                                    (origin.y + (RoomLayout.isAcross(index) ? 0 : RoomLayout.nearDesk))
-                                        * RoomLayout.pointsPerPixel))
+                                x: CGFloat(origin.x + RoomLayout.deskX(index)) * pixel,
+                                y: CGFloat(origin.y + (RoomLayout.isAcross(index) ? 0 : RoomLayout.nearDesk)) * pixel)
                     }
                 }
             }
         }
     }
+}
+
+/// How far the office is scrolled, in points.
+private struct ScrollTop: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// One seat's name tag, and the seat as one VoiceOver element: "my-project, Waiting, 3 min" or "Explore 2,
@@ -731,27 +787,26 @@ struct SeatTag: View {
     let seat: Seat
     let across: Bool
     let now: Date
+    var zoom = Zoom.normal
     @ObservedObject private var keyboard = KeyboardNavigation.shared
 
-    static let deskPoints = CGFloat(RoomLayout.deskWidth * RoomLayout.pointsPerPixel)
-    private static let pixel = CGFloat(RoomLayout.pointsPerPixel)
-    /// Three lines of tag: the room the layout keeps above a far head.
-    static let farTagPoints = 23 * pixel
+    private var pixel: CGFloat { CGFloat(zoom.rawValue) }
+    private var deskPoints: CGFloat { CGFloat(RoomLayout.deskWidth) * pixel }
 
     var body: some View {
         Group {
             if across {
-                // Bottom-aligned, so a third line grows up and away from the head.
-                tag.frame(width: Self.deskPoints, height: Self.farTagPoints, alignment: .bottom)
-                    .frame(height: CGFloat(RoomLayout.farDesk) * Self.pixel, alignment: .top)
+                // Bottom-aligned, so a third line grows up and away from the head; three lines of tag (two when
+                // small) is the room the layout keeps above a far head.
+                tag.frame(width: deskPoints, height: 23 * pixel, alignment: .bottom)
+                    .frame(height: CGFloat(RoomLayout.farDesk) * pixel, alignment: .top)
             } else {
-                tag.frame(width: Self.deskPoints)
-                    .padding(.top, 62 * Self.pixel)
-                    .frame(
-                        height: CGFloat(RoomLayout.islandDepth - RoomLayout.nearDesk) * Self.pixel, alignment: .top)
+                tag.frame(width: deskPoints)
+                    .padding(.top, 62 * pixel)
+                    .frame(height: CGFloat(RoomLayout.islandDepth - RoomLayout.nearDesk) * pixel, alignment: .top)
             }
         }
-        .frame(width: Self.deskPoints)
+        .frame(width: deskPoints)
         .contentShape(Rectangle())
         .help(summary)
         .accessibilityElement(children: .ignore)
@@ -759,40 +814,44 @@ struct SeatTag: View {
         .focusable(keyboard.active)
     }
 
+    /// The name, then what they do. Small keeps two lines: the name and the first of the rest.
     @ViewBuilder private var tag: some View {
+        let font = zoom.tagFont()
+        let compact = zoom == .small
         switch seat {
         case .session(let session, let unseated):
-            Tag {
+            // In a meeting the meeting takes the place of "Working" or "Resting"; a wait still comes first.
+            let state = !session.meets || session.state == .waiting
+            let mateWaits = session.teammateWaiting && !(compact && state)
+            Tag(zoom: zoom) {
                 HStack(spacing: 4) {
-                    Text(verbatim: session.label).font(.subheadline.weight(.semibold)).truncationMode(.middle)
+                    Text(verbatim: session.label).font(zoom.tagFont(.semibold)).truncationMode(.middle)
                         .foregroundStyle(Style.tagText)
                     if unseated > 0 {
-                        Text("+\(unseated)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
+                        Text("+\(unseated)").font(font).foregroundStyle(Style.tagSecondary).layoutPriority(1)
                     }
                 }
-                // In a meeting the meeting takes the place of "Working" or "Resting"; a wait still comes first.
-                if !session.meets || session.state == .waiting {
-                    session.state.label(since: session.since, now: now).font(.subheadline).foregroundStyle(
+                if state {
+                    session.state.label(since: session.since, now: now).font(font).foregroundStyle(
                         session.state.tagColor)
                 }
-                if session.teammateWaiting {
-                    Text("Teammate waiting").font(.subheadline).foregroundStyle(Style.waiting)
+                if mateWaits {
+                    Text("Teammate waiting").font(font).foregroundStyle(Style.waiting)
                 }
-                if session.meets {
-                    Text("In a meeting · \(session.direct.count) teammates").font(.subheadline).foregroundStyle(
-                        Style.tagText)
+                if session.meets, !(compact && (state || mateWaits)) {
+                    Text("In a meeting · \(session.direct.count) teammates").font(font).foregroundStyle(Style.tagText)
                 }
             }
         case .teammate(let mate, let session):
             // At the meeting its empty seat says so, like the session's own tag; a wait still comes first.
             let meets = session.meets(with: mate)
-            Tag {
-                mate.displayName.font(.subheadline.weight(.medium))
-                if !meets || mate.state == .waiting {
-                    mate.state.label(since: mate.since, now: now).font(.subheadline).foregroundStyle(
-                        mate.state.tagColor)
+            let state = !meets || mate.state == .waiting
+            Tag(zoom: zoom) {
+                mate.displayName.font(zoom.tagFont(.medium))
+                if state {
+                    mate.state.label(since: mate.since, now: now).font(font).foregroundStyle(mate.state.tagColor)
                 }
-                if meets { Text("In a meeting").font(.subheadline).foregroundStyle(Style.tagText) }
+                if meets, !(compact && state) { Text("In a meeting").font(font).foregroundStyle(Style.tagText) }
             }
         }
     }
@@ -839,6 +898,8 @@ final class KeyboardNavigation: ObservableObject {
     /// focused button in it, close it. Set by the office view, since macOS 13 has no onKeyPress. True when used.
     var space: (() -> Bool)?
     var escape: (() -> Bool)?
+    /// ⌘= zooms in as ⌘+ does: the menu shows ⌘+, which takes Shift on most keyboards.
+    var zoomIn: (() -> Void)?
     private var monitor: Any?
 
     private init() {
@@ -849,7 +910,12 @@ final class KeyboardNavigation: ObservableObject {
                 if self.active { self.active = false }
                 return event
             }
-            if event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+            let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+            if flags == .command, event.charactersIgnoringModifiers == "=", let zoomIn = self.zoomIn {
+                zoomIn()
+                return nil
+            }
+            if flags.isEmpty {
                 let typing = event.window?.firstResponder is NSText
                 if event.keyCode == 49, !typing, self.space?() == true { return nil }  // 49: Space
                 if event.keyCode == 53, self.escape?() == true { return nil }  // 53: Esc
@@ -869,14 +935,15 @@ final class KeyboardNavigation: ObservableObject {
 private struct MeetingTag: View {
     let name: String
     let more: Int
+    let zoom: Zoom
 
     var body: some View {
-        Tag {
+        Tag(zoom: zoom) {
             HStack(spacing: 4) {
-                Text(verbatim: name).font(.subheadline.weight(.semibold)).truncationMode(.middle)
+                Text(verbatim: name).font(zoom.tagFont(.semibold)).truncationMode(.middle)
                     .foregroundStyle(Style.tagText)
                 if more > 0 {
-                    Text("+\(more)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
+                    Text("+\(more)").font(zoom.tagFont()).foregroundStyle(Style.tagSecondary).layoutPriority(1)
                 }
             }
         }
@@ -886,16 +953,30 @@ private struct MeetingTag: View {
 
 /// A small plate behind tag text, so it reads on the wood floor by day and by night (4.5:1 or more).
 private struct Tag<Content: View>: View {
+    let zoom: Zoom
     @ViewBuilder let content: () -> Content
 
     var body: some View {
+        // 5, 2 and 5 points at normal, a little less when small and more when large.
+        let step = CGFloat(zoom.rawValue + 1) / 3
         VStack(spacing: 0) { content() }
             .lineLimit(1)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Style.tagPlate))
-            .frame(maxWidth: SeatTag.deskPoints - 4)
+            .padding(.horizontal, 5 * step)
+            .padding(.vertical, zoom == .small ? 0 : 2 * step)
+            .background(RoundedRectangle(cornerRadius: 5 * step).fill(Style.tagPlate))
+            .frame(maxWidth: CGFloat(RoomLayout.deskWidth * zoom.rawValue) - 4)
             .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension Zoom {
+    /// Name tag text: the system's small text at normal, 9 pt when small (the least that reads) and 16 pt when large.
+    func tagFont(_ weight: Font.Weight = .regular) -> Font {
+        switch self {
+        case .small: return .system(size: 9, weight: weight)
+        case .normal: return .subheadline.weight(weight)
+        case .large: return .system(size: 16, weight: weight)
+        }
     }
 }
 
@@ -909,7 +990,10 @@ struct OfficePicture: NSViewRepresentable {
     static let walkingFrameRate = 30.0
 
     let stage: Stage
+    /// The room's size in art pixels: a change draws the picture again at once, with or without a clock.
+    let width: Int
     let height: Int
+    let zoom: Zoom
     let reduceMotion: Bool
     let fixedNow: Date?
     let ticksWhileHidden: Bool
@@ -933,6 +1017,7 @@ struct OfficePicture: NSViewRepresentable {
             super.init(frame: frame)
             wantsLayer = true
             layer?.magnificationFilter = .nearest
+            layer?.minificationFilter = .nearest
             layer?.contentsGravity = .resize
         }
 
@@ -959,6 +1044,7 @@ struct OfficePicture: NSViewRepresentable {
             while walkerLayers.count < picture.walkers.count {
                 let walker = CALayer()
                 walker.magnificationFilter = .nearest
+                walker.minificationFilter = .nearest
                 walker.contentsGravity = .resize
                 layer.addSublayer(walker)
                 walkerLayers.append(walker)
@@ -972,7 +1058,7 @@ struct OfficePicture: NSViewRepresentable {
         }
 
         private func points(_ box: CGRect) -> CGRect {
-            let scale = CGFloat(RoomLayout.pointsPerPixel)
+            let scale = CGFloat(settings?.zoom.rawValue ?? RoomLayout.pointsPerPixel)
             return CGRect(
                 x: box.minX * scale, y: box.minY * scale, width: box.width * scale, height: box.height * scale)
         }

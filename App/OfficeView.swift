@@ -272,7 +272,7 @@ struct OfficeView: View {
             OfficeBar()
             Divider()
             GeometryReader { geometry in
-                let beside = SidePanelView.fitsBeside(width: geometry.size.width)
+                let beside = SidePanelView.fitsBeside(width: geometry.size.width, zoom: model.zoom)
                 HStack(spacing: 0) {
                     OfficeRoom(
                         panel: panel, focus: $focus, fixedNow: fixedNow, stage: stage,
@@ -281,10 +281,10 @@ struct OfficeView: View {
                     .overlay {
                         // Centred on the floor left of the meeting room and lounge, when the window has them.
                         GeometryReader { geometry in
-                            let pillar = RoomLayout(points: geometry.size.width, slots: 0).pillar
+                            let zoom = model.zoom
+                            let pillar = RoomLayout(points: geometry.size.width, slots: 0, zoom: zoom).pillar
                             emptyMessage.padding(
-                                .trailing,
-                                pillar.map { geometry.size.width - CGFloat($0 * RoomLayout.pointsPerPixel) } ?? 0)
+                                .trailing, pillar.map { geometry.size.width - CGFloat($0 * zoom.rawValue) } ?? 0)
                         }
                     }
                     if beside, panel.selection != nil {
@@ -322,6 +322,7 @@ struct OfficeView: View {
                 guard let model, let panel, model.sheet == nil else { return false }
                 return panel.escape()
             }
+            KeyboardNavigation.shared.zoomIn = { [weak model] in model?.zoomIn() }
         }
         .onChange(of: focus) { panel.focus = $0 }
         .onChange(of: panel.selection?.kind) { kind in
@@ -365,6 +366,45 @@ struct OfficeView: View {
     }
 }
 
+/// − and + for the office's zoom, beside Start Work; the end step's button dims. VoiceOver hears "Zoom Out, Normal".
+struct ZoomButtons: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                model.zoomOut()
+            } label: {
+                Image(systemName: "minus").frame(width: 12)
+            }
+            .disabled(model.zoom.smaller == nil)
+            .help(Text("Zoom Out (⌘−)"))
+            .accessibilityLabel(Text("Zoom Out"))
+            .accessibilityValue(model.zoom.word)
+            Button {
+                model.zoomIn()
+            } label: {
+                Image(systemName: "plus").frame(width: 12)
+            }
+            .disabled(model.zoom.bigger == nil)
+            .help(Text("Zoom In (⌘+)"))
+            .accessibilityLabel(Text("Zoom In"))
+            .accessibilityValue(model.zoom.word)
+        }
+        .controlSize(.large)
+    }
+}
+
+extension Zoom {
+    var word: Text {
+        switch self {
+        case .small: return Text("Small")
+        case .normal: return Text("Normal")
+        case .large: return Text("Large")
+        }
+    }
+}
+
 /// Summary on the left ("Working 2 · Waiting 1 · Resting 1"), 출근 on the right.
 struct OfficeBar: View {
     @EnvironmentObject private var model: AppModel
@@ -377,6 +417,7 @@ struct OfficeBar: View {
                 status.font(.callout)
             }
             Spacer(minLength: 8)
+            ZoomButtons()
             Button {
                 model.startWork()
             } label: {
@@ -535,9 +576,9 @@ struct SidePanelView: View {
 
     /// Beside the room only while the islands stay where they are (the same columns and meeting room with the
     /// panel's width taken off); otherwise the panel floats over the room's right side.
-    static func fitsBeside(width: CGFloat) -> Bool {
-        let whole = RoomLayout(points: width, slots: 0)
-        let narrower = RoomLayout(points: width - Self.width - 1, slots: 0)
+    static func fitsBeside(width: CGFloat, zoom: Zoom) -> Bool {
+        let whole = RoomLayout(points: width, slots: 0, zoom: zoom)
+        let narrower = RoomLayout(points: width - Self.width - 1, slots: 0, zoom: zoom)
         return whole.columns == narrower.columns && (whole.pillar == nil) == (narrower.pillar == nil)
     }
 

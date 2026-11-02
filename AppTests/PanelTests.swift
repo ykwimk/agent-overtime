@@ -342,3 +342,55 @@ final class PanelTests: XCTestCase {
         XCTAssertTrue(met.contains(meeting), met)
     }
 }
+
+/// Zoom: three steps that stop at the ends, Actual Size back to normal, kept in the app's settings; the View menu
+/// and ⌘+ (which takes Shift) work it.
+@MainActor
+final class ZoomTests: XCTestCase {
+    private func model(_ defaults: UserDefaults) -> AppModel {
+        let folder = (Paths.userTempFolder as NSString).appendingPathComponent("ao-zoom-\(UUID().uuidString.prefix(8))")
+        return AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
+    }
+
+    func testStepsStopAtTheEndsAndAreKept() {
+        let defaults = UserDefaults(suiteName: "ao-zoom-\(UUID().uuidString)")!
+        let model = model(defaults)
+        XCTAssertEqual(model.zoom, .normal, "normal until changed")
+        model.zoomIn()
+        model.zoomIn()
+        XCTAssertEqual(model.zoom, .large, "large is the end")
+        model.zoom = .normal
+        model.zoomOut()
+        model.zoomOut()
+        XCTAssertEqual(model.zoom, .small, "small is the end")
+        XCTAssertEqual(self.model(defaults).zoom, .small, "the same step next time")
+        XCTAssertEqual(defaults.integer(forKey: "zoom"), 1)
+        defaults.set(7, forKey: "zoom")
+        XCTAssertEqual(self.model(defaults).zoom, .normal, "an unknown value reads as normal")
+    }
+
+    func testViewMenuZooms() throws {
+        let model = try XCTUnwrap(AppModel.live, "the host app's model")
+        let menu = try XCTUnwrap(NSApp.mainMenu)
+        func item(_ key: String) -> NSMenuItem? {
+            menu.items.lazy.compactMap { $0.submenu?.items.first { $0.keyEquivalent == key } }.first
+        }
+        let zoomIn = try XCTUnwrap(item("+"))
+        XCTAssertEqual(zoomIn.keyEquivalentModifierMask, .command)
+        XCTAssertNotNil(item("-"))
+        XCTAssertNotNil(item("0"))
+        XCTAssertTrue(zoomIn.menu === item("0")?.menu, "together in one menu")
+        XCTAssertTrue(["View", "보기"].contains(zoomIn.menu?.title ?? ""), "in the View menu")
+
+        let before = model.zoom
+        defer { model.zoom = before }
+        model.zoom = .normal
+        let plus = try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [.command, .shift], timestamp: 0, windowNumber: 0,
+                context: nil, characters: "+", charactersIgnoringModifiers: "+", isARepeat: false, keyCode: 24))
+        XCTAssertTrue(menu.performKeyEquivalent(with: plus))
+        RunLoop.main.run(until: Date() + 0.2)
+        XCTAssertEqual(model.zoom, .large)
+    }
+}

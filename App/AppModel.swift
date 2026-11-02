@@ -111,11 +111,20 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// How big the office is drawn (View > Zoom In, Zoom Out, Actual Size), kept for next time.
+    @Published var zoom: Zoom {
+        didSet { defaults.set(zoom.rawValue, forKey: Keys.zoom) }
+    }
+
+    func zoomIn() { zoom = zoom.bigger ?? zoom }
+    func zoomOut() { zoom = zoom.smaller ?? zoom }
+
     private enum Keys {
         static let approved = "approvedStartFingerprint"
         static let everConnected = "everConnected"
         static let welcomeDismissed = "welcomeDismissed"
         static let findsSessions = "findsSessions"
+        static let zoom = "zoom"
     }
 
     static let hooksURL = URL(
@@ -136,6 +145,7 @@ final class AppModel: ObservableObject {
         if defaults.object(forKey: ShowDetails.key) == nil { defaults.set(true, forKey: ShowDetails.key) }
         showsDetails = defaults.bool(forKey: ShowDetails.key)
         findsSessions = defaults.object(forKey: Keys.findsSessions) as? Bool ?? true
+        zoom = Zoom(rawValue: defaults.integer(forKey: Keys.zoom)) ?? .normal
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =
