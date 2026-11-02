@@ -77,6 +77,17 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Show Details", isOn: $model.showsDetails)
+                Text(
+                    "Shows the files being read and edited, tasks and the model in the side panel. They stay on this Mac and are never saved. Anyone who sees your screen, for example while you share it, can read them."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
+            } header: {
+                Text("Side Panel")
+            }
+
+            Section {
                 LabeledContent {
                     Text(verbatim: "\(model.office.folders.count)")
                 } label: {

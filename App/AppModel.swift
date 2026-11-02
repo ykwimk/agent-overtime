@@ -79,6 +79,11 @@ final class AppModel: ObservableObject {
     @Published var welcomeDismissed: Bool {
         didSet { defaults.set(welcomeDismissed, forKey: Keys.welcomeDismissed) }
     }
+    /// Show Details. The helper reads this same value and sends no details while it is off; the app drops any that
+    /// come anyway.
+    @Published var showsDetails: Bool {
+        didSet { defaults.set(showsDetails, forKey: ShowDetails.key) }
+    }
 
     let location: AppLocation
     let socketPath: String
@@ -109,6 +114,9 @@ final class AppModel: ObservableObject {
         location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
         everConnected = defaults.bool(forKey: Keys.everConnected)
         welcomeDismissed = defaults.bool(forKey: Keys.welcomeDismissed)
+        // On by default, written out so the helper, which takes only an explicit true, sees it.
+        if defaults.object(forKey: ShowDetails.key) == nil { defaults.set(true, forKey: ShowDetails.key) }
+        showsDetails = defaults.bool(forKey: ShowDetails.key)
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =
@@ -155,7 +163,7 @@ final class AppModel: ObservableObject {
     var asksToConnect: Bool { !everConnected && office.liveSessionCount > 0 }
 
     func receive(_ event: HookEvent, at now: Date = Date()) {
-        if office.apply(event, now: now) { save() }
+        if office.apply(showsDetails ? event : event.withoutDetails, now: now) { save() }
         bookMeeting()
         receivedThisRun = true
         if !everConnected {

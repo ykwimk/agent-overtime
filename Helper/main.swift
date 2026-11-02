@@ -43,7 +43,9 @@ func sessionPID() -> Int32? {
     return nil
 }
 
-if let input = readInput(), let event = HookEvent.fromHookInput(input, pid: sessionPID()) {
+if let input = readInput(),
+    let event = HookEvent.fromHookInput(input, pid: sessionPID(), details: ShowDetails.isOn())
+{
     EventClient.send(event.wireLine(), to: Paths.socket())
 }
 exit(0)

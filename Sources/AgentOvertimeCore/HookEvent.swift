@@ -322,6 +322,15 @@ public struct HookEvent: Codable, Equatable {
         return event
     }
 
+    /// The event without its details: what the app keeps while Show Details is off.
+    public var withoutDetails: HookEvent {
+        var event = self
+        (event.file, event.linesAdded, event.linesRemoved, event.taskAction) = (nil, nil, nil, nil)
+        (event.todoTotal, event.todoDone, event.taskID, event.taskStatus) = (nil, nil, nil, nil)
+        (event.taskTitle, event.model) = (nil, nil)
+        return event
+    }
+
     /// The details again, each on its own: only on the events that carry them, in range, hidden characters dropped
     /// and capped. One that fails is dropped, the event kept.
     private mutating func cleanDetails() {
