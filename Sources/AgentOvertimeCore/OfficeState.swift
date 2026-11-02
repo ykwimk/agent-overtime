@@ -159,13 +159,38 @@ public struct OfficeState: Equatable {
     public private(set) var desks: [Desk]
     /// Islands in use, nearest the door first. Kept in memory only: after a restart nobody's seat is remembered.
     public private(set) var islands: [Island] = []
+    /// When each session ("s:" and its id) and teammate ("a:" and its id) last sent news while the app listened,
+    /// by the app's clock. Memory only, and gone with them.
+    private var news: [String: Date] = [:]
 
     /// `folders` are remembered from earlier runs, for Start Work. Nobody sits anywhere yet.
     public init(folders: [String] = []) {
         desks = folders.prefix(Self.maxDesks).map { Desk(folder: $0) }
     }
 
+    /// Equal when everything drawn is: the time of the last news alone changes nothing on screen but the side
+    /// panel, which keeps its own clock, so one more tool doesn't draw the whole room again.
+    public static func == (a: OfficeState, b: OfficeState) -> Bool {
+        a.desks == b.desks && a.islands == b.islands
+    }
+
     public var folders: [String] { desks.map(\.folder) }
+
+    /// When the app last heard from a session or a teammate; nil before any news since the app started.
+    public func lastNews(session id: String) -> Date? { news["s:" + id] }
+    public func lastNews(teammate id: String) -> Date? { news["a:" + id] }
+
+    public func session(_ id: String) -> Session? {
+        desks.lazy.flatMap(\.sessions).first { $0.id == id }
+    }
+
+    /// A teammate and the session it works for.
+    public func teammate(_ id: String) -> (teammate: Teammate, of: Session)? {
+        for session in desks.flatMap(\.sessions) {
+            if let mate = session.teammates.first(where: { $0.id == id }) { return (mate, session) }
+        }
+        return nil
+    }
 
     /// The state a session or teammate in `current` takes for an event, or nil when the event does not set one.
     static func state(for event: HookEvent, from current: WorkState) -> WorkState? {
@@ -195,6 +220,7 @@ public struct OfficeState: Equatable {
         }
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
         guard let agentID = event.agentID else {
+            news["s:" + event.session] = now
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
@@ -204,13 +230,15 @@ public struct OfficeState: Equatable {
 
         var mates = desks[d].sessions[s].teammates
         let index = mates.firstIndex { $0.id == agentID }
+        news["a:" + agentID] = now
         switch (event.kind, index) {
         case (.subagentStop, let i?):
             mates.remove(at: i)
+            news["a:" + agentID] = nil
             vacate(.teammate(agentID))
             closeEmptyIslands()
         case (.subagentStop, nil):
-            break
+            news["a:" + agentID] = nil
         case (_, let i?):
             if let newState = Self.state(for: event, from: mates[i].state) { mates[i].set(newState, now: now) }
         case (_, nil):
@@ -408,7 +436,11 @@ public struct OfficeState: Equatable {
             let leaving = desks[d].sessions.filter(shouldRemove)
             for session in leaving {
                 vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.name))
-                for mate in session.teammates { vacate(.teammate(mate.id)) }
+                news["s:" + session.id] = nil
+                for mate in session.teammates {
+                    vacate(.teammate(mate.id))
+                    news["a:" + mate.id] = nil
+                }
             }
             desks[d].sessions.removeAll { session in leaving.contains { $0.id == session.id } }
         }

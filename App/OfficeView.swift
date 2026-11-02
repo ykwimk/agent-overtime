@@ -37,6 +37,20 @@ struct PanelSelection: Equatable {
         }
         self.seat = place
     }
+
+    /// A teammate chosen from its session's panel, with the desk it sits at.
+    init(teammate mate: Teammate, in office: OfficeState) {
+        kind = .teammate(mate.id)
+        name = mate.label
+        seat = nil
+        for pod in office.pods {
+            for (index, occupant) in pod.seats.enumerated() {
+                if case .teammate(let seated, _)? = occupant, seated.id == mate.id {
+                    seat = .seat(slot: pod.slot, index: index)
+                }
+            }
+        }
+    }
 }
 
 /// The side panel's state, apart from the view so tests can drive it: whose details it shows, and where keyboard
@@ -78,7 +92,10 @@ final class SidePanel: ObservableObject {
             open(PanelSelection(seat, at: .seat(slot: slot, index: index)))
         case .close?:
             close()
-        case .edit?, .mate?, nil:
+        case .mate(let id)?:
+            guard let mate = office.teammate(id)?.teammate else { return false }
+            open(PanelSelection(teammate: mate, in: office))
+        case .edit?, nil:
             return false
         }
         return true
@@ -142,9 +159,13 @@ struct OfficeView: View {
                 .overlay(alignment: .trailing) {
                     if !beside, panel.selection != nil {
                         sidePanel
-                            .background(Color(nsColor: .windowBackgroundColor))
-                            .overlay(alignment: .leading) { Divider() }
-                            .shadow(color: .black.opacity(0.15), radius: 8, x: -2)
+                            .background(
+                                Color(nsColor: .windowBackgroundColor).shadow(
+                                    color: .black.opacity(0.15), radius: 8, x: -2)
+                            )
+                            .overlay(alignment: .leading) {
+                                Rectangle().fill(Color(nsColor: .separatorColor)).frame(width: 1)
+                            }
                     }
                 }
             }
@@ -315,23 +336,110 @@ struct SidePanelView: View {
 
     var body: some View {
         if let selection = panel.selection {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(verbatim: selection.name).font(Style.title).lineLimit(2)
-                    Spacer(minLength: 4)
-                    Button {
-                        panel.close()
-                    } label: {
-                        Image(systemName: "xmark").font(.body.weight(.semibold))
-                    }
-                    .buttonStyle(.borderless)
-                    .focusable(keyboard.active)
-                    .focused(focus, equals: .close)
-                    .help(Text("Close"))
-                    .accessibilityLabel(Text("Close"))
+            // "12 s ago" counts by the second while the panel is open.
+            if let fixedNow {
+                content(selection, now: fixedNow)
+            } else {
+                TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 1)) { context in
+                    content(selection, now: context.date)
                 }
             }
-            .padding(16)
         }
+    }
+
+    private func content(_ selection: PanelSelection, now: Date) -> some View {
+        let office = model.office
+        return VStack(alignment: .leading, spacing: 14) {
+            switch selection.kind {
+            case .session(let id):
+                if let session = office.session(id) {
+                    header(session.name)
+                    details(
+                        role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
+                        teammateWaiting: session.teammateWaiting, news: office.lastNews(session: id), now: now)
+                    teammates(session, in: office, now: now)
+                }
+            case .teammate(let id):
+                if let (mate, session) = office.teammate(id) {
+                    header(mate.label)
+                    details(
+                        role: Text("Teammate of \(session.name)"), state: mate.state, since: mate.since,
+                        meets: session.meets, teammateWaiting: false, news: office.lastNews(teammate: id), now: now)
+                }
+            case .off:
+                header(selection.name)
+            }
+        }
+        .padding(16)
+    }
+
+    private func header(_ name: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(verbatim: name).font(Style.title).lineLimit(2)
+            Spacer(minLength: 4)
+            Button {
+                panel.close()
+            } label: {
+                Image(systemName: "xmark").font(.body.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .focusable(keyboard.active)
+            .focused(focus, equals: .close)
+            .help(Text("Close"))
+            .accessibilityLabel(Text("Close"))
+        }
+    }
+
+    /// "Session" or "Teammate of my-project", the state and for how long (a wait first, then the meeting), and
+    /// when the app last heard from them.
+    @ViewBuilder private func details(
+        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool, news: Date?, now: Date
+    ) -> some View {
+        role.foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
+            if !meets || state == .waiting {
+                let minutes = Int(now.timeIntervalSince(since) / 60)
+                (state.word + (minutes >= 1 ? Text(verbatim: " · ") + Text("\(minutes) min") : Text(verbatim: "")))
+                    .foregroundStyle(state.color)
+            }
+            if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
+            if meets { Text("In a meeting") }
+        }
+        HStack {
+            Text("Last news").foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Self.ago(news, now: now)
+        }
+    }
+
+    /// The session's teammates, one row each; a row opens that teammate's panel.
+    private func teammates(_ session: Session, in office: OfficeState, now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Teammates").font(.headline)
+            ForEach(session.teammates) { mate in
+                Button {
+                    panel.open(PanelSelection(teammate: mate, in: office))
+                } label: {
+                    HStack {
+                        Text(verbatim: mate.label).lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 8)
+                        mate.state.label(since: mate.since, now: now).foregroundStyle(mate.state.color)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(keyboard.active)
+                .focused(focus, equals: .mate(mate.id))
+            }
+        }
+    }
+
+    /// By the app's own clock: "12 s ago", "3 min ago", "2 h ago"; "—" before any news since the app started.
+    static func ago(_ date: Date?, now: Date) -> Text {
+        guard let date else { return Text(verbatim: "—") }
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return Text("\(seconds) s ago") }
+        if seconds < 3600 { return Text("\(seconds / 60) min ago") }
+        return Text("\(seconds / 3600) h ago")
     }
 }
