@@ -34,11 +34,33 @@ public struct Session: Equatable, Identifiable {
     public var teammates: [Teammate] = []
     /// When it started while the app was listening (SessionStart); nil for one opened before the app.
     public var arrived: Date? = nil
+    /// Since the last teammate came, while two or more are out and the session has done nothing of its own
+    /// (it hands work out and waits). `OfficeState.advance` makes it a meeting after `OfficeState.meetingDelay`.
+    public internal(set) var quietSince: Date? = nil
+    /// In a meeting. Its own prompt, tool or stop ends it, and so does its last teammate leaving; waiting for the
+    /// user's answer does not.
+    public internal(set) var meets = false
 
     /// `since` only moves when the state changes, so "waiting · 3 min" counts from the first prompt.
     mutating func set(_ newState: WorkState, now: Date) {
         if state != newState { since = now }
         state = newState
+    }
+
+    mutating func endMeeting() {
+        quietSince = nil
+        meets = false
+    }
+
+    /// After a teammate came or went. Coming counts again from the newcomer until the meeting starts; once it has,
+    /// it goes on with one teammate and ends with none.
+    mutating func recount(_ kind: HookEvent.Kind, now: Date) {
+        let started = meets || quietSince.map { now >= $0 + OfficeState.meetingDelay } ?? false
+        switch kind {
+        case .subagentStart where teammates.count >= 2 && !started: quietSince = now
+        case .subagentStop where teammates.isEmpty || (teammates.count < 2 && !started): endMeeting()
+        default: break
+        }
     }
 
     /// The one rule for counting: the session waits if it or any of its teammates waits, because a subagent's
@@ -119,6 +141,20 @@ public struct OfficeState: Equatable {
     public static let maxTeammates = 64
     /// 128 seats. Anyone past them is still counted, and a session's tag shows its unseated teammates as "+n".
     public static let maxIslands = 32
+    /// How long a session stays quiet with two or more teammates out before they meet, so a short pause between
+    /// two tools doesn't send everyone to the meeting room and back.
+    public static let meetingDelay: TimeInterval = 10
+    /// The meeting room's table: the session and five teammates.
+    public static let meetingSeats = 6
+
+    /// Who sits in the one meeting room.
+    public struct Meeting: Equatable {
+        public let session: Session
+        /// Its teammates at the table, first come first.
+        public let members: [Teammate]
+        /// Teammates who stay at their desks: the table is full.
+        public let more: Int
+    }
 
     public private(set) var desks: [Desk]
     /// Islands in use, nearest the door first. Kept in memory only: after a restart nobody's seat is remembered.
@@ -162,6 +198,7 @@ public struct OfficeState: Equatable {
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
+            if Self.isOwnWork(event) { desks[d].sessions[s].endMeeting() }
             return desksChanged
         }
 
@@ -188,7 +225,48 @@ public struct OfficeState: Equatable {
             }
         }
         desks[d].sessions[s].teammates = mates
+        desks[d].sessions[s].recount(event.kind, now: now)
         return desksChanged
+    }
+
+    /// The session's own work: a prompt, a tool that doesn't ask the user, a stop. Calling one more teammate is a
+    /// tool too, so it ends a meeting until the newcomer's `meetingDelay` has passed.
+    static func isOwnWork(_ event: HookEvent) -> Bool {
+        guard event.agentID == nil else { return false }
+        switch event.kind {
+        case .userPromptSubmit, .stop: return true
+        case .preToolUse: return !event.asksUser
+        default: return false
+        }
+    }
+
+    /// Starts the meetings whose quiet time is up at `now`. The app calls it at `nextMeeting`.
+    public mutating func advance(to now: Date) {
+        for d in desks.indices {
+            for s in desks[d].sessions.indices {
+                guard let quiet = desks[d].sessions[s].quietSince, now >= quiet + Self.meetingDelay else { continue }
+                desks[d].sessions[s].meets = true
+            }
+        }
+    }
+
+    /// When the next meeting starts, if nothing else happens first.
+    public var nextMeeting: Date? {
+        desks.flatMap(\.sessions).filter { !$0.meets }.compactMap { $0.quietSince }.min().map {
+            $0 + Self.meetingDelay
+        }
+    }
+
+    /// The one meeting room is the session's that met first. Other sessions in a meeting stay at their desks.
+    public var meeting: Meeting? {
+        let first = desks.flatMap(\.sessions).filter(\.meets).min {
+            ($0.quietSince ?? .distantPast, $0.id) < ($1.quietSince ?? .distantPast, $1.id)
+        }
+        return first.map { session in
+            Meeting(
+                session: session, members: Array(session.teammates.prefix(Self.meetingSeats - 1)),
+                more: max(0, session.teammates.count - (Self.meetingSeats - 1)))
+        }
     }
 
     /// Ends sessions whose Claude Code process is gone (a killed terminal sends no SessionEnd).

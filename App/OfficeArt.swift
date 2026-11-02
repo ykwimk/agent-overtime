@@ -255,6 +255,14 @@ struct Walker {
     var box: CGRect { CGRect(x: x - 24, y: y - 45, width: 48, height: 48) }
 }
 
+/// Someone sitting at the meeting table: seats 0–2 face the room from behind it, 3–5 have their backs to it.
+struct RoomPerson {
+    let look: Look
+    let seat: Int
+    let state: WorkState
+    let headphones: Bool
+}
+
 /// Everything one picture of the office needs. Sizes are art pixels.
 struct OfficeScene {
     var layout: RoomLayout
@@ -270,8 +278,10 @@ struct OfficeScene {
     /// went home from.
     var out: Set<String> = []
     var doorOpen = false
-    /// The meeting room's glass door; nobody walks to a meeting yet, so it stays shut.
+    /// The meeting room's glass door, open while someone walks through.
     var meetingDoorOpen = false
+    /// Who sits at the meeting table.
+    var room: [RoomPerson] = []
     /// Who wears headphones (ids as `id(_:)` gives them). Only screenshots set it for now.
     var headphones: Set<String> = []
     /// Where two people talk: the top-left corner of each speaking mark.
@@ -509,7 +519,7 @@ struct OfficeRenderer {
             let width = scene.layout.width
             let height = self.height
             let plan = OfficeRenderer.wallPlan(scene.layout)
-            let key = "room \(width)x\(height) open:\(scene.doorOpen) \(scene.meetingDoorOpen)"
+            let key = "room \(width)x\(height) open:\(scene.doorOpen)"
             let room = art.picture(key) { [art] in
                 OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
                     room in
@@ -517,7 +527,7 @@ struct OfficeRenderer {
                     room.wall(width: width, plan: plan)
                     room.door(open: scene.doorOpen)
                     if let meeting = scene.layout.meetingRoom {
-                        room.meetingRoom(meeting, right: width, doorOpen: scene.meetingDoorOpen)
+                        room.meetingRoomBack(meeting)
                         room.lounge(meeting.left)
                     }
                 }
@@ -525,8 +535,13 @@ struct OfficeRenderer {
             stamp(room, 0, 0)
             clock(center: (123, 21), scene.now, scene.calendar)
             plants(scene)
-            // Back to front: someone walking behind an island's far seats is drawn before the island.
             var walkers = scene.walkers.sorted { $0.y < $1.y }[...]
+            if let meeting = scene.layout.meetingRoom {
+                let inside = { (walker: Walker) in walker.x >= meeting.left && walker.y < MeetingRoom.front }
+                meetingRoomFront(meeting, scene, walkers: walkers.filter(inside))
+                walkers.removeAll(where: inside)
+            }
+            // Back to front: someone walking behind an island's far seats is drawn before the island.
             for pod in scene.pods {
                 let origin = scene.layout.origin(of: pod.slot)
                 while let walker = walkers.first, walker.y < origin.y + RoomLayout.farDesk {
@@ -580,9 +595,9 @@ struct OfficeRenderer {
 
         // MARK: the right-hand column
 
-        /// The meeting room, empty: the TV showing no signal, a table for six, glass on the left and in front with
-        /// its door shut. Someone in a meeting is drawn over it later.
-        private func meetingRoom(_ room: MeetingRoom, right: Int, doorOpen: Bool) {
+        /// The back of the meeting room, drawn once with the room: the TV showing no signal, a poster, the rug and
+        /// the chairs behind the table.
+        private func meetingRoomBack(_ room: MeetingRoom) {
             let x0 = room.left
             let t = MeetingRoom.table
             let middle = x0 + t.x + t.width / 2
@@ -591,9 +606,31 @@ struct OfficeRenderer {
             sprite(Sheet.posters, 128, 64, 32, 32, x0 + 158, 27)
             stretch(Sheet.rug, (192, 96, 96, 96), edges: (32, 32, 32, 32), middle - 72, t.y - 20, 144, 80)
             for seat in room.seats.prefix(3) { sprite(Sheet.chair, 0, 40, 32, 48, seat.x - 16, t.y - 17) }
-            table(x0 + t.x, t.y, t.width, t.depth)
+        }
+
+        /// The rest of the meeting room, back to front, with the people at the table and anyone walking inside:
+        /// those facing the room behind the table (the table hides them from the chest), the table, those with
+        /// their backs to the room behind their chairs, the glass with its door, and the pots along it.
+        private mutating func meetingRoomFront(_ room: MeetingRoom, _ scene: OfficeScene, walkers: [Walker]) {
+            let t = MeetingRoom.table
+            let nod = scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
+            for person in scene.room where person.seat < 3 {
+                let x = CGFloat(room.seats[person.seat].x - 24)
+                let y = CGFloat(t.y - 28) + (person.state == .resting ? nod : 0)
+                self.person(person.look, column: 0, rows: 28, x, y)
+                if person.headphones { headphones(front: true, x, y) }
+            }
+            for walker in walkers where walker.y < t.y + 10 { self.walker(walker) }
+            table(room.left + t.x, t.y, t.width, t.depth)
+            for person in scene.room where person.seat >= 3 {
+                let x = CGFloat(room.seats[person.seat].x - 24)
+                let y = CGFloat(t.y - 6) + (person.state == .resting ? nod : 0)
+                self.person(person.look, column: 12, rows: 24, x, y)
+                if person.headphones { headphones(front: false, x, y) }
+            }
             for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 20) }
-            glass(left: x0, right: right, doorOpen: doorOpen)
+            for walker in walkers where walker.y >= t.y + 10 { self.walker(walker) }
+            glass(left: room.left, right: scene.layout.width, doorOpen: scene.meetingDoorOpen)
             // Pots along the glass: a tall one left of the door, low ones taking turns to its right.
             for (index, pot) in room.planters.enumerated() {
                 if index == 0 {

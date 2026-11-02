@@ -2,13 +2,15 @@ import AppKit
 import SwiftUI
 
 /// Who walks where: each time the office changes it lays out the islands and plans the walks: in through the
-/// door and out, and over to a newcomer's desk to talk.
+/// door and out, over to a newcomer's desk to talk, and to the meeting room and back.
 final class Stage: ObservableObject {
     typealias Point = (x: Int, y: Int)
 
     /// Where someone is when they are not walking.
     enum Place: Equatable {
         case desk
+        /// A seat of the meeting room's table.
+        case room(Int)
     }
 
     /// A stretch of a trip: a walk along points, or a pause where the walker stands and talks.
@@ -46,9 +48,11 @@ final class Stage: ObservableObject {
         let arrived: Date?
         let session: String
         let isSession: Bool
-        /// Waiting for the user's answer.
-        let waits: Bool
+        let state: WorkState
+        /// Its session is in a meeting.
+        let meets: Bool
         var place = Place.desk
+        var waits: Bool { state == .waiting }
     }
 
     /// Everyone on the move at one moment.
@@ -62,7 +66,10 @@ final class Stage: ObservableObject {
         var away: Set<String> = []
         /// Away from their desks for a while: chair in, laptop on.
         var out: Set<String> = []
+        /// Sitting in the meeting room.
+        var room: [RoomPerson] = []
         var doorOpen = false
+        var meetingDoorOpen = false
     }
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
@@ -92,6 +99,10 @@ final class Stage: ObservableObject {
     static let together: TimeInterval = 2
     /// At most this many walk at once.
     static let maxWalkers = 6
+    /// Where the session sits at the meeting table (the middle, facing the room), and its teammates in turn: the
+    /// rest of that side first, then across, the middle across last.
+    static let sessionSeat = 1
+    static let teammateSeats = [0, 2, 3, 5, 4]
 
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.
     func sync(_ office: OfficeState, width: Int, now: Date, animate: Bool) -> (pods: [Pod], layout: RoomLayout) {
@@ -103,11 +114,19 @@ final class Stage: ObservableObject {
         layout = RoomLayout(width: width, slots: (pods.last?.slot ?? -1) + 1)
         trips = trips.filter { $0.value.end > now }
 
-        let people = Self.people(pods)
+        let people = Self.people(pods, meeting: layout.meetingRoom == nil ? nil : office.meeting)
         if animate {
             for (id, person) in people where present[id] == nil { arrive(id, person) }
             checkVisits(people, now)
             for (id, person) in present where people[id] == nil { leave(id, person, people, before, now) }
+        }
+        // To the meeting room and back. Only when the office changes: a new width (the meeting room comes and
+        // goes with it) leaves everyone's walks as they are.
+        for (id, person) in people where before.width == layout.width {
+            guard let old = present[id], old.place != person.place else { continue }
+            if animate { move(id, person, from: old.place, now) } else { trips[id] = nil }
+        }
+        if animate {
             for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people, now) }
         }
         present = people
@@ -116,7 +135,8 @@ final class Stage: ObservableObject {
         return (pods, layout)
     }
 
-    private static func people(_ pods: [Pod]) -> [String: Person] {
+    /// Everyone at a seat, and where they are: at their desks, or the meeting's at the meeting table.
+    private static func people(_ pods: [Pod], meeting: OfficeState.Meeting?) -> [String: Person] {
         var people: [String: Person] = [:]
         for pod in pods {
             for (index, seat) in pod.seats.enumerated() {
@@ -125,11 +145,17 @@ final class Stage: ObservableObject {
                 case .session(let session, _):
                     people[id] = Person(
                         look: look, slot: pod.slot, seat: index, arrived: session.arrived, session: session.id,
-                        isSession: true, waits: session.state == .waiting)
+                        isSession: true, state: session.state, meets: session.meets)
+                    if meeting?.session.id == session.id { people[id]?.place = .room(sessionSeat) }
                 case .teammate(let mate, let session):
                     people[id] = Person(
                         look: look, slot: pod.slot, seat: index, arrived: mate.arrived, session: session.id,
-                        isSession: false, waits: mate.state == .waiting)
+                        isSession: false, state: mate.state, meets: session.meets)
+                    if meeting?.session.id == session.id,
+                        let turn = meeting?.members.firstIndex(where: { $0.id == mate.id })
+                    {
+                        people[id]?.place = .room(teammateSeats[turn])
+                    }
                 case .off:
                     break
                 }
@@ -147,13 +173,44 @@ final class Stage: ObservableObject {
     /// A walk in starts when the person arrived, not when the window first draws it: a window drawn late still
     /// shows the walk, or the person seated once it would be over.
     private func arrive(_ id: String, _ person: Person) {
-        guard let arrived = person.arrived else { return }
+        guard let arrived = person.arrived, let to = spot(person.place, person, layout) else { return }
         start(
             id,
             Trip(
-                look: person.look, start: arrived,
-                legs: [Leg(points: layout.route(slot: person.slot, seat: person.seat))],
-                from: nil, to: .desk, arriving: true))
+                look: person.look, start: arrived, legs: [Leg(points: layout.path(from: layout.doorSpot, to: to))],
+                from: nil, to: person.place, arriving: true))
+    }
+
+    /// Where a place is, for someone sitting at a seat of an island; nil is the front door.
+    private func spot(_ place: Place?, _ person: Person, _ room: RoomLayout) -> RoomLayout.Spot? {
+        switch place {
+        case nil: return room.doorSpot
+        case .desk?: return room.deskSpot(slot: person.slot, seat: person.seat)
+        case .room(let seat)?: return room.roomSpot(seat)
+        }
+    }
+
+    /// ③ Over to the meeting table, or back to the desk. Someone on the way the other way turns back; someone on
+    /// the way elsewhere gets there first.
+    private func move(_ id: String, _ person: Person, from old: Place, _ now: Date) {
+        guard let to = spot(person.place, person, layout) else { return }
+        if var trip = trips[id], trip.start <= now {
+            if trip.from == person.place, let back = Self.turnedBack(trip, at: now) {
+                trips[id] = back
+            } else if trip.to != person.place, let end = spot(trip.to, person, layout) {
+                trip.legs.append(Leg(points: layout.path(from: end, to: to)))
+                trip.to = person.place
+                trips[id] = trip
+            }
+            return
+        }
+        trips[id] = nil
+        guard let from = spot(old, person, layout) else { return }
+        start(
+            id,
+            Trip(
+                look: person.look, start: now, legs: [Leg(points: layout.path(from: from, to: to))], from: old,
+                to: person.place))
     }
 
     /// ① Once a newcomer sits down, their session walks over to their desk, talks for a moment and walks back.
@@ -161,9 +218,9 @@ final class Stage: ObservableObject {
     /// instead (③).
     private func visit(_ id: String, _ mate: Person, _ people: [String: Person], _ now: Date) {
         let host = "p:" + mate.session
-        guard let session = people[host], session.place == .desk, !session.waits, let arrived = mate.arrived else {
-            return
-        }
+        guard let session = people[host], session.place == .desk, !session.waits, !session.meets,
+            let arrived = mate.arrived
+        else { return }
         let others = people.filter { other in
             other.key != id && !other.value.isSession && other.value.session == mate.session
                 && other.value.arrived.map { abs($0.timeIntervalSince(arrived)) < Self.together } ?? false
@@ -187,12 +244,13 @@ final class Stage: ObservableObject {
                 from: .desk, to: .desk, partner: id))
     }
 
-    /// A visit not under way yet is dropped once its host waits for an answer. One whose newcomer has left
-    /// before it began is dropped; under way, the host turns back at once.
+    /// A visit not under way yet is dropped once its host waits for an answer or meets. One whose newcomer has
+    /// left before it began is dropped; under way, the host turns back at once.
     private func checkVisits(_ people: [String: Person], _ now: Date) {
         for (host, trip) in trips {
             guard let partner = trip.partner else { continue }
-            if trip.start > now, people[host]?.waits ?? true || people[partner] == nil {
+            let busy = people[host].map { $0.waits || $0.meets } ?? true
+            if trip.start > now, busy || people[partner] == nil {
                 trips[host] = nil
             } else if people[partner] == nil, let back = Self.turnedBack(trip, at: now) {
                 trips[host] = back
@@ -200,24 +258,30 @@ final class Stage: ObservableObject {
         }
     }
 
-    /// Out through the door. ② A teammate that worked a while first walks to its session's desk and reports.
-    /// Someone still walking in turns back; someone on their way elsewhere gets there first.
+    /// Out through the door. ② A teammate that worked a while first walks to its session's desk and reports,
+    /// unless the session is in the meeting room. Someone still walking in turns back; someone on their way
+    /// elsewhere gets there first.
     private func leave(_ id: String, _ person: Person, _ people: [String: Person], _ room: RoomLayout, _ now: Date) {
-        let desk = room.deskSpot(slot: person.slot, seat: person.seat)
         if var trip = trips[id], trip.start <= now {
             if trip.from == nil, let back = Self.turnedBack(trip, at: now) {
                 trips[id] = back
-            } else {
-                trip.legs.append(Leg(points: room.path(from: desk, to: room.doorSpot)))
+            } else if let end = spot(trip.to, person, room) {
+                trip.legs.append(Leg(points: room.path(from: end, to: room.doorSpot)))
                 trip.to = nil
                 trips[id] = trip
             }
             return
         }
-        var legs = [Leg(points: room.path(from: desk, to: room.doorSpot))]
-        if !person.isSession, let host = people["p:" + person.session], host.place == .desk,
-            now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
+        guard let here = spot(person.place, person, room) else {
+            trips[id] = nil
+            return
+        }
+        var legs = [Leg(points: room.path(from: here, to: room.doorSpot))]
+        let hostID = "p:" + person.session
+        if !person.isSession, person.place == .desk, let host = people[hostID], host.place == .desk,
+            present[hostID]?.place == .desk, now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
         {
+            let desk = room.deskSpot(slot: person.slot, seat: person.seat)
             let beside = room.besideSpot(slot: host.slot, seat: host.seat)
             let there = room.path(from: desk, to: beside)
             legs = [
@@ -225,7 +289,7 @@ final class Stage: ObservableObject {
                 Leg(points: room.path(from: beside, to: room.doorSpot)),
             ]
         }
-        start(id, Trip(look: person.look, start: now, legs: legs, from: .desk, to: nil))
+        start(id, Trip(look: person.look, start: now, legs: legs, from: person.place, to: nil))
     }
 
     /// The trip turned around at `now`, back the way it came; nil once it is past its pause (on the way back
@@ -316,20 +380,32 @@ final class Stage: ObservableObject {
         return nil
     }
 
-    /// Where everyone on the move is at `now`.
+    /// Where everyone on the move is at `now`, and who sits in the meeting room.
     func moment(at now: Date) -> Moment {
         var moment = Moment()
         let door = layout.doorSpot
+        let glassDoor = layout.meetingRoom.map { (x: $0.doorstep.x, y: MeetingRoom.front) }
         for (id, trip) in trips {
             guard let (walker, talk) = Self.walker(trip, at: now) else { continue }
             if trip.arriving { moment.away.insert(id) } else { moment.out.insert(id) }
             if let talk {
                 moment.standing.append(walker)
                 moment.talks.append(talk)
-            } else {
-                moment.walkers.append(walker)
+                continue
             }
+            moment.walkers.append(walker)
             if abs(walker.x - door.x) + abs(walker.y - door.aisle) < 30 { moment.doorOpen = true }
+            if let glassDoor, abs(walker.x - glassDoor.x) + abs(walker.y - glassDoor.y) < 20 {
+                moment.meetingDoorOpen = true
+            }
+        }
+        for (id, person) in present {
+            guard case .room(let seat) = person.place, !moment.away.contains(id), !moment.out.contains(id) else {
+                continue
+            }
+            moment.out.insert(id)
+            moment.room.append(
+                RoomPerson(look: person.look, seat: seat, state: person.state, headphones: headphones.contains(id)))
         }
         return moment
     }
@@ -345,6 +421,8 @@ final class Stage: ObservableObject {
             headphones: headphones)
         scene.out = moment.out
         scene.talks = moment.talks
+        scene.room = moment.room.sorted { $0.seat < $1.seat }
+        scene.meetingDoorOpen = moment.meetingDoorOpen && !reduceMotion
         return (scene, moment.walkers)
     }
 
@@ -367,7 +445,7 @@ final class Stage: ObservableObject {
         let roomKey =
             "\(frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
             + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(height) \(layout.width) \(generation) "
-            + "\(headphones.sorted())"
+            + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen)"
         if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
         scene.walkers += walking
         let bounds = CGRect(x: 0, y: 0, width: layout.width, height: height)

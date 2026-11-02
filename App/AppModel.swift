@@ -70,6 +70,7 @@ final class AppModel: ObservableObject {
     private let defaults: UserDefaults
     private var server: EventServer?
     private var ticker: Timer?
+    private var meetingTimer: Timer?
 
     private enum Keys {
         static let approved = "approvedStartFingerprint"
@@ -134,6 +135,7 @@ final class AppModel: ObservableObject {
 
     func receive(_ event: HookEvent, at now: Date = Date()) {
         if office.apply(event, now: now) { save() }
+        bookMeeting()
         receivedThisRun = true
         if !everConnected {
             everConnected = true
@@ -150,10 +152,34 @@ final class AppModel: ObservableObject {
         // Assign only on a change: every assignment redraws everything that watches the office.
         var checked = office
         checked.endSessions { pid in kill(pid, 0) != 0 && errno == ESRCH }
-        if checked != office { office = checked }
+        if checked != office {
+            office = checked
+            bookMeeting()
+        }
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }
+    }
+
+    /// Starts the meetings that are due at `now` (the screenshot tests pass their own clock).
+    func advanceMeetings(to now: Date = Date()) {
+        var advanced = office
+        advanced.advance(to: now)
+        if advanced != office { office = advanced }
+        bookMeeting()
+    }
+
+    /// Wakes up when the next meeting is due. Only while listening: tests move their own clock.
+    private func bookMeeting() {
+        meetingTimer?.invalidate()
+        meetingTimer = nil
+        guard ticker != nil, let next = office.nextMeeting else { return }
+        let timer = Timer(fire: next, interval: 0, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.advanceMeetings() }
+        }
+        timer.tolerance = 0.1
+        RunLoop.main.add(timer, forMode: .common)
+        meetingTimer = timer
     }
 
     func forgetIdleFolders() {
