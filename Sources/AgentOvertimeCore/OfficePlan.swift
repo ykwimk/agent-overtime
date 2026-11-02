@@ -164,11 +164,14 @@ public struct RoomLayout: Equatable {
         return Spot(aisle: aisle(slot: slot, seat: seat), x: stand.x, tail: [stand])
     }
 
-    /// On the aisle by a seat, a step to the island's outer side: where someone stands to talk with the person
-    /// sitting there.
+    /// On the aisle by a seat, a step to the side: where someone stands to talk with the person sitting there.
+    /// Across the desks the outer side; with the back to the room the inner one, since that person's bubble sits
+    /// at the outer shoulder, at the height of the visitor's speaking mark.
     public func besideSpot(slot: Int, seat: Int) -> Spot {
-        Spot(
-            aisle: aisle(slot: slot, seat: seat), x: standPoint(slot: slot, seat: seat).x + (seat < 2 ? -20 : 20),
+        let outer = seat < 2 ? -20 : 20
+        return Spot(
+            aisle: aisle(slot: slot, seat: seat),
+            x: standPoint(slot: slot, seat: seat).x + (Self.isAcross(seat) ? outer : -outer),
             tail: [])
     }
 
