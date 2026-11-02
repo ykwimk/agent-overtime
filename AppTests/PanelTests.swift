@@ -243,6 +243,23 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(model.office.toolKind(session: "s1"), .edit, "the kind stays: it isn't a detail")
     }
 
+    /// Finding turned off: those only found go home, a session with news stays. A model that isn't listening (as
+    /// in these tests) never looks at this Mac's processes, even turned back on.
+    func testFindingOffSendsTheFoundHome() {
+        let model = model(in: folder())
+        XCTAssertTrue(model.findsSessions, "on by default")
+        model.receive(
+            found: [
+                OfficeState.Found(pid: 4242, started: t0, folder: project, busy: false),
+                OfficeState.Found(pid: 4343, started: t0, folder: FakeScenario.root + "/web-app", busy: false),
+            ], at: t0)
+        model.receive(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: project, pid: 4242), at: t0 + 1)
+        model.findsSessions = false
+        XCTAssertEqual(model.office.desks.flatMap(\.sessions).map(\.label), ["my-project"])
+        model.findsSessions = true
+        XCTAssertEqual(model.office.liveSessionCount, 1)
+    }
+
     /// The office bar asks to connect while people are found but no news ever came; the first news ends it.
     func testTheConnectLineShowsUntilTheFirstNews() {
         let model = model(in: folder())

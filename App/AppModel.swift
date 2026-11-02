@@ -96,11 +96,26 @@ final class AppModel: ObservableObject {
     private var ticker: Timer?
     private var meetingTimer: Timer?
     private var hasLooked = false
+    private var finder = SessionFinder()
+    /// Find sessions without the plugin (Settings > Connection). Off, it stops looking and those only found leave;
+    /// on again, those found sit down as already there.
+    @Published var findsSessions: Bool {
+        didSet {
+            defaults.set(findsSessions, forKey: Keys.findsSessions)
+            if findsSessions {
+                hasLooked = false
+                lookForSessions()
+            } else {
+                office.forgetFound()
+            }
+        }
+    }
 
     private enum Keys {
         static let approved = "approvedStartFingerprint"
         static let everConnected = "everConnected"
         static let welcomeDismissed = "welcomeDismissed"
+        static let findsSessions = "findsSessions"
     }
 
     static let hooksURL = URL(
@@ -120,6 +135,7 @@ final class AppModel: ObservableObject {
         // On by default, written out so the helper, which takes only an explicit true, sees it.
         if defaults.object(forKey: ShowDetails.key) == nil { defaults.set(true, forKey: ShowDetails.key) }
         showsDetails = defaults.bool(forKey: ShowDetails.key)
+        findsSessions = defaults.object(forKey: Keys.findsSessions) as? Bool ?? true
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =
@@ -134,6 +150,8 @@ final class AppModel: ObservableObject {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             let folder = (Paths.userTempFolder as NSString).appendingPathComponent("ao-test-\(getpid())")
             let defaults = UserDefaults(suiteName: "AgentOvertimeTests-\(getpid())")!
+            // Tests send their own made-up sessions; this Mac's real ones stay out.
+            defaults.set(false, forKey: Keys.findsSessions)
             model = AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
         } else {
             model = AppModel(supportFolder: Paths.supportFolder(), socketPath: Paths.socket(), defaults: .standard)
@@ -157,6 +175,14 @@ final class AppModel: ObservableObject {
         ticker = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
+        // Right away, so sessions already running show within the first seconds; then on the 5 s tick only.
+        lookForSessions()
+    }
+
+    /// One look at this Mac's Claude Code processes, on the 5 s tick (never more often, window shown or not).
+    func lookForSessions() {
+        guard findsSessions, ticker != nil else { return }
+        receive(found: finder.look())
     }
 
     var shouldShowWelcome: Bool { !everConnected && !welcomeDismissed }
@@ -200,6 +226,7 @@ final class AppModel: ObservableObject {
             office = checked
             bookMeeting()
         }
+        lookForSessions()
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }

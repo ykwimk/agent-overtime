@@ -46,6 +46,12 @@ struct SettingsView: View {
                 }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
+                Toggle("Find Sessions Without the Plugin", isOn: $model.findsSessions)
+                Text(
+                    "Shows the Claude Code sessions started on this Mac even before the plugin sends news. Claude run by a script may show too."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
             } header: {
                 Text("Connection")
             }
