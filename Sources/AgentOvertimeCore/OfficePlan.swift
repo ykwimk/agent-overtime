@@ -131,20 +131,30 @@ public struct RoomLayout: Equatable {
     /// Where the lane runs, under the door.
     static let laneX = lane / 2 + 4
 
-    /// The aisle a seat is reached from: above the island across the desks (along the foot of the wall in the
-    /// first row), below it for the seats with their backs to the room.
+    /// Someone talking with a person across the desks stands at the island's end, feet this far below the
+    /// island's top: heads about level, and the body and speaking mark clear of every name tag.
+    public static let endStand = 74
+
+    /// The aisle a seat is reached from: the one between its row and the row above for the seats across the
+    /// desks (in the first row the one below it: the foot of the wall runs under the first row's name tags),
+    /// below the island for the seats with their backs to the room.
     func aisle(slot: Int, seat: Int) -> Int {
         let row = slot / columns
-        return Self.isAcross(seat) ? (row == 0 ? Self.wall + 2 : aisle(belowRow: row - 1)) : aisle(belowRow: row)
+        return aisle(belowRow: Self.isAcross(seat) ? max(0, row - 1) : row)
+    }
+
+    /// The middle of the clear floor at an island's end, beside a seat across the desks: left of seat 1, right of
+    /// seat 3. Nobody's name tag reaches over it.
+    func endX(slot: Int, seat: Int) -> Int {
+        let o = origin(of: slot)
+        return seat < 2 ? o.x - Self.gap / 2 : o.x + Self.islandWidth + Self.gap / 2
     }
 
     /// The door's feet point and the walking route from it to a seat: down the lane, along the aisle between
-    /// rows (under the wall for the first row's far seats), then up or down to the seat. Nobody walks over the
-    /// heads of people sitting there.
+    /// rows, then up or down to the seat; the seats across the desks by the island's end. Nobody walks over the
+    /// heads of people sitting there, or along the foot of the wall under the first row's name tags.
     public func route(slot: Int, seat: Int) -> [(x: Int, y: Int)] {
-        let stand = standPoint(slot: slot, seat: seat)
-        let aisle = aisle(slot: slot, seat: seat)
-        return [(Self.laneX, Self.wall + 2), (Self.laneX, aisle), (stand.x, aisle), stand]
+        path(from: doorSpot, to: deskSpot(slot: slot, seat: seat))
     }
 
     /// A place people walk to: the aisle it is reached from, where on that aisle they turn off, and the points
@@ -158,21 +168,25 @@ public struct RoomLayout: Equatable {
     /// Just inside the front door.
     public var doorSpot: Spot { Spot(aisle: Self.wall + 2, x: Self.laneX, tail: []) }
 
-    /// A seat, reached the way `route(slot:seat:)` reaches it.
+    /// A seat. Across the desks: up or down the island's end, then behind the far desk to the seat.
     public func deskSpot(slot: Int, seat: Int) -> Spot {
         let stand = standPoint(slot: slot, seat: seat)
-        return Spot(aisle: aisle(slot: slot, seat: seat), x: stand.x, tail: [stand])
+        guard Self.isAcross(seat) else { return Spot(aisle: aisle(slot: slot, seat: seat), x: stand.x, tail: [stand]) }
+        let end = endX(slot: slot, seat: seat)
+        return Spot(aisle: aisle(slot: slot, seat: seat), x: end, tail: [(end, stand.y), stand])
     }
 
-    /// On the aisle by a seat, a step to the side: where someone stands to talk with the person sitting there.
-    /// Across the desks the outer side; with the back to the room the inner one, since that person's bubble sits
-    /// at the outer shoulder, at the height of the visitor's speaking mark.
+    /// Where someone stands to talk with the person sitting at a seat. Across the desks: at the island's end on
+    /// that person's side. With the back to the room: on the aisle a step to the inner side, since that person's
+    /// bubble sits at the outer shoulder, at the height of the visitor's speaking mark.
     public func besideSpot(slot: Int, seat: Int) -> Spot {
+        let aisle = aisle(slot: slot, seat: seat)
+        if Self.isAcross(seat) {
+            let end = endX(slot: slot, seat: seat)
+            return Spot(aisle: aisle, x: end, tail: [(end, origin(of: slot).y + Self.endStand)])
+        }
         let outer = seat < 2 ? -20 : 20
-        return Spot(
-            aisle: aisle(slot: slot, seat: seat),
-            x: standPoint(slot: slot, seat: seat).x + (Self.isAcross(seat) ? outer : -outer),
-            tail: [])
+        return Spot(aisle: aisle, x: standPoint(slot: slot, seat: seat).x - outer, tail: [])
     }
 
     /// A seat of the meeting room: up from the aisle under the first row, through the glass door, left of the
@@ -187,7 +201,8 @@ public struct RoomLayout: Equatable {
 
     /// The walk from one spot to another: back to the first spot's aisle, along it, down the lane or the
     /// passage beside the right-hand column (whichever is shorter) when the aisles differ, along the second
-    /// aisle, and on to the spot.
+    /// aisle, and on to the spot. A stretch that would go on and come back the same line is cut short (the
+    /// first island's end is the lane itself).
     public func path(from a: Spot, to b: Spot) -> [(x: Int, y: Int)] {
         var points = a.tail.reversed() + [(a.x, a.aisle)]
         if a.aisle != b.aisle {
@@ -197,7 +212,15 @@ public struct RoomLayout: Equatable {
             points += [(way, a.aisle), (way, b.aisle)]
         }
         points += [(b.x, b.aisle)] + b.tail
-        return points.indices.filter { $0 == 0 || points[$0 - 1] != points[$0] }.map { points[$0] }
+        var kept: [(x: Int, y: Int)] = []
+        for point in points {
+            if kept.count >= 2 {
+                let (p, q) = (kept[kept.count - 2], kept[kept.count - 1])
+                if (p.x == q.x && q.x == point.x) || (p.y == q.y && q.y == point.y) { kept.removeLast() }
+            }
+            if kept.last.map({ $0 != point }) ?? true { kept.append(point) }
+        }
+        return kept
     }
 }
 

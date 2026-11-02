@@ -413,6 +413,33 @@ final class CaptureTests: XCTestCase {
             "office-hand-off", size: OfficeView.defaultSize,
             OfficeView(fixedNow: visit, stage: handOff).environmentObject(visited))
 
+        // ① to a newcomer across the desks: the caller stands at the island's end, off the name tags. The first
+        // teammate sits across from its session (that end is the lane); with the island's other seats taken by
+        // sessions, the newcomer sits across on the right.
+        for (name, sessions) in [
+            ("office-hand-off-front", ["my-project"]),
+            ("office-hand-off-front-right", ["my-project", "web-app", "blog"]),
+        ] {
+            let stage = Stage()
+            let model = makeModel(connected: true)
+            for (i, folder) in sessions.enumerated() {
+                model.receive(
+                    HookEvent(kind: .userPromptSubmit, session: "f\(i)", cwd: FakeScenario.root + "/" + folder),
+                    at: base - 300)
+            }
+            _ = stage.sync(model.office, width: width, now: base - 30, animate: true)
+            model.receive(
+                HookEvent(kind: .subagentStart, session: "f0", cwd: folder, agentID: "x1", agentType: "Explore"),
+                at: base - 20)
+            _ = stage.sync(model.office, width: width, now: base - 20, animate: true)
+            XCTAssertEqual(
+                model.office.pods.first?.seats.compactMap { $0 }.count, sessions.count + 1, "all at the first island")
+            try capture(
+                name, size: OfficeView.defaultSize,
+                OfficeView(fixedNow: try talking(stage, from: base - 20, to: base), stage: stage).environmentObject(
+                    model))
+        }
+
         let report = Stage()
         let reporting = office(report)
         reporting.receive(

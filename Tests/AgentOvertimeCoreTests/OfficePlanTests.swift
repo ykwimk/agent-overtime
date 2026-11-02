@@ -138,34 +138,76 @@ final class OfficePlanTests: XCTestCase {
 
     func testRouteGoesDownTheLaneThenAlongTheAisleToTheSeat() {
         let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
-        for (slot, seat) in [(3, 2), (3, 3), (0, 1), (2, 0)] {
-            let route = layout.route(slot: slot, seat: seat)
-            let stand = layout.standPoint(slot: slot, seat: seat)
-            let top = layout.origin(of: slot).y
-            XCTAssertEqual(route.count, 4)
-            XCTAssertEqual(route[0].x, route[1].x, "straight down from the door")
-            XCTAssertLessThan(route[0].x, RoomLayout.lane, "the lane is left of every island")
-            XCTAssertEqual(route[1].y, route[2].y, "then along the aisle")
-            XCTAssertEqual(route[2].x, stand.x)
-            XCTAssertEqual(route[3].x, stand.x, "then straight to the seat")
-            XCTAssertEqual(route[3].y, stand.y)
-            if RoomLayout.isAcross(seat) {
-                XCTAssertLessThan(stand.y, top + RoomLayout.farDesk, "behind the far desk")
-                XCTAssertLessThan(route[1].y, stand.y, "the aisle above the island: behind the far heads")
-                if slot < layout.columns {
-                    XCTAssertEqual(route[1].y, RoomLayout.wall + 2, "the first row: along the foot of the wall")
+        for slot in 0..<4 {
+            for seat in 0..<Island.size {
+                let route = layout.route(slot: slot, seat: seat)
+                let stand = layout.standPoint(slot: slot, seat: seat)
+                let o = layout.origin(of: slot)
+                let name = "island \(slot) seat \(seat): \(route)"
+                XCTAssertEqual(route[0].x, route[1].x, "straight down from the door")
+                XCTAssertLessThan(route[0].x, RoomLayout.lane, "the lane is left of every island")
+                XCTAssertEqual(route.last!.x, stand.x)
+                XCTAssertEqual(route.last!.y, stand.y)
+                for (p, q) in zip(route, route.dropFirst()) { XCTAssert(p.x == q.x || p.y == q.y, name) }
+                XCTAssertFalse(
+                    route.dropFirst().contains { $0.y == RoomLayout.wall + 2 },
+                    "never along the foot of the wall, under the first row's name tags: \(name)")
+                if RoomLayout.isAcross(seat) {
+                    XCTAssertLessThan(stand.y, o.y + RoomLayout.farDesk, "behind the far desk")
+                    let end = route[route.count - 2]
+                    XCTAssertEqual(end.y, stand.y, "in from the island's end: \(name)")
+                    XCTAssert(end.x < o.x || end.x > o.x + RoomLayout.islandWidth, "past the island's end: \(name)")
+                    if slot >= layout.columns {
+                        XCTAssert((o.y - 6...o.y).contains(route[1].y), "between the rows: \(name)")
+                    } else {
+                        XCTAssert(
+                            route.dropFirst().allSatisfy { $0.y >= stand.y }, "the first row: from below: \(name)")
+                    }
                 } else {
-                    XCTAssert((top - 6...top).contains(route[1].y), "between the rows")
+                    XCTAssertEqual(route.count, 4, name)
+                    XCTAssertGreaterThanOrEqual(route[1].y - stand.y, 20, "below the seated heads, not over them")
+                    XCTAssertLessThan(route[1].y, o.y + RoomLayout.islandDepth, "inside the island's own row")
                 }
-            } else {
-                XCTAssertGreaterThanOrEqual(route[1].y - stand.y, 20, "below the seated heads, not over them")
-                XCTAssertLessThan(route[1].y, top + RoomLayout.islandDepth, "inside the island's own row")
+            }
+        }
+        // The first island's end is the lane: straight down to the seat's line, not down and back up.
+        XCTAssertEqual(layout.route(slot: 0, seat: 1).count, 3)
+    }
+
+    /// Talking with someone across the desks: standing at the island's end, on clear floor. The body and the
+    /// speaking mark over the head stay off every name tag (a tag can be as wide as its desk, three lines tall).
+    func testVisitsAcrossTheDesksStandClearOfNameTags() {
+        typealias Box = (x: Int, y: Int, width: Int, height: Int)
+        func overlap(_ a: Box, _ b: Box) -> Bool {
+            a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+        }
+        let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        let tags: [Box] = (0..<4).flatMap { slot in
+            (0..<Island.size).map { seat -> Box in
+                let o = layout.origin(of: slot)
+                let x = o.x + RoomLayout.deskX(seat)
+                let y = RoomLayout.isAcross(seat) ? o.y : o.y + RoomLayout.islandDepth - 23
+                return (x, y, RoomLayout.deskWidth, 23)
+            }
+        }
+        for slot in 0..<4 {
+            for seat in [1, 3] {
+                let spot = layout.besideSpot(slot: slot, seat: seat)
+                let feet = spot.tail.last!
+                let o = layout.origin(of: slot)
+                XCTAssert(feet.x < o.x || feet.x > o.x + RoomLayout.islandWidth, "at the island's end")
+                XCTAssertLessThan(abs(feet.y - 41 - (o.y + 24)), 12, "heads about level")
+                let standing: Box = (feet.x - 16, feet.y - 53, 32, 53)
+                for tag in tags { XCTAssertFalse(overlap(standing, tag), "island \(slot) seat \(seat): \(tag)") }
+                let walk = layout.path(from: layout.deskSpot(slot: 0, seat: 0), to: spot)
+                XCTAssertFalse(walk.contains { $0.y == RoomLayout.wall + 2 }, "not along the foot of the wall")
             }
         }
     }
 
     /// From any seat to beside any other: straight lines only, along aisles (never across an island), between
-    /// rows by the lane or the passage beside the right-hand column, whichever is shorter.
+    /// rows by the lane or the passage beside the right-hand column, whichever is shorter. Only the step behind
+    /// a far desk to or from a seat across the desks leaves the aisles.
     func testWalksBetweenSeatsKeepToTheAislesAndPassages() {
         let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
         let passage = layout.pillar! - 20
@@ -175,13 +217,16 @@ final class OfficePlanTests: XCTestCase {
                 let from = layout.deskSpot(slot: a / 4, seat: a % 4)
                 let to = layout.besideSpot(slot: b / 4, seat: b % 4)
                 let path = layout.path(from: from, to: to)
-                XCTAssertEqual(path.first!.x, from.tail[0].x)
-                XCTAssertEqual(path.first!.y, from.tail[0].y)
-                XCTAssertEqual(path.last!.x, to.x)
-                XCTAssertEqual(path.last!.y, to.aisle)
-                for (p, q) in zip(path, path.dropFirst()) {
+                let end = to.tail.last ?? (to.x, to.aisle)
+                XCTAssertEqual(path.first!.x, from.tail.last!.x)
+                XCTAssertEqual(path.first!.y, from.tail.last!.y)
+                XCTAssertEqual(path.last!.x, end.x)
+                XCTAssertEqual(path.last!.y, end.y)
+                for (index, (p, q)) in zip(path, path.dropFirst()).enumerated() {
                     XCTAssert(p.x == q.x || p.y == q.y, "\(a) → \(b): \(path)")
-                    if p.y == q.y { XCTAssert(aisles.contains(p.y), "along an aisle: \(a) → \(b): \(path)") }
+                    if p.y == q.y, index > 0 || from.tail.count < 2 {
+                        XCTAssert(aisles.contains(p.y), "along an aisle: \(a) → \(b): \(path)")
+                    }
                     if p.x == q.x, p.x != from.x, p.x != to.x {
                         XCTAssert([RoomLayout.laneX, passage].contains(p.x), "\(a) → \(b): \(path)")
                     }

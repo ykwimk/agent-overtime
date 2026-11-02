@@ -419,13 +419,18 @@ final class Stage: ObservableObject {
     }
 
     /// Standing at `at` and talking with the person at `other`'s seat: facing them, the speaking mark beside the
-    /// head on their side.
+    /// head on their side. At an island's end the mark stays over the clear floor there, above the head: their
+    /// name tag and bubble reach right up to the island's edge.
     private func talk(at: Point, with other: Person, in room: RoomLayout? = nil) -> Leg {
         let room = room ?? layout
         let x = room.origin(of: other.slot).x + RoomLayout.personX(other.seat)
+        if RoomLayout.isAcross(other.seat) {
+            return Leg(
+                points: [at], pause: Self.talkTime, facing: x >= at.x ? .right : .left,
+                talk: (x >= at.x ? at.x : at.x - 16, at.y - 53))
+        }
         return Leg(
-            points: [at], pause: Self.talkTime, facing: RoomLayout.isAcross(other.seat) ? .down : .up,
-            talk: (x >= at.x ? at.x + 5 : at.x - 21, at.y - 50))
+            points: [at], pause: Self.talkTime, facing: .up, talk: (x >= at.x ? at.x + 5 : at.x - 21, at.y - 50))
     }
 
     static func length(_ route: [(x: Int, y: Int)]) -> Double {
