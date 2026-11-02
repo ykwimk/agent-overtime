@@ -1,7 +1,7 @@
 {
   "name": "agent-overtime",
   "displayName": "Agent Overtime",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Lets the Agent Overtime Mac app show your sessions and subagents in its pixel office. Sends the app only event names, session and subagent ids and names, folder paths, a tool kind and who a message is addressed to, plus, unless you turn Show Details off in the app, shortened file names, edited line counts, task titles, states and ids, and the model, over a local socket only your user can open; nothing leaves this Mac.",
   "author": { "name": "Agent Overtime contributors" },
   "license": "MIT",
