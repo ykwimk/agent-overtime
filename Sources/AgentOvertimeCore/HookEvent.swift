@@ -395,10 +395,9 @@ public enum Detail {
     /// The lines an edit adds and removes: `new` against `old`, leaving out the whole lines both begin and end with.
     /// One pass over the bytes from each end, no diff and no list of lines, so a huge edit stays fast. Capped.
     public static func lineChange(old: String, new: String) -> (added: Int, removed: Int) {
-        var old = old
-        var new = new
-        // Native UTF-8, read in place.
-        return old.withUTF8 { a in new.withUTF8 { b in lineChange(a, b) } }
+        // Copied out as UTF-8: for strings from JSONSerialization this is several times faster than `withUTF8`.
+        let (old, new) = (Array(old.utf8), Array(new.utf8))
+        return old.withUnsafeBufferPointer { a in new.withUnsafeBufferPointer { b in lineChange(a, b) } }
     }
 
     private static func lineChange(_ a: UnsafeBufferPointer<UInt8>, _ b: UnsafeBufferPointer<UInt8>) -> (Int, Int) {
@@ -423,8 +422,7 @@ public enum Detail {
 
     /// Lines in some text: its newlines, and one more for a last line without one. Capped.
     public static func lines(_ text: String) -> Int {
-        var text = text
-        return text.withUTF8 { lines($0, 0..<$0.count) }
+        Array(text.utf8).withUnsafeBufferPointer { lines($0, 0..<$0.count) }
     }
 
     private static func lines(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Int {
