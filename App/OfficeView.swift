@@ -720,8 +720,10 @@ struct SidePanelView: View {
                 if others > 0 { Text("and \(others) more").foregroundStyle(.secondary) }
             }
         }
-        // The latest steps before the one going on now, newest first.
-        let steps = Array(detail.steps.dropLast(doing == nil ? 0 : 1).suffix(3).reversed())
+        // The latest steps, newest first, leaving out what they do now (its kind on its file) wherever it was.
+        let current = doing == nil ? nil : detail.steps.last
+        let steps = Array(
+            detail.steps.filter { $0.kind != current?.kind || $0.file != current?.file }.suffix(3).reversed())
         if !steps.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Recently").foregroundStyle(.secondary)
