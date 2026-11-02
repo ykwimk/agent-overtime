@@ -194,6 +194,24 @@ final class CaptureTests: XCTestCase {
         }
     }
 
+    /// Every desk prop twice: once across the desks and once with the back to the room. Folder names are picked so
+    /// each prop comes up; the second session of a folder gets the same prop at another seat.
+    func testCaptureDeskProps() throws {
+        let model = makeModel(connected: true)
+        let names = Prop.allCases.map { prop in (0...).lazy.map { "desk-\($0)" }.first { Prop.pick($0) == prop }! }
+        for (i, name) in (names + names).enumerated() {
+            model.receive(
+                HookEvent(kind: .userPromptSubmit, session: "prop-\(i)", cwd: FakeScenario.root + "/" + name),
+                at: today(14) - 300)
+        }
+        XCTAssertEqual(model.office.islands.count, 6)
+        for (time, hour) in [("day", 14), ("night", 22)] {
+            try capture(
+                "office-props-\(time)", size: CGSize(width: OfficeView.defaultSize.width, height: 1060),
+                OfficeView(fixedNow: today(hour)).environmentObject(model))
+        }
+    }
+
     /// The README picture (copied by hand to docs/images/): the window a little taller than the default so the
     /// off-duty prototype desk shows too, and the helper already seated, so no name tag stands under an empty
     /// chair. Light by day, dark by night.
@@ -369,12 +387,18 @@ final class CaptureTests: XCTestCase {
         let names = ["my-project", "web-app", "blog", "api", "Explore", "Plan", "code-reviewer", "helper"]
         XCTAssertGreaterThanOrEqual(Set(names.map(Prop.pick)).count, 4, "the example names don't all match")
 
+        XCTAssertGreaterThanOrEqual(Prop.allCases.count, 10, "at least six new kinds beside the four before")
+
         let store = ArtStore()
+        let small = "Objects/Small Items/"
         for (sheet, x, y) in [
-            ("Objects/Small Items/Lighting, Table.png", 224, 32), ("Objects/Small Items/Lighting, Table.png", 192, 32),
-            ("Objects/Small Items/Lighting, Table.png", 160, 32), ("Objects/Small Items/Lighting, Table.png", 128, 32),
-            ("Objects/Furniture/Planter.png", 128, 0), ("Objects/Small Items/Laptop.png", 64, 0),
-            ("Objects/Small Items/Laptop.png", 64, 96),
+            (small + "Lighting, Table.png", 224, 32), (small + "Lighting, Table.png", 192, 32),
+            (small + "Lighting, Table.png", 160, 32), (small + "Lighting, Table.png", 128, 32),
+            ("Objects/Furniture/Planter.png", 128, 0), (small + "Laptop.png", 64, 0), (small + "Laptop.png", 64, 96),
+            (small + "Dishes A.png", 0, 0), (small + "Coffee Maker.png", 64, 0), (small + "Rotary Phones.png", 32, 32),
+            (small + "Tabletop Portraits.png", 32, 32), (small + "Loose Paper.png", 32, 64),
+            (small + "Boxes.png", 32, 32), (small + "Flowers.png", 128, 64), (small + "Flowers.png", 192, 0),
+            (small + "Flowers.png", 96, 64),
         ] {
             XCTAssertNotNil(store.cell(sheet, x, y, 32, 32), "\(sheet) \(x),\(y)")
         }

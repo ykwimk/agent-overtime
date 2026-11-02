@@ -177,12 +177,44 @@ LPC Revised: Objects/Small Items/Credits.txt
 https://github.com/ElizaWy/LPC/blob/main/Objects/Small%20Items/Credits.txt
 ================================================================
 
+-- Used here: Objects/Small Items/Boxes.png
+Boxes
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
 -- Used here: Objects/Small Items/Coffee Maker.png
 Coffee Maker
 -------------------
   ARTIST(S): Eliza Wyatt (DeathsDarling)
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Dishes A.png
+Dishes
+-------------------
+  ARTIST(S): Richard Kettering (Jetrel), BlueCarrot16, Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/rpg-item-set
+  SOURCE: https://opengameart.org/content/lpc-meals
+  LICENSE: OGA-BY 3.0 (Original art CC0)
+  DETAILS:
+	Top Row: Original by Richard Kettering. Recolored by BlueCarrot16 and Eliza Wyatt.
+	Second Row: Original by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. A small plate is drawn under the Coffee Maker
+   sheet's mug, as a cup on its saucer.
+
+-- Used here: Objects/Small Items/Flowers.png
+Flowers
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Single flower, bouquet, large vase by Lanea Zimmerman. Potted shrub base, small vase by Eliza Wyatt. Recolored by Eliza Wyatt.
+MODIFIED: by Agent Overtime contributors, 2026, while drawing; the file
+   itself is not changed. A single flower is drawn standing in a small
+   vase.
 
 -- Used here: Objects/Small Items/Laptop.png
 Laptop
@@ -206,6 +238,13 @@ Lighting, Tabletop
 	Top Row: Original by Lanea Zimmerman. Adjustments and recolors by Eliza Wyatt.
 	Row 2+: Original by Eliza Wyatt.
 
+-- Used here: Objects/Small Items/Loose Paper.png
+Loose Paper
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
 -- Used here: Objects/Small Items/Pillows.png
 Pillows
 -------------------
@@ -214,6 +253,21 @@ Pillows
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Lanea Zimmerman and BlueCarrot16. Recolored by Eliza Wyatt.
 ALSO: the original page asks to link https://opengameart.org/content/lpc-interior-castle-tiles
+
+-- Used here: Objects/Small Items/Rotary Phones.png
+Rotary Phone
+-------------------
+  ARTIST(S): Eliza Wyatt (DeathsDarling)
+  LICENSE: OGA-BY 3.0
+  DETAILS: Original by Eliza Wyatt.
+
+-- Used here: Objects/Small Items/Tabletop Portraits.png
+Tabletop Pictures
+-------------------
+  ARTIST(S): Lanea Zimmerman (Sharm), Eliza Wyatt (DeathsDarling)
+  SOURCE: https://opengameart.org/content/lpc-interior-castle-tiles
+  LICENSE: OGA-BY 3.0
+  DETAILS: Office portrait frames by Eliza Wyatt. Woman's Small Portrait by Lanea Zimmerman, recolored by Eliza Wyatt.
 
 
 ================================================================

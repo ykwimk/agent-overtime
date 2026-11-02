@@ -152,10 +152,12 @@ struct Look: Equatable {
     var layers: [Layer] { [Layer(sheet: Self.body, row: skin), clothes, hair] }
 }
 
-/// What stands on a desk beside the laptop. A name always gets the same one, picked like `Look.pick`: a session
-/// by its folder's name, a teammate by its own name.
+/// What stands on a desk beside the laptop: one or two small things, so the desk doesn't crowd. A name always
+/// gets the same one, picked like `Look.pick`: a session by its folder's name, a teammate by its own name.
 enum Prop: CaseIterable {
-    case lamp, shade, flowers, laptop, none
+    /// A desk lamp, a lampshade, flowers in a pot, a second screen, a mug on a saucer, a phone, a framed photo,
+    /// papers with a mug, a box, a small potted plant, one flower in a vase.
+    case lamp, shade, flowers, laptop, coffee, phone, photo, papers, box, plant, vase
 
     static func pick(_ seed: String) -> Prop {
         allCases[Int(Look.stableHash("prop " + seed) % UInt32(allCases.count))]
@@ -279,6 +281,12 @@ struct OfficeRenderer {
         static let pillows = "Objects/Small Items/Pillows.png"
         static let coffee = "Objects/Small Items/Coffee Maker.png"
         static let shelf = "Objects/Furniture/Shelf.png"
+        static let dishes = "Objects/Small Items/Dishes A.png"
+        static let phones = "Objects/Small Items/Rotary Phones.png"
+        static let photos = "Objects/Small Items/Tabletop Portraits.png"
+        static let papers = "Objects/Small Items/Loose Paper.png"
+        static let boxes = "Objects/Small Items/Boxes.png"
+        static let flowers = "Objects/Small Items/Flowers.png"
         static let desk = "Objects/Furniture/Desk, Office.png"
         static let chair = "Objects/Furniture/Seating/Chair, Office.png"
         static let laptop = "Objects/Small Items/Laptop.png"
@@ -780,9 +788,32 @@ struct OfficeRenderer {
                 } else {
                     sprite(Sheet.laptop, 64, 0, 32, 32, dx + 36, base - 25)
                 }
-            case .none:
-                break
+            case .coffee:
+                small(Sheet.dishes, (0, 0), middle: 16, foot: 22, dx: dx, base: base, across: across)
+                small(Sheet.coffee, (64, 0), middle: 15, foot: 19, dx: dx, base: base - 4, across: across)
+            case .phone:
+                small(Sheet.phones, (32, 32), middle: 15, foot: 29, dx: dx, base: base, across: across)
+            case .photo:
+                small(Sheet.photos, (32, 32), middle: 16, foot: 19, dx: dx, base: base, across: across)
+            case .papers:
+                small(Sheet.papers, (32, 64), middle: 15, foot: 25, dx: dx - 3, base: base - 1, across: across)
+                small(Sheet.coffee, (64, 0), middle: 15, foot: 19, dx: dx + 7, base: base + 2, across: across)
+            case .box:
+                small(Sheet.boxes, (32, 32), middle: 16, foot: 24, dx: dx, base: base, across: across)
+            case .plant:
+                small(Sheet.flowers, (128, 64), middle: 15, foot: 28, dx: dx, base: base, across: across)
+            case .vase:
+                small(Sheet.flowers, (192, 0), middle: 15, foot: 23, dx: dx, base: base, across: across)
+                small(Sheet.flowers, (96, 64), middle: 15, foot: 23, dx: dx, base: base, across: across)
             }
+        }
+
+        /// One small thing from a sheet's 32-pixel cell, its `middle` column and `foot` row (cell pixels) put
+        /// where desk props stand: left of someone facing the room, right of someone with their back to it.
+        private func small(
+            _ sheet: String, _ cell: (x: Int, y: Int), middle: Int, foot: Int, dx: Int, base: Int, across: Bool
+        ) {
+            sprite(sheet, cell.x, cell.y, 32, 32, dx + (across ? 10 : 51) - middle, base - foot)
         }
 
         /// The pack has no sitting pose: the back of a standing person, cut under the shoulders (sheet row 24),
