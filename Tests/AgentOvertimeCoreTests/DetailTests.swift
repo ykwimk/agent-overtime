@@ -54,6 +54,19 @@ final class DetailTests: XCTestCase {
         XCTAssertEqual(Detail.lines(String(repeating: "\n", count: 2_000_000)), Detail.maxLines, "capped")
     }
 
+    func testModelNamesInAKnownShapeReadAsWords() {
+        XCTAssertEqual(Detail.modelName("claude-opus-4-7"), "Opus 4.7")
+        XCTAssertEqual(Detail.modelName("claude-sonnet-4-5-20250929"), "Sonnet 4.5", "the date left out")
+        XCTAssertEqual(Detail.modelName("claude-haiku-4"), "Haiku 4")
+        XCTAssertEqual(Detail.modelName("fable-5"), "Fable 5")
+        // Any other shape as it came, without "claude-".
+        XCTAssertEqual(Detail.modelName("claude-opus-4-7[1m]"), "opus-4-7[1m]")
+        XCTAssertEqual(Detail.modelName("claude-3-5-sonnet-20241022"), "3-5-sonnet-20241022")
+        XCTAssertEqual(Detail.modelName("claude-opus"), "opus")
+        XCTAssertEqual(Detail.modelName("gpt-4-1"), "gpt-4-1")
+        XCTAssertEqual(Detail.modelName("Opus-4-7"), "Opus-4-7")
+    }
+
     /// Near the 8 MiB input limit, counting stays linear.
     func testAHugeEditIsCountedQuickly() {
         let half = String(repeating: "let x = 1\n", count: 400_000)  // 4 MB

@@ -741,7 +741,7 @@ struct SidePanelView: View {
             }
         }
         if let model = detail.model {
-            Text(verbatim: model.hasPrefix("claude-") ? String(model.dropFirst(7)) : model)
+            Text(verbatim: Detail.modelName(model))
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
         }
     }

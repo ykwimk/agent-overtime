@@ -367,6 +367,15 @@ public enum Detail {
     public static let maxLines = 999_999
     public static let maxTasks = 999
 
+    /// A model as the side panel shows it: a known shape such as `claude-opus-4-7` (a date at the end left out) as
+    /// "Opus 4.7"; any other shape as it came, without `claude-`.
+    public static func modelName(_ model: String) -> String {
+        let name = model.hasPrefix("claude-") ? String(model.dropFirst(7)) : model
+        guard let match = name.wholeMatch(of: #/(opus|sonnet|haiku|fable)-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?/#)
+        else { return name }
+        return match.1.capitalized + " " + (match.3.map { "\(match.2).\($0)" } ?? String(match.2))
+    }
+
     /// A file as the side panel shows it. Inside the session's folder, its path from there (`src/app.ts`) or, deeper,
     /// `…/` and its last two parts; anywhere else, and for any path with a `.` or `..` part, its name alone. Never
     /// the full path. nil for a path that isn't absolute or leaves nothing to show.
