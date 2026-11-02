@@ -170,6 +170,13 @@ final class HookEventTests: XCTestCase {
             try XCTUnwrap(preToolUse("SendMessage", input: ["to": "Pl\u{200B}a\u{202E}n"])).recipient, "Plan")
         let long = String(repeating: "a", count: 129)
         XCTAssertNil(try XCTUnwrap(preToolUse("SendMessage", input: ["to": long])).recipient, "(c) dropped, not cut")
+        // Counted whole, before spaces are trimmed: a space at 129 doesn't let a cut name through.
+        for spaced in [
+            String(repeating: "a", count: 128) + " bbb", "Plan" + String(repeating: " ", count: 125) + "Other",
+        ] {
+            XCTAssertNil(
+                try XCTUnwrap(preToolUse("SendMessage", input: ["to": spaced])).recipient, "(c) \(spaced.count)")
+        }
         let fits = String(repeating: "a", count: 128)
         XCTAssertEqual(try XCTUnwrap(preToolUse("SendMessage", input: ["to": fits])).recipient, fits)
         XCTAssertNil(try XCTUnwrap(preToolUse("SendMessage", input: ["to": ["Plan"]])).recipient, "not text")

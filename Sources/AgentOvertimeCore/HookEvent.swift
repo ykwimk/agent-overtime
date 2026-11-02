@@ -172,7 +172,7 @@ public struct HookEvent: Codable, Equatable {
         // dropped whole rather than cut (a cut name could match another teammate).
         event.sendsMessage = kind == .preToolUse && sendsMessage
         event.recipient = nil
-        if event.sendsMessage, let to = recipient, let clean = Sanitize.clean(to, max: Limits.id + 1),
+        if event.sendsMessage, let to = recipient, let clean = Sanitize.clean(to, max: .max),
             clean.unicodeScalars.count <= Limits.id
         {
             event.recipient = clean
