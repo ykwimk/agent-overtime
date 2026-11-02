@@ -428,6 +428,11 @@ public struct OfficeState: Equatable {
                 sit(.teammate(agentID), folder: desks[d].folder, near: event.session, caller: mate.calledBy)
             }
         }
+        // Only seated teammates keep news and a tool kind: a stranger's message, or one past the limit, leaves none.
+        if !mates.contains(where: { $0.id == agentID }) {
+            news["a:" + agentID] = nil
+            kinds["a:" + agentID] = nil
+        }
         desks[d].sessions[s].teammates = mates
         desks[d].sessions[s].recount(event.kind, now: now)
         return desksChanged

@@ -322,4 +322,21 @@ final class OfficeStateTests: XCTestCase {
         office.apply(event(.sessionEnd), now: t0 + 8)
         XCTAssertNil(office.toolKind(session: "s1"))
     }
+
+    /// Messages from ids nobody seated leave no news or tool kind behind: memory doesn't grow with them.
+    func testMessagesFromStrangersLeaveNothingInMemory() {
+        var office = OfficeState()
+        office.apply(event(.userPromptSubmit), now: t0)
+        for i in 0..<100 {
+            office.apply(
+                HookEvent(
+                    kind: .preToolUse, session: "s1", cwd: shop, agentID: "x\(i)", toolKind: .team, sendsMessage: true,
+                    recipient: "main"), now: t0 + Double(i))
+        }
+        for i in 0..<100 {
+            XCTAssertNil(office.lastNews(teammate: "x\(i)"))
+            XCTAssertNil(office.toolKind(teammate: "x\(i)"))
+        }
+        XCTAssertEqual(office.desks[0].sessions[0].teammates, [], "nobody new sat down")
+    }
 }
