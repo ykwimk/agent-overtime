@@ -120,3 +120,142 @@ final class DetectTests: XCTestCase {
         XCTAssertEqual(office.desks.map(\.folder), [Paths.home, project])
     }
 }
+
+/// Telling Claude Code's processes from the rest: by name or by the official install's path, never by a word in it.
+final class SessionFinderTests: XCTestCase {
+    let home = "/Users/me"
+
+    /// A made-up process table that counts each read.
+    final class Table {
+        struct Process {
+            var uid: uid_t = 501
+            var parent: Int32 = 1
+            var name = "claude"
+            var started: UInt64 = 1_000
+            var path: String? = nil
+            var folder: String? = "/Users/me/my-project"
+            var cpu: UInt64? = 0
+        }
+        var processes: [Int32: Process] = [:]
+        var reads: [String: Int] = [:]
+
+        var table: SessionFinder.ProcessTable {
+            SessionFinder.ProcessTable(
+                list: { [unowned self] in self.processes.keys.sorted() },
+                info: { [unowned self] pid in
+                    self.processes[pid].map { ($0.uid, $0.parent, $0.name) }
+                },
+                started: { [unowned self] pid in self.processes[pid]?.started },
+                path: { [unowned self] pid in
+                    self.reads["path", default: 0] += 1
+                    return self.processes[pid]?.path
+                },
+                folder: { [unowned self] pid in
+                    self.reads["folder", default: 0] += 1
+                    return self.processes[pid]?.folder
+                },
+                cpu: { [unowned self] pid in self.processes[pid]?.cpu })
+        }
+    }
+
+    func testOnlyClaudeByNameOrByTheInstallPath() {
+        XCTAssertTrue(SessionFinder.isClaude(name: "claude", path: nil, home: home))
+        for name in ["Claude", "claude2", "claude-tools", "claude ", "node"] {
+            XCTAssertFalse(SessionFinder.isClaude(name: name, path: nil, home: home), name)
+        }
+        let versions = home + "/.local/share/claude/versions/"
+        XCTAssertTrue(SessionFinder.isClaude(name: "2.1.316", path: versions + "2.1.316", home: home))
+        for path in [
+            versions + "2.1.316/extra", versions + "latest", versions + "2.1",
+            "/Users/other/.local/share/claude/versions/2.1.316",
+            "/Applications/Claude.app/Contents/MacOS/Claude", home + "/claude-tools/claude", home + "/bin/claude",
+        ] {
+            XCTAssertFalse(SessionFinder.isClaude(name: "2.1.316", path: path, home: home), path)
+        }
+        XCTAssertTrue(SessionFinder.isVersion("10.0.1"))
+        XCTAssertFalse(SessionFinder.isVersion("1..2"))
+    }
+
+    /// Others' processes, other names and a Claude Code started by another are left out; a process that answers
+    /// short is skipped. The folder and path are read once for each process, not at every look.
+    func testFindsTheSessionsAndReadsTheFolderOnce() {
+        let fake = Table()
+        fake.processes = [
+            10: .init(),
+            11: .init(parent: 10, folder: "/Users/me/my-project"),  // run by session 10
+            12: .init(name: "2.1.316", started: 2_000, path: home + "/.local/share/claude/versions/2.1.316"),
+            13: .init(uid: 502),
+            14: .init(name: "Claude"),
+            15: .init(name: "9.9.9", path: home + "/claude-tools/9.9.9"),
+            16: .init(folder: nil),
+        ]
+        var finder = SessionFinder(table: fake.table, home: home, uid: 501)
+        let found = finder.look(now: 1_000_000_000)
+        XCTAssertEqual(found.map(\.pid), [10, 12])
+        XCTAssertEqual(found.map(\.busy), [false, false], "nothing to compare yet")
+        XCTAssertEqual(fake.reads["path"], 2, "only for the two names that are version numbers")
+        let folders = fake.reads["folder", default: 0]
+        _ = finder.look(now: 6_000_000_000)
+        XCTAssertEqual(fake.reads["folder"], folders, "not again for the same process")
+        XCTAssertEqual(fake.reads["path"], 2)
+
+        // The same number with a new start time is another process: read anew.
+        fake.processes[10]?.started = 5_000
+        let again = finder.look(now: 7_000_000_000).first { $0.pid == 10 }
+        XCTAssertEqual(again?.started.timeIntervalSince1970 ?? 0, 0.005, accuracy: 0.000_01)
+        XCTAssertEqual(fake.reads["folder"], folders + 1)
+    }
+
+    /// Busy while it spends more than 3 % of the time since the last look on the CPU.
+    func testBusyByCPUTime() {
+        let fake = Table()
+        fake.processes = [10: .init(cpu: 0)]
+        var finder = SessionFinder(table: fake.table, home: home, uid: 501)
+        _ = finder.look(now: 0)
+        fake.processes[10]?.cpu = 100_000_000  // 0.1 s in 5 s: 2 %
+        XCTAssertEqual(finder.look(now: 5_000_000_000).first?.busy, false)
+        fake.processes[10]?.cpu = 600_000_000  // 0.5 s in 5 s: 10 %
+        XCTAssertEqual(finder.look(now: 10_000_000_000).first?.busy, true)
+        fake.processes[10]?.cpu = nil
+        XCTAssertEqual(finder.look(now: 15_000_000_000).first?.busy, false, "unreadable: not busy")
+        XCTAssertTrue(SessionFinder.isBusy(spent: 160_000_000, over: 5_000_000_000))
+        XCTAssertFalse(SessionFinder.isBusy(spent: 1, over: 0))
+    }
+}
+
+/// Finding on and off, and one process, one person.
+final class FoundSessionTests: XCTestCase {
+    let t0 = Date(timeIntervalSince1970: 1_000_000)
+    let project = "/Users/me/my-project"
+
+    private func found(_ pid: Int32, started: TimeInterval = 0) -> OfficeState.Found {
+        OfficeState.Found(pid: pid, started: t0 + started, folder: project, busy: false)
+    }
+
+    /// Turned off, those only found go home; a session with news stays, and keeps the process it was matched with.
+    func testTurningFindingOffAndAMatchedSessionsNumber() {
+        var office = OfficeState()
+        office.detect([found(10), found(20)], now: t0, opening: true)
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: project, pid: 10), now: t0 + 1)
+        office.apply(HookEvent(kind: .stop, session: "s1", cwd: project, pid: 99), now: t0 + 2)
+        XCTAssertEqual(office.desks.flatMap(\.sessions).first { $0.heard }?.pid, 10, "news from another number")
+        office.forgetFound()
+        XCTAssertEqual(office.desks.flatMap(\.sessions).map(\.heard), [true])
+        XCTAssertEqual(office.liveSessionCount, 1)
+    }
+
+    /// What was seen: a session at work, and a short Claude Code run in the same folder sending SessionStart and
+    /// SessionEnd. Now it comes and goes as its own person (a hook's news), leaves no seat behind, and the session
+    /// stays as it was. Found on this Mac, a Claude Code run by the session isn't a person at all.
+    func testAShortRunInTheSameFolderLeavesNothingBehind() {
+        var office = OfficeState()
+        office.detect([found(10)], now: t0, opening: true)
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: project, pid: 10), now: t0 + 1)
+        office.apply(HookEvent(kind: .sessionStart, session: "short", cwd: project, pid: 11), now: t0 + 2)
+        XCTAssertEqual(office.desks[0].sessions.map(\.label), ["my-project", "my-project 2"])
+        office.apply(HookEvent(kind: .sessionEnd, session: "short", cwd: project, pid: 11), now: t0 + 3)
+        XCTAssertEqual(office.desks[0].sessions.map(\.label), ["my-project"])
+        XCTAssertEqual(office.islands.count, 1)
+        XCTAssertEqual(office.desks[0].sessions[0].state, .working)
+    }
+}

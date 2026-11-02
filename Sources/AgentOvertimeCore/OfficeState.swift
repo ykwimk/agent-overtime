@@ -530,7 +530,8 @@ public struct OfficeState: Equatable {
             return false
         }
         let desksChanged = remember(desks[d].folder)
-        if let pid = event.pid { desks[d].sessions[s].pid = pid }
+        // Once matched with a process found on this Mac, its number stays that process's.
+        if let pid = event.pid, desks[d].sessions[s].started == nil { desks[d].sessions[s].pid = pid }
         if seated, event.sendsMessage, let to = event.recipient { overhear(event, to: to, in: desks[d].sessions[s]) }
         guard let agentID = event.agentID else {
             news["s:" + event.session] = now
@@ -702,6 +703,11 @@ public struct OfficeState: Equatable {
             desks[d].sessions[s].started = process.started
             desks[d].sessions[s].heard = false
         }
+    }
+
+    /// Finding sessions turned off: those only found go home; those with news stay.
+    public mutating func forgetFound() {
+        removeSessions { !$0.heard }
     }
 
     /// The first news of a session the office seats as found on this Mac (the same process number): it goes on in
@@ -951,5 +957,161 @@ public struct OfficeState: Equatable {
             desks[d].sessions.removeAll { session in leaving.contains { $0.id == session.id } }
         }
         desks.removeAll { $0.sessions.isEmpty }
+    }
+}
+
+/// Finds the Claude Code sessions running under this user on this Mac, from what macOS tells any program about its
+/// own user's processes: never command lines, environment variables or other users' processes, and never a signal.
+/// Each look lists the processes and reads their names, start times and CPU time; a new process's folder (and, for a
+/// name that is a version number, its program's path) is read once and kept in memory. What it reads decides who is
+/// found; only the folder goes on, to the office.
+public struct SessionFinder {
+    /// What it may read of a process: one call each, nil when the process is gone, not this user's or answers short.
+    public struct ProcessTable {
+        public var list: () -> [Int32]
+        public var info: (Int32) -> (uid: uid_t, parent: Int32, name: String)?
+        /// Start time in microseconds since 1970.
+        public var started: (Int32) -> UInt64?
+        public var path: (Int32) -> String?
+        public var folder: (Int32) -> String?
+        /// User and system CPU time, in nanoseconds.
+        public var cpu: (Int32) -> UInt64?
+    }
+
+    /// Process ids listed at most per look (16 KiB); past them the rest are skipped.
+    public static let maxProcesses = 4096
+    /// Busy: more CPU time since the last look than this share of the time between the looks. An idle session wakes
+    /// now and then for well under 1 %; streaming a reply or running tools takes several percent and more.
+    public static let busyShare = 0.03
+
+    private struct Key: Hashable {
+        let pid: Int32
+        let started: UInt64
+    }
+
+    private struct Known {
+        let folder: String?
+        var cpu: UInt64?
+        var at: UInt64
+    }
+
+    private let table: ProcessTable
+    private let home: String
+    private let uid: uid_t
+    /// Every process seen at the last look whose name could be Claude Code's: nil for one that isn't after all.
+    private var known: [Key: Known?] = [:]
+
+    public init(table: ProcessTable = .live, home: String = Paths.home, uid: uid_t = getuid()) {
+        self.table = table
+        self.home = home
+        self.uid = uid
+    }
+
+    /// Claude Code by its program's name exactly, or by its path from the official install, fixed at both ends:
+    /// `<home>/.local/share/claude/versions/<n.n.n>`. Never a name or path that merely contains "claude".
+    public static func isClaude(name: String, path: String?, home: String) -> Bool {
+        if name == "claude" { return true }
+        let prefix = home + "/.local/share/claude/versions/"
+        guard let path, path.hasPrefix(prefix) else { return false }
+        return isVersion(String(path.dropFirst(prefix.count)))
+    }
+
+    /// Three numbers with dots between them, such as "2.1.316": the name a versioned program may run under.
+    public static func isVersion(_ text: String) -> Bool {
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 3 && parts.allSatisfy { !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) } }
+    }
+
+    /// The sessions running now, oldest first. A Claude Code started by another (a short run inside a session) is no
+    /// session of its own. `now` is a monotonic clock in nanoseconds.
+    public mutating func look(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> [OfficeState.Found] {
+        var claudes: [Int32: (key: Key, parent: Int32)] = [:]
+        var seen: [Key: Known?] = [:]
+        for pid in table.list().prefix(Self.maxProcesses) {
+            guard let info = table.info(pid), info.uid == uid, info.name == "claude" || Self.isVersion(info.name),
+                let started = table.started(pid)
+            else { continue }
+            let key = Key(pid: pid, started: started)
+            let known: Known? =
+                known[key]
+                ?? (Self.isClaude(name: info.name, path: info.name == "claude" ? nil : table.path(pid), home: home)
+                    ? Known(folder: table.folder(pid), cpu: nil, at: now) : nil)
+            seen[key] = .some(known)
+            if known != nil { claudes[pid] = (key, info.parent) }
+        }
+        known = seen
+        var found: [OfficeState.Found] = []
+        for (pid, claude) in claudes where claudes[claude.parent] == nil {
+            guard var entry = known[claude.key] ?? nil, let folder = entry.folder else { continue }
+            // Busy by the CPU time spent since the last look; not on the first, with nothing to compare.
+            let cpu = table.cpu(pid)
+            var busy = false
+            if let cpu, let before = entry.cpu, cpu >= before {
+                busy = Self.isBusy(spent: cpu - before, over: now &- entry.at)
+            }
+            (entry.cpu, entry.at) = (cpu, now)
+            known[claude.key] = .some(entry)
+            found.append(
+                OfficeState.Found(
+                    pid: pid, started: Date(timeIntervalSince1970: Double(claude.key.started) / 1_000_000),
+                    folder: folder, busy: busy))
+        }
+        return found.sorted { ($0.started, $0.pid) < ($1.started, $1.pid) }
+    }
+
+    /// CPU time spent over some wall time, both in nanoseconds: busy past `busyShare` of it.
+    public static func isBusy(spent: UInt64, over elapsed: UInt64) -> Bool {
+        elapsed > 0 && Double(spent) > Double(elapsed) * busyShare
+    }
+}
+
+extension SessionFinder.ProcessTable {
+    /// The calls macOS lets any program make about its own user's processes, with no permission asked: the list
+    /// for this user only (each process checked again), the name and parent, the start time, the program's path,
+    /// the working folder, CPU time.
+    public static var live: Self {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let (numer, denom) = (UInt64(max(timebase.numer, 1)), UInt64(max(timebase.denom, 1)))
+        func text<T>(_ field: T) -> String {
+            withUnsafeBytes(of: field) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        }
+        func read<Info>(_ pid: Int32, _ flavor: Int32, _ info: inout Info) -> Bool {
+            let size = Int32(MemoryLayout<Info>.size)
+            return withUnsafeMutableBytes(of: &info) { proc_pidinfo(pid, flavor, 0, $0.baseAddress, size) } == size
+        }
+        return Self(
+            list: {
+                var pids = [Int32](repeating: 0, count: SessionFinder.maxProcesses)
+                let bytes = proc_listpids(
+                    UInt32(PROC_UID_ONLY), UInt32(getuid()), &pids, Int32(pids.count * MemoryLayout<Int32>.size))
+                guard bytes > 0 else { return [] }
+                return pids.prefix(Int(bytes) / MemoryLayout<Int32>.size).filter { $0 > 0 }
+            },
+            info: { pid in
+                var info = proc_bsdshortinfo()
+                guard read(pid, PROC_PIDT_SHORTBSDINFO, &info) else { return nil }
+                return (info.pbsi_uid, Int32(bitPattern: info.pbsi_ppid), text(info.pbsi_comm))
+            },
+            started: { pid in
+                var info = proc_bsdinfo()
+                guard read(pid, PROC_PIDTBSDINFO, &info), info.pbi_uid == getuid() else { return nil }
+                return info.pbi_start_tvsec &* 1_000_000 &+ info.pbi_start_tvusec
+            },
+            path: { pid in
+                var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))  // PROC_PIDPATHINFO_MAXSIZE
+                guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+                return String(cString: path)
+            },
+            folder: { pid in
+                var info = proc_vnodepathinfo()
+                guard read(pid, PROC_PIDVNODEPATHINFO, &info) else { return nil }
+                return text(info.pvi_cdir.vip_path)
+            },
+            cpu: { pid in
+                var info = proc_taskinfo()
+                guard read(pid, PROC_PIDTASKINFO, &info) else { return nil }
+                return (info.pti_total_user &+ info.pti_total_system) &* numer / denom
+            })
     }
 }
