@@ -110,6 +110,96 @@ public struct Session: Equatable, Identifiable {
     public var teammateWaiting: Bool { state != .waiting && shown.state == .waiting }
 }
 
+/// What one person's side panel shows beyond their state, from their news while the app listens. Memory only, and
+/// gone with them. Files, edits, tasks and the model come only with Show Details on.
+public struct PersonDetail: Equatable {
+    /// Something they did: the kind of tool, and its file.
+    public struct Step: Equatable {
+        public let kind: HookEvent.ToolKind
+        public internal(set) var file: String?
+        public internal(set) var at: Date
+    }
+
+    public struct Edit: Equatable {
+        public let file: String
+        public internal(set) var added: Int
+        public internal(set) var removed: Int
+    }
+
+    static let maxSteps = 4
+    static let maxEdits = 20
+
+    /// The latest steps, newest last (the last may be what they do now); one for a run of the same kind on the same
+    /// file.
+    public internal(set) var steps: [Step] = []
+    /// Files edited since the session's last prompt, and how many edits went past them.
+    public internal(set) var edits: [Edit] = []
+    public internal(set) var moreEdits = 0
+    public internal(set) var tasks = TaskList()
+    public internal(set) var model: String?
+    /// A session's teammates called since its last prompt, by id, and whether each is done.
+    var called: [String: Bool] = [:]
+    public var teamCalled: Int { called.count }
+    public var teamDone: Int { called.values.filter { $0 }.count }
+
+    mutating func forgetDetails() {
+        (edits, moreEdits, tasks, model) = ([], 0, TaskList(), nil)
+        for i in steps.indices { steps[i].file = nil }
+    }
+}
+
+/// A person's task list as their task tools leave it: TodoWrite gives the whole list, TaskCreate one more task (its
+/// id comes only with a later TaskUpdate), TaskUpdate one task by id.
+public struct TaskList: Equatable {
+    struct Tracked: Equatable {
+        let id: String
+        var status: HookEvent.TaskStatus
+        var title: String?
+    }
+
+    static let maxTasks = 50
+
+    public internal(set) var total = 0
+    public internal(set) var done = 0
+    /// The task in progress, when its title is known.
+    public internal(set) var title: String?
+    private var tracked: [Tracked] = []
+    /// Created, and not yet seen by id.
+    private var created = 0
+
+    mutating func apply(_ event: HookEvent) {
+        switch event.taskAction {
+        case .todo?:
+            guard let total = event.todoTotal, let done = event.todoDone else { return }
+            (tracked, created) = ([], 0)
+            (self.total, self.done, title) = (total, done, event.taskTitle)
+            return
+        case .create?:
+            created = min(created + 1, Self.maxTasks - tracked.count)
+        case .update?:
+            guard let id = event.taskID else { return }
+            var task = Tracked(id: id, status: .pending, title: nil)
+            if let i = tracked.firstIndex(where: { $0.id == id }) {
+                task = tracked.remove(at: i)
+            } else if created > 0 {
+                // Most likely one of those created (TaskCreate's id isn't known).
+                created -= 1
+            }
+            task.status = event.taskStatus ?? task.status
+            task.title = event.taskTitle ?? task.title
+            if task.status != .deleted { tracked.append(task) }
+            // The oldest go first past the limit.
+            let over = min(tracked.count, max(0, tracked.count + created - Self.maxTasks))
+            tracked.removeFirst(over)
+        case nil:
+            return
+        }
+        total = tracked.count + created
+        done = tracked.filter { $0.status == .completed }.count
+        title = tracked.last { $0.status == .inProgress }?.title
+    }
+}
+
 /// A folder sessions run in, while one does. Start Work's recent folders are `OfficeState.folders`, kept apart;
 /// where people sit is `OfficeState.islands`.
 public struct Desk: Equatable, Identifiable {
@@ -267,6 +357,8 @@ public struct OfficeState: Equatable {
     /// by the app's clock, and the kind of tool each is running and since when. Memory only, and gone with them.
     private var news: [String: Date] = [:]
     private var kinds: [String: (kind: HookEvent.ToolKind, since: Date)] = [:]
+    /// What each one's side panel shows beyond that, by the same keys.
+    private var details: [String: PersonDetail] = [:]
     /// For each session, who called a teammate and is still waiting for it to come, first first: a teammate's id,
     /// or nil for the session itself. A SubagentStart says nothing of who called, so the next one to come goes with
     /// the first call still open; with none open, the session called it.
@@ -344,6 +436,45 @@ public struct OfficeState: Equatable {
     public func toolSince(session id: String) -> Date? { kinds["s:" + id]?.since }
     public func toolSince(teammate id: String) -> Date? { kinds["a:" + id]?.since }
 
+    /// What a session's or teammate's side panel shows beyond its state; nil before any news from it.
+    public func detail(session id: String) -> PersonDetail? { details["s:" + id] }
+    public func detail(teammate id: String) -> PersonDetail? { details["a:" + id] }
+
+    /// Show Details turned off: every file, edit, task and model goes at once.
+    public mutating func forgetDetails() {
+        for key in details.keys { details[key]?.forgetDetails() }
+    }
+
+    /// Keeps what an event adds to someone's side panel: a step, an edit, a task, the model. A session's prompt
+    /// starts its edits and teammate count again.
+    private mutating func record(_ event: HookEvent, at key: String, now: Date) {
+        var detail = details[key] ?? PersonDetail()
+        if let kind = event.toolKind {
+            if let last = detail.steps.last, last.kind == kind, last.file == event.file {
+                detail.steps[detail.steps.count - 1].at = now
+            } else {
+                detail.steps.append(PersonDetail.Step(kind: kind, file: event.file, at: now))
+                if detail.steps.count > PersonDetail.maxSteps { detail.steps.removeFirst() }
+            }
+        }
+        if event.kind == .userPromptSubmit, key.hasPrefix("s:") {
+            (detail.edits, detail.moreEdits, detail.called) = ([], 0, [:])
+        }
+        if let file = event.file, let added = event.linesAdded, let removed = event.linesRemoved {
+            if let i = detail.edits.firstIndex(where: { $0.file == file }) {
+                detail.edits[i].added = min(detail.edits[i].added + added, Detail.maxLines)
+                detail.edits[i].removed = min(detail.edits[i].removed + removed, Detail.maxLines)
+            } else if detail.edits.count < PersonDetail.maxEdits {
+                detail.edits.append(PersonDetail.Edit(file: file, added: added, removed: removed))
+            } else {
+                detail.moreEdits += 1
+            }
+        }
+        detail.tasks.apply(event)
+        if let model = event.model { detail.model = model }
+        details[key] = detail
+    }
+
     /// Keeps the latest kind of tool under `key`, and forgets it when a new prompt or the end of a turn comes. A
     /// call for a teammate (a teammate tool other than SendMessage) waits for the next newcomer.
     private mutating func note(_ event: HookEvent, at key: String, now: Date) {
@@ -404,6 +535,7 @@ public struct OfficeState: Equatable {
         guard let agentID = event.agentID else {
             news["s:" + event.session] = now
             note(event, at: "s:" + event.session, now: now)
+            record(event, at: "s:" + event.session, now: now)
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
@@ -419,8 +551,12 @@ public struct OfficeState: Equatable {
         let index = mates.firstIndex { $0.id == agentID }
         news["a:" + agentID] = now
         note(event, at: "a:" + agentID, now: now)
+        record(event, at: "a:" + agentID, now: now)
         switch (event.kind, index) {
         case (.subagentStop, let i?):
+            if details["s:" + event.session]?.called[agentID] != nil {
+                details["s:" + event.session]?.called[agentID] = true
+            }
             let leaving = mates.remove(at: i)
             for k in mates.indices where mates[k].calledBy == agentID { mates[k].calledBy = leaving.calledBy }
             news["a:" + agentID] = nil
@@ -453,12 +589,17 @@ public struct OfficeState: Equatable {
                 }
                 mates.append(mate)
                 sit(.teammate(agentID), at: event.session)
+                if event.kind == .subagentStart {
+                    details["s:" + event.session, default: PersonDetail()].called[agentID] = false
+                }
             }
         }
-        // Only seated teammates keep news and a tool kind: a stranger's message, or one past the limit, leaves none.
+        // Only seated teammates keep news, a tool kind and details: a stranger's message, or one past the limit, or
+        // one that left, leaves none.
         if !mates.contains(where: { $0.id == agentID }) {
             news["a:" + agentID] = nil
             kinds["a:" + agentID] = nil
+            details["a:" + agentID] = nil
         }
         desks[d].sessions[s].teammates = mates
         desks[d].sessions[s].recount(event.kind, now: now)
@@ -798,10 +939,12 @@ public struct OfficeState: Equatable {
             links = links.filter { $0.value != session.id }
             news["s:" + session.id] = nil
             kinds["s:" + session.id] = nil
+            details["s:" + session.id] = nil
             calls[session.id] = nil
             for mate in session.teammates {
                 news["a:" + mate.id] = nil
                 kinds["a:" + mate.id] = nil
+                details["a:" + mate.id] = nil
             }
         }
         for d in desks.indices {

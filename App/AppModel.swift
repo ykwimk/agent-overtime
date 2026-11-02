@@ -82,7 +82,10 @@ final class AppModel: ObservableObject {
     /// Show Details. The helper reads this same value and sends no details while it is off; the app drops any that
     /// come anyway.
     @Published var showsDetails: Bool {
-        didSet { defaults.set(showsDetails, forKey: ShowDetails.key) }
+        didSet {
+            defaults.set(showsDetails, forKey: ShowDetails.key)
+            if !showsDetails { office.forgetDetails() }
+        }
     }
 
     let location: AppLocation

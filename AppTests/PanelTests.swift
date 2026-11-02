@@ -221,6 +221,28 @@ final class PanelTests: XCTestCase {
         XCTAssertTrue(saved.contains(project), saved)
     }
 
+    /// Show Details is on from the first start, written out for the helper; turned off, the app forgets what it had
+    /// and drops what still comes.
+    func testShowDetailsOffForgetsAndDrops() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "ao-panel-\(UUID().uuidString)"))
+        let place = folder()
+        let model = AppModel(supportFolder: place, socketPath: place + "/events.sock", defaults: defaults)
+        XCTAssertTrue(model.showsDetails)
+        XCTAssertEqual(defaults.object(forKey: ShowDetails.key) as? Bool, true)
+        var edit = HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit)
+        (edit.file, edit.linesAdded, edit.linesRemoved) = ("app.ts", 2, 1)
+        model.receive(edit, at: t0)
+        XCTAssertEqual(model.office.detail(session: "s1")?.edits.count, 1)
+
+        model.showsDetails = false
+        XCTAssertEqual(defaults.object(forKey: ShowDetails.key) as? Bool, false)
+        XCTAssertEqual(model.office.detail(session: "s1")?.edits, [], "forgotten at once")
+        model.receive(edit, at: t0 + 1)
+        XCTAssertEqual(model.office.detail(session: "s1")?.edits, [], "dropped")
+        XCTAssertEqual(model.office.detail(session: "s1")?.steps.compactMap(\.file), [])
+        XCTAssertEqual(model.office.toolKind(session: "s1"), .edit, "the kind stays: it isn't a detail")
+    }
+
     /// The office bar asks to connect while people are found but no news ever came; the first news ends it.
     func testTheConnectLineShowsUntilTheFirstNews() {
         let model = model(in: folder())
