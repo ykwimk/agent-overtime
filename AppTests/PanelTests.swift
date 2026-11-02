@@ -69,10 +69,6 @@ final class PanelTests: XCTestCase {
         }
         XCTAssertEqual(alone.teammates, [], "No teammates")
 
-        XCTAssertEqual(SidePanelView.ago(nil, now: t0), Text(verbatim: "—"))
-        // Localized texts don't compare equal; their description carries the words.
-        XCTAssertTrue(String(describing: SidePanelView.ago(t0, now: t0 + 12)).contains("\"12 s ago\""))
-        XCTAssertTrue(String(describing: SidePanelView.ago(t0, now: t0 + 125)).contains("\"2 min ago\""))
         let spoken = try XCTUnwrap(SidePanel.spoken(.teammate("a1"), in: model.office, now: t0 + 6))
         XCTAssertTrue(spoken.hasPrefix("Explore, "), spoken)
         XCTAssertTrue(spoken.contains("my-project"), spoken)
@@ -199,6 +195,22 @@ final class PanelTests: XCTestCase {
         let phrases = HookEvent.ToolKind.allCases.map(\.spoken)
         XCTAssertEqual(Set(phrases).count, 6)
         for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
+    }
+
+    /// No seconds on the panel: under a minute is "just", then minutes, then hours.
+    func testTimeWordsHaveNoSeconds() {
+        let cases: [(TimeInterval, TimeSpan)] = [
+            (0, .just), (59, .just), (60, .minutes(1)), (59 * 60, .minutes(59)), (60 * 60, .hours(1)),
+            (3 * 3600 + 59 * 60, .hours(3)), (-5, .just),
+        ]
+        for (seconds, span) in cases { XCTAssertEqual(TimeSpan(from: t0, to: t0 + seconds), span, "\(seconds) s") }
+        // Localized texts don't compare equal; their description carries the words.
+        XCTAssertTrue(String(describing: TimeSpan.just.lasting).contains("\"Just started\""))
+        XCTAssertTrue(String(describing: TimeSpan.minutes(2).lasting).contains("\"2 min\""))
+        XCTAssertTrue(String(describing: TimeSpan.hours(1).lasting).contains("\"1 h\""))
+        XCTAssertTrue(String(describing: TimeSpan.just.ago).contains("\"Just now\""))
+        XCTAssertTrue(String(describing: TimeSpan.minutes(3).ago).contains("\"3 min ago\""))
+        XCTAssertTrue(String(describing: TimeSpan.hours(1).ago).contains("\"1 h ago\""))
     }
 
     /// The panel's state badges read at 4.5:1 or more, light and dark: the word on its own fill, Quiet's on the

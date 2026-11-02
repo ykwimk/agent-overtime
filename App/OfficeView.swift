@@ -129,8 +129,7 @@ final class SidePanel: ObservableObject {
             var words: [String] = []
             if !meets || state == .waiting {
                 words.append(state.spoken)
-                let minutes = Int(now.timeIntervalSince(since) / 60)
-                if minutes >= 1 { words.append(String(localized: "\(minutes) min")) }
+                if state != .quiet { words.append(TimeSpan(from: since, to: now).lastingSpoken) }
             }
             if meets { words.append(String(localized: "In a meeting")) }
             return words
@@ -430,17 +429,41 @@ struct EmptyOffice<Actions: View>: View {
     }
 }
 
-/// "12 s ago" by the second for its first minute, then by the half minute: every update of the panel costs about
-/// as much as the room's own ticking.
-struct NewsSchedule: TimelineSchedule {
-    /// Until when it counts seconds.
-    let seconds: Date
+/// Time on the side panel, never in seconds (they ticked and distracted): under a minute is "just", then minutes,
+/// then hours. The panel redraws every 30 s.
+enum TimeSpan: Equatable {
+    case just
+    case minutes(Int)
+    case hours(Int)
 
-    func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
-        var next = start
-        return AnyIterator {
-            defer { next += next < seconds ? 1 : 30 }
-            return next
+    init(from start: Date, to now: Date) {
+        let minutes = max(0, Int(now.timeIntervalSince(start) / 60))
+        self = minutes < 1 ? .just : minutes < 60 ? .minutes(minutes) : .hours(minutes / 60)
+    }
+
+    /// How long it has gone on: "Just started", "2 min", "1 h".
+    var lasting: Text {
+        switch self {
+        case .just: return Text("Just started")
+        case .minutes(let minutes): return Text("\(minutes) min")
+        case .hours(let hours): return Text("\(hours) h")
+        }
+    }
+
+    var lastingSpoken: String {
+        switch self {
+        case .just: return String(localized: "Just started")
+        case .minutes(let minutes): return String(localized: "\(minutes) min")
+        case .hours(let hours): return String(localized: "\(hours) h")
+        }
+    }
+
+    /// When it happened: "Just now", "3 min ago", "1 h ago".
+    var ago: Text {
+        switch self {
+        case .just: return Text("Just now")
+        case .minutes(let minutes): return Text("\(minutes) min ago")
+        case .hours(let hours): return Text("\(hours) h ago")
         }
     }
 }
@@ -490,8 +513,8 @@ struct SidePanelView: View {
         if let selection = panel.selection { content(selection) }
     }
 
-    /// What changes with the clock alone, drawn again on its own every `seconds` ("12 s ago" by the second, minutes
-    /// every 30 s): the rest of the panel and the room around it stay as they are.
+    /// What changes with the clock alone, drawn again on its own every `seconds` (minutes, every 30 s): the rest of
+    /// the panel and the room around it stay as they are.
     @ViewBuilder private func ticking<Content: View>(
         every seconds: TimeInterval, @ViewBuilder _ content: @escaping (Date) -> Content
     ) -> some View {
@@ -608,10 +631,7 @@ struct SidePanelView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             StateBadge(state: meeting ? .quiet : state, word: meeting ? Text("In a meeting") : state.word)
             if !meeting, state != .quiet {
-                ticking(every: 30) { now in
-                    let minutes = Int(now.timeIntervalSince(since) / 60)
-                    if minutes >= 1 { Text("\(minutes) min").foregroundStyle(.secondary) }
-                }
+                ticking(every: 30) { now in TimeSpan(from: since, to: now).lasting.foregroundStyle(.secondary) }
             }
         }
         role.foregroundStyle(.secondary)
@@ -623,11 +643,7 @@ struct SidePanelView: View {
         HStack {
             Text("Last news").foregroundStyle(.secondary)
             Spacer(minLength: 8)
-            if let fixedNow {
-                Self.ago(news, now: fixedNow)
-            } else {
-                TimelineView(NewsSchedule(seconds: (news ?? .distantPast) + 60)) { Self.ago(news, now: $0.date) }
-            }
+            ticking(every: 30) { now in news.map { TimeSpan(from: $0, to: now).ago } ?? Text(verbatim: "—") }
         }
     }
 
@@ -660,14 +676,5 @@ struct SidePanelView: View {
                 .focused(focus, equals: .mate(mate.id))
             }
         }
-    }
-
-    /// By the app's own clock: "12 s ago", "3 min ago", "2 h ago"; "—" before any news since the app started.
-    static func ago(_ date: Date?, now: Date) -> Text {
-        guard let date else { return Text(verbatim: "—") }
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        if seconds < 60 { return Text("\(seconds) s ago") }
-        if seconds < 3600 { return Text("\(seconds / 60) min ago") }
-        return Text("\(seconds / 3600) h ago")
     }
 }
