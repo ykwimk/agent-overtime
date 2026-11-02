@@ -176,4 +176,30 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(nonsense.start?.folder, "/x", "the rest of the file is still read")
         XCTAssertEqual(nonsense.office.nicknames, Nicknames())
     }
+
+    /// "What they're doing now": one of six fixed phrases, only while working; a kind the app doesn't know shows
+    /// nothing, and nothing received is ever shown.
+    func testNowIsAFixedPhraseOnlyWhileWorking() throws {
+        let model = model(in: folder())
+        office(model)
+        model.receive(HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit), at: t0 + 6)
+        XCTAssertEqual(SidePanel.doing(.session("s1"), in: model.office), .edit)
+        let spoken = try XCTUnwrap(SidePanel.spoken(.session("s1"), in: model.office, now: t0 + 7))
+        XCTAssertTrue(spoken.hasSuffix(HookEvent.ToolKind.edit.spoken), spoken)
+        XCTAssertEqual(SidePanel.doing(.teammate("a1"), in: model.office), nil, "a1 sent no kind")
+
+        model.receive(HookEvent(kind: .permissionRequest, session: "s1", cwd: project), at: t0 + 8)
+        XCTAssertNil(SidePanel.doing(.session("s1"), in: model.office), "only while working")
+        model.receive(HookEvent(kind: .stop, session: "s1", cwd: project), at: t0 + 9)
+        XCTAssertNil(SidePanel.doing(.session("s1"), in: model.office))
+
+        let line = Data(#"{"e":"PreToolUse","s":"s1","d":"\#(project)","k":"Bash: rm -rf ~/"}"#.utf8)
+        model.receive(try XCTUnwrap(HookEvent.fromWire(line)), at: t0 + 10)
+        XCTAssertEqual(model.office.session("s1")?.state, .working)
+        XCTAssertNil(SidePanel.doing(.session("s1"), in: model.office), "an unknown kind shows no line")
+
+        let phrases = HookEvent.ToolKind.allCases.map(\.spoken)
+        XCTAssertEqual(Set(phrases).count, 6)
+        for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
+    }
 }

@@ -297,6 +297,51 @@ final class CaptureTests: XCTestCase {
         return SidePanel(PanelSelection(seat, at: .seat(slot: slot, index: index)))
     }
 
+    /// Teams: my-project called Explore and went on editing files (Explore wears headphones), Explore called Plan
+    /// (at Explore's island, indented under it in the panel, which also says what my-project is doing now). In
+    /// web-app, Explore walks over to Plan to talk.
+    func testCaptureTeamsHeadphonesAndTalks() throws {
+        let now = today(14)
+        let model = makeModel(connected: true)
+        let project = FakeScenario.root + "/my-project"
+        let web = FakeScenario.root + "/web-app"
+        func send(
+            _ kind: HookEvent.Kind, _ session: String, _ cwd: String, agent: String? = nil, type: String? = nil,
+            tool: HookEvent.ToolKind? = nil, to: String? = nil, at: TimeInterval
+        ) {
+            model.receive(
+                HookEvent(
+                    kind: kind, session: session, cwd: cwd, agentID: agent, agentType: type, toolKind: tool,
+                    sendsMessage: to != nil, recipient: to), at: now + at)
+        }
+        send(.userPromptSubmit, "m1", project, at: -300)
+        send(.preToolUse, "m1", project, tool: .team, at: -290)
+        send(.subagentStart, "m1", project, agent: "e1", type: "Explore", at: -289)
+        send(.preToolUse, "m1", project, tool: .edit, at: -200)
+        send(.preToolUse, "m1", project, agent: "e1", type: "Explore", tool: .team, at: -150)
+        send(.subagentStart, "m1", project, agent: "p1", type: "Plan", at: -149)
+        send(.preToolUse, "m1", project, tool: .edit, at: -12)
+        send(.userPromptSubmit, "w1", web, at: -300)
+        send(.subagentStart, "w1", web, agent: "e2", type: "Explore", at: -280)
+        send(.subagentStart, "w1", web, agent: "p2", type: "Plan", at: -260)
+        let mates = try XCTUnwrap(model.office.session("m1")?.teammates)
+        XCTAssertEqual(mates.map(\.calledBy), [nil, "e1"])
+        XCTAssertEqual(mates.map(\.headphones), [true, false])
+        try capture(
+            "panel-team-doing", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(model, slot: 0, index: 0)).environmentObject(model))
+
+        let stage = Stage()
+        let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
+        _ = stage.sync(model.office, width: width, now: now - 20, animate: true)
+        send(.preToolUse, "w1", web, agent: "e2", type: "Explore", tool: .team, to: "Plan", at: -10)
+        _ = stage.sync(model.office, width: width, now: now - 10, animate: true)
+        let talk = try talking(stage, from: now - 10, to: now)
+        try capture(
+            "office-talk", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: talk, stage: stage).environmentObject(model))
+    }
+
     /// The side panel: a session with three teammates, a teammate, over the smallest window, someone who went
     /// home, a nickname being typed, and nicknames on the name tags.
     func testCaptureSidePanel() throws {
