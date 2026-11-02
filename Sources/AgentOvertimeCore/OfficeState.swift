@@ -225,6 +225,15 @@ public struct OfficeState: Equatable {
     /// The meeting room's table: the session and five teammates.
     public static let meetingSeats = 6
 
+    /// The last message one person in a session sent another, by who they are (nil: the session itself); the
+    /// recipient as written is not kept. `serial` tells one message from the next.
+    public struct Talk: Equatable {
+        public let session: String
+        public let from: String?
+        public let to: String?
+        public let serial: Int
+    }
+
     /// Who sits in the one meeting room.
     public struct Meeting: Equatable {
         public let session: Session
@@ -249,6 +258,8 @@ public struct OfficeState: Equatable {
     static let maxCalls = 16
 
     public private(set) var nicknames: Nicknames
+    /// The latest message between two people at their desks, for the walk over to talk.
+    public private(set) var talk: Talk?
 
     /// `folders` are remembered from earlier runs, for Start Work, and so are `nicknames`. Nobody sits anywhere
     /// yet.
@@ -260,7 +271,7 @@ public struct OfficeState: Equatable {
     /// Equal when everything drawn is: the time of the last news alone changes nothing on screen but the side
     /// panel, which keeps its own clock, so one more tool doesn't draw the whole room again.
     public static func == (a: OfficeState, b: OfficeState) -> Bool {
-        a.desks == b.desks && a.islands == b.islands && a.nicknames == b.nicknames
+        a.desks == b.desks && a.islands == b.islands && a.nicknames == b.nicknames && a.talk == b.talk
     }
 
     /// The folder a session runs in.
@@ -359,10 +370,12 @@ public struct OfficeState: Equatable {
             return false
         }
         var desksChanged = false
+        let seated = locate(event.session) != nil
         guard let (d, s) = locate(event.session) ?? seat(event, now: now, desksChanged: &desksChanged) else {
             return false
         }
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
+        if seated, event.sendsMessage, let to = event.recipient { overhear(event, to: to, in: desks[d].sessions[s]) }
         guard let agentID = event.agentID else {
             news["s:" + event.session] = now
             note(event, at: "s:" + event.session)
@@ -393,7 +406,7 @@ public struct OfficeState: Equatable {
         case (_, let i?):
             if let newState = Self.state(for: event, from: mates[i].state) { mates[i].set(newState, now: now) }
         case (_, nil):
-            if mates.count < Self.maxTeammates {
+            if mates.count < Self.maxTeammates, !event.sendsMessage {
                 let taken = desks.flatMap(\.teammates).filter { $0.name == event.agentType }.map(\.number)
                 var mate = Teammate(
                     id: agentID, name: event.agentType, number: Self.firstFree(taken),
@@ -426,7 +439,27 @@ public struct OfficeState: Equatable {
         }
     }
 
-    /// The teammates a caller (nil: the session) has out while it goes on with its own work work on their own.
+    /// A message about to go from someone in `session` to `to`: kept as a talk between two people only when `to`
+    /// is, in this same session, a teammate's id, a name exactly one teammate has, or "main" (the session). Anything
+    /// else (another session, a name two have, nobody) is dropped, and nobody new is seated for it. `to` itself is
+    /// not kept.
+    private mutating func overhear(_ event: HookEvent, to: String, in session: Session) {
+        if let sender = event.agentID, !session.teammates.contains(where: { $0.id == sender }) { return }
+        let receiver: String??
+        if session.teammates.contains(where: { $0.id == to }) {
+            receiver = .some(to)
+        } else if case let named = session.teammates.filter({ $0.name == to }), named.count == 1 {
+            receiver = .some(named[0].id)
+        } else if to == "main" {
+            receiver = .some(nil)
+        } else {
+            receiver = nil
+        }
+        guard let receiver, receiver != event.agentID else { return }
+        talk = Talk(session: session.id, from: event.agentID, to: receiver, serial: (talk?.serial ?? 0) + 1)
+    }
+
+    /// The teammates a caller (nil: the session) has out once it goes on with its own work: they work on their own.
     private mutating func putOnHeadphones(_ d: Int, _ s: Int, calledBy caller: String?) {
         for m in desks[d].sessions[s].teammates.indices where desks[d].sessions[s].teammates[m].calledBy == caller {
             desks[d].sessions[s].teammates[m].headphones = true
@@ -500,7 +533,8 @@ public struct OfficeState: Equatable {
 
     /// Seats a session the office has not seen yet (a new one, or one started before the app).
     private mutating func seat(_ event: HookEvent, now: Date, desksChanged: inout Bool) -> (Int, Int)? {
-        if event.kind == .subagentStop || liveSessionCount >= Self.maxSessions { return nil }
+        // A message seats nobody: it is only matched against those already here.
+        if event.kind == .subagentStop || event.sendsMessage || liveSessionCount >= Self.maxSessions { return nil }
         var d = desks.firstIndex { $0.folder == event.cwd }
         if d == nil {
             // A new folder takes over the off-duty desk nearest the door, so it is in view without scrolling.

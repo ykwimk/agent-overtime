@@ -106,6 +106,46 @@ final class TeamTests: XCTestCase {
         XCTAssertEqual(wearing(office), ["a1", "b1"])
     }
 
+    private func message(_ office: inout OfficeState, from agent: String?, to: String?, session: String = "s1") {
+        office.apply(
+            HookEvent(
+                kind: .preToolUse, session: session, cwd: folder, agentID: agent, toolKind: .team, sendsMessage: true,
+                recipient: to), now: t0)
+    }
+
+    /// A message becomes a talk only to someone in the same session: a teammate's id, a name exactly one teammate
+    /// has, or "main". Other sessions, unknown or shared names and unknown senders are dropped; nobody new sits down.
+    func testAMessageIsATalkOnlyToSomeoneHere() {
+        var office = OfficeState()
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder), now: t0)
+        start(&office, "a1", "Explore")
+        start(&office, "b1", "Plan")
+        start(&office, "b2", "Plan")
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s2", cwd: "/w/web-app"), now: t0)
+        office.apply(
+            HookEvent(kind: .subagentStart, session: "s2", cwd: "/w/web-app", agentID: "x1", agentType: "Review"),
+            now: t0)
+        let seats = office.islands
+
+        message(&office, from: "a1", to: "b2")
+        XCTAssertEqual(office.talk, OfficeState.Talk(session: "s1", from: "a1", to: "b2", serial: 1), "by id")
+        message(&office, from: nil, to: "Explore")
+        XCTAssertEqual(office.talk?.from, nil)
+        XCTAssertEqual(office.talk?.to, "a1", "the one Explore")
+        message(&office, from: "b1", to: "main")
+        XCTAssertEqual(office.talk, OfficeState.Talk(session: "s1", from: "b1", to: nil, serial: 3), "the session")
+
+        for to in ["Plan", "Review", "x1", "web-app", "someone", nil] {
+            message(&office, from: "a1", to: to)
+            XCTAssertEqual(office.talk?.serial, 3, "dropped: \(to ?? "nil")")
+        }
+        message(&office, from: "a1", to: "a1")
+        message(&office, from: "zz", to: "a1")
+        XCTAssertEqual(office.talk?.serial, 3, "to oneself, or from nobody known")
+        XCTAssertEqual(office.islands.count, seats.count)
+        XCTAssertEqual(office.desks[0].sessions[0].teammates.count, 3, "nobody new for a message")
+    }
+
     /// A caller that has already left when its newcomer comes: the session.
     func testACallerGoneBeforeItsNewcomerComesLeavesItToTheSession() {
         var office = OfficeState()

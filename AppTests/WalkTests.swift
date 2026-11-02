@@ -195,4 +195,32 @@ final class WalkTests: XCTestCase {
         XCTAssertEqual(moment.walkers.count, 0)
         XCTAssertEqual(moment.room.count, 3)
     }
+
+    private func message(from agent: String?, to: String, at time: TimeInterval, animate: Bool = true) {
+        office.apply(
+            HookEvent(
+                kind: .preToolUse, session: "s1", cwd: folder, agentID: agent, toolKind: .team, sendsMessage: true,
+                recipient: to), now: t0 + time)
+        _ = stage.sync(office, width: width, now: t0 + time, animate: animate)
+    }
+
+    /// A message between two teammates at their desks: the sender walks over, talks 2 s and walks back; the
+    /// recipient stays seated. At the meeting table only the mark shows, nobody walks.
+    func testATeammateWalksOverToTalk() {
+        send(.userPromptSubmit, at: 0)
+        send(.subagentStart, agent: "a1", type: "Explore", at: 1)
+        send(.subagentStart, agent: "a2", type: "Plan", at: 1)
+        message(from: "a1", to: "Plan", at: 9)
+        let walk = track(explore, from: 9, to: 30)
+        XCTAssertNotNil(walk[1], "on the way")
+        XCTAssertEqual(talkSeconds(walk), Stage.talkTime, accuracy: 0.11)
+        XCTAssertNil(walk.last!, "back at its desk")
+        XCTAssertTrue(track(plan, from: 9, to: 30).allSatisfy { $0 == nil }, "the recipient stays seated")
+
+        meet(at: 40)
+        message(from: "a2", to: "a1", at: 60)
+        let inMeeting = stride(from: 60.0, to: 64, by: 0.05).map { stage.moment(at: t0 + $0) }
+        XCTAssertTrue(inMeeting.allSatisfy { $0.walkers.isEmpty })
+        XCTAssertEqual(Double(inMeeting.filter { !$0.talks.isEmpty }.count) * 0.05, Stage.talkTime, accuracy: 0.11)
+    }
 }

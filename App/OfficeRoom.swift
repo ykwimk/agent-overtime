@@ -91,6 +91,8 @@ final class Stage: ObservableObject {
     /// Speaking marks shown at a seat instead of a walk (Reduce Motion): from, until, where, the session, the
     /// newcomer it is for.
     private var seatTalks: [(start: Date, end: Date, at: Point, host: String, partner: String?)] = []
+    /// The last message between two people already played.
+    private var lastTalk = 0
     /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
     private var generation = 0
 
@@ -141,6 +143,11 @@ final class Stage: ObservableObject {
             for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people, now) }
         } else {
             talkInPlace(people, now)
+        }
+        if let talk = office.talk, talk.serial != lastTalk {
+            lastTalk = talk.serial
+            // A message from before the window opened is old news.
+            if before.width > 0 { converse(talk, people, now, animate: animate) }
         }
         present = people
 
@@ -299,8 +306,38 @@ final class Stage: ObservableObject {
         }
     }
 
-    /// The speaking mark at someone's own seat, on the side away from their state bubble.
+    /// A message between two people here: the sender walks over to the other's desk, talks for a moment and
+    /// walks back. Both at the meeting table, or with Reduce Motion: only the speaking mark, at the sender's seat.
+    /// Someone already on the way doesn't set off again.
+    private func converse(_ talk: OfficeState.Talk, _ people: [String: Person], _ now: Date, animate: Bool) {
+        let from = talk.from.map { "m:" + $0 } ?? "p:" + talk.session
+        let to = talk.to.map { "m:" + $0 } ?? "p:" + talk.session
+        guard let sender = people[from], let receiver = people[to], trips[from] == nil else { return }
+        guard animate, sender.place == .desk, receiver.place == .desk else {
+            seatTalks.append((now, now + Self.talkTime, markAtSeat(sender), from, nil))
+            return
+        }
+        let home = layout.deskSpot(slot: sender.slot, seat: sender.seat)
+        let there = layout.path(from: home, to: layout.besideSpot(slot: receiver.slot, seat: receiver.seat))
+        start(
+            from,
+            Trip(
+                look: sender.look, start: now,
+                legs: [
+                    Leg(points: there), self.talk(at: there.last!, with: receiver),
+                    Leg(points: Array(there.reversed())),
+                ],
+                from: .desk, to: .desk, partner: to))
+    }
+
+    /// The speaking mark at someone's own seat, on the side away from their state bubble; at the meeting table,
+    /// at their seat there.
     private func markAtSeat(_ person: Person) -> Point {
+        if case .room(let seat) = person.place, let room = layout.meetingRoom {
+            let x = room.seats[seat].x
+            let table = MeetingRoom.table
+            return seat < 3 ? (x - 25, table.y - 26) : (seat == 3 ? x + 12 : x - 28, table.y + 30)
+        }
         let origin = layout.origin(of: person.slot)
         let x = origin.x + RoomLayout.personX(person.seat)
         if RoomLayout.isAcross(person.seat) { return (x - 25, origin.y + RoomLayout.farDesk - 26) }
