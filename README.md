@@ -8,7 +8,7 @@ Works with Claude Code. Not affiliated with Anthropic.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
-  <img alt="The office window: each session sits at its own row of desks, with its subagents beside it" src="docs/images/office-light.png">
+  <img alt="The office window: sessions and their subagents at islands of four desks, one session meeting its subagents in the glass meeting room, and a lounge" src="docs/images/office-light.png">
 </picture>
 
 | State | What it means | What you see |
@@ -16,10 +16,11 @@ Works with Claude Code. Not affiliated with Anthropic.
 | Working | Producing an answer | Sitting at the desk, laptop on, `…` bubble |
 | Waiting · n min | Needs your permission or answer | Still sitting, a `!` bubble hopping over the head |
 | Resting | Done, waiting for your next instruction | Nodding off in the chair, `z` bubble |
-| Off duty | The session ended | Walks out the door, leaving an empty desk and a dimmed name tag |
+| Off duty | The session ended | Walks out the door; while others still work at that island, its seat keeps a dimmed name tag |
 
-- Each session gets a row of four desks named after its folder. A second session in the same folder gets the next row, "name 2".
-- Subagents walk in and sit beside the session that called them. From the fourth one on, the name tag shows "+n".
+- People sit at islands of four facing desks, nearest the door first, only while they work. A session's name tag is its folder's name; a second session in the same folder is "name 2".
+- Subagents walk in and sit at the island of whoever called them. The caller walks over to hand out the work, and a subagent that finishes walks over to report before it leaves. When a session hands work to two or more subagents and waits, they meet in the glass meeting room.
+- Click a character or its name tag for a side panel: the state and for how long, the kind of tool in use, the subagents. ✏️ there gives a nickname, kept on this Mac.
 - The menu bar icon turns into `! 2` while sessions wait for you. Everything stays on this Mac.
 
 ## Start here
@@ -90,12 +91,13 @@ From each project's README, November 2026. If something here is wrong, please op
 ## How it works
 
 1. The plugin adds hooks for nine Claude Code events (`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SubagentStart`, `SubagentStop`, `SessionEnd`; see [`plugin/hooks/hooks.json`](plugin/hooks/hooks.json)). Each one runs a small helper inside the app, `agent-overtime-hook`.
-2. The helper keeps eight values: event name, session id, folder path, subagent id, subagent type, notification type, whether the tool is AskUserQuestion, and the Claude Code process id. Everything else Claude Code passes (tool names and input, prompts, file contents, the transcript path, notifications the app doesn't use) is dropped right after parsing; it is never stored or sent, and the transcript file is never opened.
+2. The helper keeps only: event name, session id, folder path, subagent id and name, notification type, whether the tool is AskUserQuestion or SendMessage, the recipient of a SendMessage (its `to` field only), a tool kind (one of: reading, editing, command, search/web, teammates, other), and the Claude Code process id. Tool names, the message itself and all other tool input, prompts, file contents and transcripts are dropped right after parsing; they are never stored or sent. The recipient is only matched against teammates already at a desk, then dropped; it is never saved or shown. The tool kind is worked out inside the helper from a fixed list of Claude Code's built-in tools. MCP tools and any tool it does not know count as "other", so MCP server names never leave the helper. The app keeps only the latest kind and when it arrived, in memory. The transcript file is never opened.
 3. The helper hands the values to the app over a unix socket only your user can open (folder 0700, file 0600). It prints nothing and always exits within 0.5 s.
-4. The app only changes the picture. Nothing in an event is ever run, and the screen shows states and names only, never tool names, commands or file paths.
+4. The app only changes the picture, and nothing in an event is ever run. The screen shows states and a coarse tool kind (for example "Editing files") only, never tool names, commands or file paths.
 
+- Meetings are a picture of a session handing out work: when it has two or more subagents out and does nothing of its own for 10 seconds, they meet in the meeting room. The app never knows what anyone says, so speech bubbles stay empty.
 - Network: none. No ports, no update checks, no analytics, no crash reports.
-- On disk: `~/Library/Application Support/AgentOvertime/config.json` (0600) with remembered desks (folder paths) and your start command, plus the app's preferences (whether it has connected, and the fingerprint of the start command you approved). Clear desks in Settings > Desks.
+- On disk: `~/Library/Application Support/AgentOvertime/config.json` (0600) with recent folders (folder paths), your start command, and the nicknames you give sessions (by folder path) and teammates (by name), plus the app's preferences (whether it has connected, and the fingerprint of the start command you approved). Nicknames stay on this Mac: they never go to the hook helper, a log or a notification. Clear them in Settings > Nicknames, and recent folders in Settings > Recent Folders.
 
 ## Verify the download
 
@@ -146,7 +148,7 @@ Move `build/Build/Products/Release/AgentOvertime.app` into **Applications** (or 
 
 ## Roadmap
 
-- Click a character to jump to that session's terminal
+- Jump from a character's side panel to that session's terminal
 - A small always-on-top window
 - Other agents such as Codex, once enough people ask in issues
 

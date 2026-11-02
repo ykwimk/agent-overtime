@@ -426,15 +426,18 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// The README picture (copied by hand to docs/images/): the window a little taller than the default so the
-    /// off-duty prototype desk shows too, and the helper already seated, so no name tag stands under an empty
-    /// chair. Light by day, dark by night.
+    /// The README picture (copied by hand to docs/images/): the example office in the default window, my-project
+    /// meeting its three teammates (Plan waiting for an answer at the table), the others at their islands. Light
+    /// by day, dark by night.
     func testCaptureReadme() throws {
         for (time, hour) in [("day", 14), ("night", 22)] {
-            let (model, stage) = scenario(at: today(hour), still: true)
+            let model = makeModel(connected: true)
+            for event in FakeScenario.events { model.receive(event, at: today(hour) - 200) }
+            model.advanceMeetings(to: today(hour))
+            XCTAssertEqual(model.office.meeting?.members.count, 3)
             try capture(
-                "readme-\(time)", size: CGSize(width: OfficeView.defaultSize.width, height: 860),
-                OfficeView(fixedNow: today(hour), stage: stage).environmentObject(model))
+                "readme-\(time)", size: OfficeView.defaultSize,
+                OfficeView(fixedNow: today(hour)).environmentObject(model))
         }
     }
 
