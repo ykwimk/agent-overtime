@@ -84,6 +84,8 @@ final class Stage: ObservableObject {
     private static let stride = 12.0
     /// How long two people stand and talk.
     static let talkTime: TimeInterval = 2
+    /// A teammate done sooner than this after it came just leaves: short calls are common.
+    static let quick: TimeInterval = 5
 
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.
     func sync(_ office: OfficeState, width: Int, now: Date, animate: Bool) -> (pods: [Pod], layout: RoomLayout) {
@@ -106,12 +108,7 @@ final class Stage: ObservableObject {
                     legs: [Leg(points: layout.route(slot: person.slot, seat: person.seat))],
                     from: nil, to: .desk, arriving: true)
             }
-            for (id, person) in present where people[id] == nil {
-                trips[id] = Trip(
-                    look: person.look, start: now,
-                    legs: [Leg(points: Array(before.route(slot: person.slot, seat: person.seat).reversed()))],
-                    from: .desk, to: nil)
-            }
+            for (id, person) in present where people[id] == nil { leave(id, person, people, before, now) }
             for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people) }
         }
         present = people
@@ -155,10 +152,28 @@ final class Stage: ObservableObject {
             from: .desk, to: .desk, partner: id)
     }
 
+    /// Out through the door. ② A teammate that worked a while first walks to its session's desk and reports.
+    private func leave(_ id: String, _ person: Person, _ people: [String: Person], _ room: RoomLayout, _ now: Date) {
+        let desk = room.deskSpot(slot: person.slot, seat: person.seat)
+        var legs = [Leg(points: room.path(from: desk, to: room.doorSpot))]
+        if !person.isSession, let host = people["p:" + person.session], host.place == .desk,
+            now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
+        {
+            let beside = room.besideSpot(slot: host.slot, seat: host.seat)
+            let there = room.path(from: desk, to: beside)
+            legs = [
+                Leg(points: there), talk(at: there.last!, with: host, in: room),
+                Leg(points: room.path(from: beside, to: room.doorSpot)),
+            ]
+        }
+        trips[id] = Trip(look: person.look, start: now, legs: legs, from: .desk, to: nil)
+    }
+
     /// Standing at `at` and talking with the person at `other`'s seat: facing them, the speaking mark beside the
     /// head on their side.
-    private func talk(at: Point, with other: Person) -> Leg {
-        let x = layout.origin(of: other.slot).x + RoomLayout.personX(other.seat)
+    private func talk(at: Point, with other: Person, in room: RoomLayout? = nil) -> Leg {
+        let room = room ?? layout
+        let x = room.origin(of: other.slot).x + RoomLayout.personX(other.seat)
         return Leg(
             points: [at], pause: Self.talkTime, facing: RoomLayout.isAcross(other.seat) ? .down : .up,
             talk: (x >= at.x ? at.x + 5 : at.x - 21, at.y - 50))
