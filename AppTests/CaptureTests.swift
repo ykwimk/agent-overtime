@@ -289,6 +289,16 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(two.office.desks.flatMap(\.sessions).filter(\.meets).count, 2)
         try capture(
             "office-meeting-second", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(two))
+
+        // web-app's helper wears headphones: it works on through the meeting, and its panel says so.
+        let helper = try XCTUnwrap(
+            two.office.pods.flatMap { pod in pod.seats.indices.map { (pod.slot, $0, pod.seats[$0]) } }.first {
+                $0.2.flatMap(OfficeScene.id) == "m:w1-h"
+            })
+        XCTAssertEqual(two.office.session("w1")?.teammates.first?.headphones, true)
+        try capture(
+            "panel-meeting-headphones", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(two, slot: helper.0, index: helper.1)).environmentObject(two))
     }
 
     /// The side panel on the seat at `slot`, `index`.
