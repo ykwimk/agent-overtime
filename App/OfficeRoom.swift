@@ -82,6 +82,9 @@ final class Stage: ObservableObject {
     private var pods: [Pod] = []
     private var present: [String: Person] = [:]
     private var trips: [String: Trip] = [:]
+    /// Speaking marks shown at a seat instead of a walk (Reduce Motion): from, until, where, the session, the
+    /// newcomer it is for.
+    private var seatTalks: [(start: Date, end: Date, at: Point, host: String, partner: String?)] = []
     /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
     private var generation = 0
 
@@ -113,6 +116,7 @@ final class Stage: ObservableObject {
         pods = office.pods
         layout = RoomLayout(width: width, slots: (pods.last?.slot ?? -1) + 1)
         trips = trips.filter { $0.value.end > now }
+        seatTalks.removeAll { $0.end <= now }
 
         let people = Self.people(pods, meeting: layout.meetingRoom == nil ? nil : office.meeting)
         if animate {
@@ -128,6 +132,8 @@ final class Stage: ObservableObject {
         }
         if animate {
             for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people, now) }
+        } else {
+            talkInPlace(people, now)
         }
         present = people
 
@@ -218,19 +224,15 @@ final class Stage: ObservableObject {
     /// instead (③).
     private func visit(_ id: String, _ mate: Person, _ people: [String: Person], _ now: Date) {
         let host = "p:" + mate.session
-        guard let session = people[host], session.place == .desk, !session.waits, !session.meets,
-            let arrived = mate.arrived
-        else { return }
-        let others = people.filter { other in
-            other.key != id && !other.value.isSession && other.value.session == mate.session
-                && other.value.arrived.map { abs($0.timeIntervalSince(arrived)) < Self.together } ?? false
-        }
+        guard let arrived = mate.arrived else { return }
+        let others = Self.cameWith(id, mate, people)
         if !others.isEmpty {
-            if let partner = trips[host]?.partner, others[partner] != nil, trips[host]!.start > now {
+            if let partner = trips[host]?.partner, others.contains(partner), trips[host]!.start > now {
                 trips[host] = nil
             }
             return
         }
+        guard let session = people[host], session.place == .desk, !session.waits, !session.meets else { return }
         // shortcut: a newcomer who sits down while the session is already on its way gets no visit; queue visits if
         // teammates that start one after another while others still work turn out to be common.
         guard trips[host] == nil else { return }
@@ -242,6 +244,60 @@ final class Stage: ObservableObject {
                 look: session.look, start: max(trips[id]?.end ?? arrived, arrived + Self.together),
                 legs: [Leg(points: there), talk(at: there.last!, with: mate), Leg(points: Array(there.reversed()))],
                 from: .desk, to: .desk, partner: id))
+    }
+
+    /// The session's other teammates that came within `together` of this one.
+    private static func cameWith(_ id: String, _ mate: Person, _ people: [String: Person]) -> Set<String> {
+        guard let arrived = mate.arrived else { return [] }
+        return Set(
+            people.filter { other in
+                other.key != id && !other.value.isSession && other.value.session == mate.session
+                    && other.value.arrived.map { abs($0.timeIntervalSince(arrived)) < Self.together } ?? false
+            }.keys)
+    }
+
+    /// ② The session a leaving teammate reports to: at its desk (not in the meeting room), and only after the
+    /// teammate worked a while.
+    private func host(reportedToBy person: Person, _ people: [String: Person], _ now: Date) -> Person? {
+        let id = "p:" + person.session
+        guard !person.isSession, person.place == .desk, let host = people[id], host.place == .desk,
+            present[id]?.place == .desk, now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
+        else { return nil }
+        return host
+    }
+
+    /// With Reduce Motion nobody walks: ① and ② show as the speaking mark at the session's own seat for a moment,
+    /// on the same terms as the walks.
+    private func talkInPlace(_ people: [String: Person], _ now: Date) {
+        seatTalks.removeAll { talk in
+            let busy = people[talk.host].map { $0.waits || $0.meets } ?? true
+            return talk.start > now && (busy || talk.partner.map { people[$0] == nil } ?? false)
+        }
+        for (id, mate) in people where present[id] == nil && !mate.isSession {
+            let others = Self.cameWith(id, mate, people)
+            if !others.isEmpty {
+                seatTalks.removeAll { $0.start > now && others.contains($0.partner ?? "") }
+                continue
+            }
+            let host = "p:" + mate.session
+            guard let arrived = mate.arrived, let session = people[host], session.place == .desk, !session.waits,
+                !session.meets
+            else { continue }
+            let start = arrived + Self.together
+            seatTalks.append((start, start + Self.talkTime, markAtSeat(session), host, id))
+        }
+        for (id, mate) in present where people[id] == nil {
+            guard let session = host(reportedToBy: mate, people, now) else { continue }
+            seatTalks.append((now, now + Self.talkTime, markAtSeat(session), "p:" + mate.session, nil))
+        }
+    }
+
+    /// The speaking mark at someone's own seat, on the side away from their state bubble.
+    private func markAtSeat(_ person: Person) -> Point {
+        let origin = layout.origin(of: person.slot)
+        let x = origin.x + RoomLayout.personX(person.seat)
+        if RoomLayout.isAcross(person.seat) { return (x - 25, origin.y + RoomLayout.farDesk - 26) }
+        return (person.seat == 0 ? x + 12 : x - 28, origin.y + RoomLayout.nearDesk + 22)
     }
 
     /// A visit not under way yet is dropped once its host waits for an answer or meets. One whose newcomer has
@@ -277,10 +333,7 @@ final class Stage: ObservableObject {
             return
         }
         var legs = [Leg(points: room.path(from: here, to: room.doorSpot))]
-        let hostID = "p:" + person.session
-        if !person.isSession, person.place == .desk, let host = people[hostID], host.place == .desk,
-            present[hostID]?.place == .desk, now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
-        {
+        if let host = host(reportedToBy: person, people, now) {
             let desk = room.deskSpot(slot: person.slot, seat: person.seat)
             let beside = room.besideSpot(slot: host.slot, seat: host.seat)
             let there = room.path(from: desk, to: beside)
@@ -380,6 +433,13 @@ final class Stage: ObservableObject {
         return nil
     }
 
+    /// The next moment after `now` that something starts or stops on its own (a walk, a speaking mark), so a slow
+    /// picture still draws it on time.
+    func nextChange(after now: Date) -> Date? {
+        (trips.values.flatMap { [$0.start, $0.end] } + seatTalks.flatMap { [$0.start, $0.end] }).filter { $0 > now }
+            .min()
+    }
+
     /// Where everyone on the move is at `now`, and who sits in the meeting room.
     func moment(at now: Date) -> Moment {
         var moment = Moment()
@@ -399,6 +459,7 @@ final class Stage: ObservableObject {
                 moment.meetingDoorOpen = true
             }
         }
+        for talk in seatTalks where talk.start <= now && now < talk.end { moment.talks.append(talk.at) }
         for (id, person) in present {
             guard case .room(let seat) = person.place, !moment.away.contains(id), !moment.out.contains(id) else {
                 continue
@@ -445,7 +506,8 @@ final class Stage: ObservableObject {
         let minute = Int(now.timeIntervalSinceReferenceDate / 60)
         let roomKey =
             "\(frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
-            + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(height) \(layout.width) \(generation) "
+            + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(scene.talks.map { "\($0.x),\($0.y)" }) \(height) "
+            + "\(layout.width) \(generation) "
             + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
             + "\(scene.meetingLit)"
         if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
@@ -823,8 +885,11 @@ struct OfficePicture: NSViewRepresentable {
 
             let visible = window?.occlusionState.contains(.visible) ?? false
             guard settings.fixedNow == nil, window != nil, visible || settings.ticksWhileHidden else { return }
-            let interval =
+            var interval =
                 now < settings.stage.busyUntil ? 1 / OfficePicture.walkingFrameRate : (settings.reduceMotion ? 30 : 0.4)
+            if let next = settings.stage.nextChange(after: now) {
+                interval = min(interval, max(0.05, next.timeIntervalSince(now)))
+            }
             let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in self?.refresh() }
             timer.tolerance = interval / 10
             // Common modes: keep moving while the room is scrolled.
