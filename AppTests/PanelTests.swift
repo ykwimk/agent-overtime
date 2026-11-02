@@ -360,8 +360,9 @@ final class PanelTests: XCTestCase {
     }
 }
 
-/// Zoom: three steps that stop at the ends, Actual Size back to normal, kept in the app's settings; the View menu
-/// and ⌘+ (which takes Shift) work it.
+/// Zoom like a map: the steps stop at the ends, Actual Size is normal, the step is kept in the app's settings; the View
+/// menu and ⌘+ (which takes Shift) work it; zooming keeps the islands where they are and the spot under the pointer
+/// under it; zoomed-out name tags make room for long names.
 @MainActor
 final class ZoomTests: XCTestCase {
     private func model(_ defaults: UserDefaults) -> AppModel {
@@ -372,40 +373,89 @@ final class ZoomTests: XCTestCase {
     func testStepsStopAtTheEndsAndAreKept() {
         let defaults = UserDefaults(suiteName: "ao-zoom-\(UUID().uuidString)")!
         let model = model(defaults)
-        XCTAssertEqual(model.zoom, .normal, "normal until changed")
+        XCTAssertEqual(model.zoom, 1, "normal until changed")
         model.zoomIn()
         model.zoomIn()
-        XCTAssertEqual(model.zoom, .large, "large is the end")
-        model.zoom = .normal
+        XCTAssertEqual(model.zoom, 1.5, "the last step")
+        model.zoom = Zoom.normal
         model.zoomOut()
         model.zoomOut()
-        XCTAssertEqual(model.zoom, .small, "small is the end")
-        XCTAssertEqual(self.model(defaults).zoom, .small, "the same step next time")
-        XCTAssertEqual(defaults.integer(forKey: "zoom"), 1)
-        defaults.set(7, forKey: "zoom")
-        XCTAssertEqual(self.model(defaults).zoom, .normal, "an unknown value reads as normal")
+        XCTAssertEqual(model.zoom, 0.5, "the first step")
+        XCTAssertEqual(self.model(defaults).zoom, 0.5, "the same step next time")
+        XCTAssertEqual(defaults.integer(forKey: "zoom"), 50)
+        defaults.set(3, forKey: "zoom")
+        XCTAssertEqual(self.model(defaults).zoom, 1.5, "the earlier large")
+        defaults.set(400, forKey: "zoom")
+        XCTAssertEqual(self.model(defaults).zoom, 1, "out of range reads as normal")
+        defaults.set("big", forKey: "zoom")
+        XCTAssertEqual(self.model(defaults).zoom, 1, "not a number reads as normal")
     }
 
-    /// Small name tags grow past their desk rather than cut a name short: over the free seat beside, else a little
-    /// outward, still clear of the next island's tags. An 18-character folder name fits over two desks; the short
-    /// wait line ("Waiting 3 min", "답 기다림 3분") over a desk and the bit outward.
-    func testSmallTagsMakeRoomForLongNames() {
+    /// Zoomed in to 150 % around a point, then the window made narrower: the islands stay where the window's width
+    /// puts them, the spot under the point stays under it, and a narrower window lays the room out again.
+    func testZoomKeepsTheIslandsAndTheSpotUnderThePointer() throws {
+        let model = AppModel(
+            supportFolder: (Paths.userTempFolder as NSString).appendingPathComponent("ao-zoom-\(UUID().uuidString)"),
+            socketPath: "/nonexistent", defaults: UserDefaults(suiteName: "ao-zoom-\(UUID().uuidString)")!)
+        for i in 0..<9 {
+            model.receive(HookEvent(kind: .userPromptSubmit, session: "z\(i)", cwd: FakeScenario.root + "/p\(i)"))
+        }
+        let stage = Stage()
+        let zoom = OfficeZoom()
+        let window = NSWindow(
+            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled, .resizable],
+            backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: OfficeView(stage: stage, zoom: zoom).environmentObject(model))
+        window.orderFrontRegardless()
+        defer { window.close() }
+        RunLoop.main.run(until: Date() + 1)
+
+        func island(_ slot: Int, width: Double) -> (Int, Int)? {
+            let origin = RoomLayout(points: width, slots: 9).origin(of: slot)
+            return stage.seat(at: (origin.x + 10, origin.y + 60), now: Date()).map { ($0.slot, $0.index) }
+        }
+        XCTAssertEqual(zoom.magnification, 1)
+        XCTAssertTrue(island(5, width: 1216).map { $0 == (5, 0) } ?? false)
+        zoom.zoom(to: 1.5, at: CGPoint(x: 300, y: 200))
+        RunLoop.main.run(until: Date() + 0.5)
+        XCTAssertEqual(zoom.magnification, 1.5)
+        XCTAssertTrue(island(5, width: 1216).map { $0 == (5, 0) } ?? false, "the same place at 150 %")
+        let offset = try XCTUnwrap(zoom.offset())
+        XCTAssertEqual(offset.x, 150, accuracy: 1, "(0 + 300) × 1.5 − 300")
+        XCTAssertEqual(offset.y, 100, accuracy: 1, "(0 + 200) × 1.5 − 200")
+
+        window.setContentSize(CGSize(width: 1176, height: OfficeView.defaultSize.height))
+        RunLoop.main.run(until: Date() + 0.5)
+        XCTAssertEqual(zoom.magnification, 1.5, "a new width keeps the zoom")
+        XCTAssertTrue(island(2, width: 1176).map { $0 == (2, 0) } ?? false, "one island a row, from the width")
+    }
+
+    /// Zoomed-out name tags (under 75 %) grow past their desk rather than cut a name short: over the free seat beside,
+    /// else a little outward, still clear of the next island's tags. At 50 % an 18-character folder name fits over
+    /// two desks; the short wait line ("Waiting 3 min", "답 기다림 3분") over a desk and the bit outward.
+    func testZoomedOutTagsMakeRoomForLongNames() {
+        XCTAssertTrue(SeatTag.isCompact(1))
+        XCTAssertTrue(SeatTag.isCompact(1.49))
+        XCTAssertFalse(SeatTag.isCompact(1.5))
         let desk = CGFloat(RoomLayout.deskWidth)
-        XCTAssertEqual(SeatTag.smallGrowth(left: true, besideFree: true), desk)
-        XCTAssertEqual(SeatTag.smallGrowth(left: false, besideFree: true), -desk)
-        XCTAssertEqual(SeatTag.smallGrowth(left: true, besideFree: false), -14)
-        XCTAssertEqual(SeatTag.smallGrowth(left: false, besideFree: false), 14)
-        XCTAssertLessThan(2 * (14 - 2), CGFloat(RoomLayout.gap), "two islands' outward tags keep apart")
+        XCTAssertEqual(SeatTag.growth(left: true, besideFree: true, scale: 1), desk)
+        XCTAssertEqual(SeatTag.growth(left: false, besideFree: true, scale: 1), -desk)
+        XCTAssertEqual(SeatTag.growth(left: true, besideFree: false, scale: 1), -14)
+        XCTAssertEqual(SeatTag.growth(left: false, besideFree: false, scale: 1.4), 14 * 1.4)
+        for scale in [1.0, 1.25, 1.49] {
+            XCTAssertLessThan(2 * (14 * scale - 2), CGFloat(RoomLayout.gap) * scale, "two islands' tags keep apart")
+        }
 
         func width(_ text: Text, _ language: String = "en") -> CGFloat {
             NSHostingView(rootView: text.fixedSize().environment(\.locale, Locale(identifier: language))).fittingSize
                 .width
         }
-        let padding = 2 * 5 * CGFloat(Zoom.small.rawValue + 1) / 3
-        let name = width(Text(verbatim: "my-long-project-dir").font(Zoom.small.tagFont(.semibold)))
+        let padding = 2 * 5 * CGFloat(1 + 1) / 3
+        let name = width(Text(verbatim: "my-long-project-dir").font(.tag(1, .semibold)))
         XCTAssertLessThanOrEqual(name + padding, 2 * desk - 4)
         for language in ["en", "ko"] {
-            let wait = width(Text("Waiting \(3) min").font(Zoom.small.tagFont()), language)
+            let wait = width(Text("Waiting \(3) min").font(.tag(1)), language)
             XCTAssertLessThanOrEqual(wait + padding, desk - 4 + 14, language)
         }
     }
@@ -425,13 +475,13 @@ final class ZoomTests: XCTestCase {
 
         let before = model.zoom
         defer { model.zoom = before }
-        model.zoom = .normal
+        model.zoom = Zoom.normal
         let plus = try XCTUnwrap(
             NSEvent.keyEvent(
                 with: .keyDown, location: .zero, modifierFlags: [.command, .shift], timestamp: 0, windowNumber: 0,
                 context: nil, characters: "+", charactersIgnoringModifiers: "+", isARepeat: false, keyCode: 24))
         XCTAssertTrue(menu.performKeyEquivalent(with: plus))
         RunLoop.main.run(until: Date() + 0.2)
-        XCTAssertEqual(model.zoom, .large)
+        XCTAssertEqual(model.zoom, 1.5)
     }
 }

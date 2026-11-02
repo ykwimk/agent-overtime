@@ -27,26 +27,58 @@ public struct Pod: Equatable, Identifiable {
     public var id: Int { slot }
 }
 
-/// How big the office is drawn: an art pixel as 1, 2 or 3 points. Whole numbers only, so the pixel art stays sharp
-/// (on a Retina screen every step lands on whole screen pixels). Normal is the size the room was laid out for.
-public enum Zoom: Int, CaseIterable {
-    case small = 1
-    case normal, large
+/// How big the office is shown, like a map: a magnification of the room as laid out for the window (1 is normal).
+/// The layout never changes with it. A pinch or ⌘-scroll goes anywhere in `range`, and letting go settles on the
+/// nearest of the `steps`, where every pixel of the room and of the people lands on whole screen pixels of a Retina
+/// display: the room's art pixels are 4 × m screen pixels and the people's 6 × m.
+public enum Zoom {
+    public static let normal = 1.0
+    public static let steps = [0.5, 1, 1.5]
+    public static let range = 0.5...1.5
 
-    public var bigger: Zoom? { Zoom(rawValue: rawValue + 1) }
-    public var smaller: Zoom? { Zoom(rawValue: rawValue - 1) }
+    public static func clamped(_ magnification: Double) -> Double {
+        magnification.isFinite ? min(max(magnification, range.lowerBound), range.upperBound) : normal
+    }
+
+    /// The step a gesture settles on.
+    public static func nearest(_ magnification: Double) -> Double {
+        steps.min { abs($0 - magnification) < abs($1 - magnification) }!
+    }
+
+    /// The next step up (1) or down (-1) from here, or nil past the end.
+    public static func step(from magnification: Double, by direction: Int) -> Double? {
+        direction > 0
+            ? steps.first { $0 > magnification + 0.001 } : steps.last { $0 < magnification - 0.001 }
+    }
+
+    /// The saved setting, a step in percent (50, 100, 150). The earlier 1, 2 and 3 meant small, normal and large;
+    /// anything else, or nothing, is normal.
+    public static func stored(_ value: Any?) -> Double {
+        guard let number = value as? Int else { return normal }
+        if (1...3).contains(number) { return steps[number - 1] }
+        return steps.first { percent($0) == number } ?? normal
+    }
+
+    public static func percent(_ magnification: Double) -> Int { Int((magnification * 100).rounded()) }
+
+    /// Where a view is scrolled after a zoom from `old` to `new` that keeps `point` (in the view, from its top left)
+    /// over the same spot of the room: like a map, the place under the pointer stays under it.
+    public static func origin(_ origin: CGPoint, keeping point: CGPoint, from old: Double, to new: Double) -> CGPoint {
+        let ratio = new / old
+        return CGPoint(x: (origin.x + point.x) * ratio - point.x, y: (origin.y + point.y) * ratio - point.y)
+    }
 }
 
-/// Where things sit in the office, in art pixels. The art is drawn at a whole number of points per pixel (`Zoom`),
-/// so a wider window fits more islands in a row and nothing is ever scaled by a fraction.
+/// Where things sit in the office, in art pixels, for the window's width at normal size. The room picture is
+/// drawn at 2 bitmap pixels per art pixel and shown at the zoom (`Zoom`); a wider window fits more islands in a row.
 ///
 /// An island from its top down: the name tags of the two seats across the desks (people facing the room), their
 /// heads behind the far desks, the near desks, the chairs of the two seats with their backs to the room, and
 /// their name tags. Rows of islands sit one after another; every other row is moved right, so islands don't
 /// line up in columns.
 public struct RoomLayout: Equatable {
-    /// Points per art pixel at normal zoom, and the room picture's own bitmap pixels per art pixel at every zoom.
-    public static let pointsPerPixel = Zoom.normal.rawValue
+    /// Points per art pixel at normal size, and the room picture's own bitmap pixels per art pixel at every zoom.
+    public static let pointsPerPixel = 2
     /// The back wall, door at its left end.
     public static let wall = 96
     public static let deskWidth = 58
@@ -94,8 +126,8 @@ public struct RoomLayout: Equatable {
     }
 
     /// Room width for a window (or scroll view) this many points wide.
-    public init(points: Double, slots: Int, zoom: Zoom = .normal) {
-        self.init(width: Int(points) / zoom.rawValue, slots: slots)
+    public init(points: Double, slots: Int) {
+        self.init(width: Int(points) / Self.pointsPerPixel, slots: slots)
     }
 
     public var rows: Int { max(1, (slots + columns - 1) / columns) }

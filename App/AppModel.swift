@@ -111,13 +111,13 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// How big the office is drawn (View > Zoom In, Zoom Out, Actual Size), kept for next time.
-    @Published var zoom: Zoom {
-        didSet { defaults.set(zoom.rawValue, forKey: Keys.zoom) }
+    /// The office's zoom step (View > Zoom In, Zoom Out, Actual Size; a pinch settles on one), kept for next time.
+    @Published var zoom: Double {
+        didSet { defaults.set(Zoom.percent(zoom), forKey: Keys.zoom) }
     }
 
-    func zoomIn() { zoom = zoom.bigger ?? zoom }
-    func zoomOut() { zoom = zoom.smaller ?? zoom }
+    func zoomIn() { zoom = Zoom.step(from: zoom, by: 1) ?? zoom }
+    func zoomOut() { zoom = Zoom.step(from: zoom, by: -1) ?? zoom }
 
     private enum Keys {
         static let approved = "approvedStartFingerprint"
@@ -145,7 +145,7 @@ final class AppModel: ObservableObject {
         if defaults.object(forKey: ShowDetails.key) == nil { defaults.set(true, forKey: ShowDetails.key) }
         showsDetails = defaults.bool(forKey: ShowDetails.key)
         findsSessions = defaults.object(forKey: Keys.findsSessions) as? Bool ?? true
-        zoom = Zoom(rawValue: defaults.integer(forKey: Keys.zoom)) ?? .normal
+        zoom = Zoom.stored(defaults.object(forKey: Keys.zoom))
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =

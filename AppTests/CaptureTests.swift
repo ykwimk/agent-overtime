@@ -247,19 +247,20 @@ final class CaptureTests: XCTestCase {
         "mobile-app-ios", "landing-page-kit", "shop-backend", "docs-site-builder",
     ]
 
-    /// Zoom: nine sessions with long folder names in the default window at each step (small shows all nine, the
-    /// names whole over a free seat, "general-purpose 3" cut in the middle); a window a little narrower than the
-    /// default with the side panel open, three sessions, one island a row: at normal "1 more team below" over the
-    /// lounge, left of the panel, and small shows all three; the − + buttons at each step.
+    /// Zoom like a map: nine sessions with long folder names in the default window at 50, 100 and 150 %, the same
+    /// layout at each (two islands a row), zoomed out at the top left with floor to spare, zoomed in scrolling both
+    /// ways; at 50 % the names grow over a free seat and "general-purpose 3" keeps its number. A window a little
+    /// narrower than the default with the side panel open, three sessions, one island a row: at 100 % "1 more team
+    /// below" over the lounge, left of the panel; at 50 % all three in sight. The − + buttons at each step.
     func testCaptureZoom() throws {
         let now = today(14)
-        for zoom in Zoom.allCases {
+        for step in Zoom.steps {
             let nine = team([2, 1, 3, 0, 1, 2, 0, 1, 3], at: now, folders: longFolders)
             XCTAssertTrue(
-                nine.office.desks.flatMap(\.teammates).contains { $0.label == "general-purpose 3" }, "\(zoom)")
-            nine.zoom = zoom
+                nine.office.desks.flatMap(\.teammates).contains { $0.label == "general-purpose 3" }, "\(step)")
+            nine.zoom = step
             try capture(
-                "office-zoom-\(zoom)", size: OfficeView.defaultSize,
+                "office-map-zoom-\(Zoom.percent(step))", size: OfficeView.defaultSize,
                 OfficeView(fixedNow: now).environmentObject(nine))
         }
 
@@ -277,21 +278,21 @@ final class CaptureTests: XCTestCase {
             at: now - 300)
         XCTAssertEqual(narrow.office.islands.map(\.slot), [0, 1, 2])
         let size = CGSize(width: 1176, height: OfficeView.defaultSize.height)
-        XCTAssertFalse(SidePanelView.fitsBeside(width: size.width, zoom: .normal), "the panel floats over the room")
+        XCTAssertFalse(SidePanelView.fitsBeside(width: size.width), "the panel floats over the room")
         let bar: CGFloat = 58
-        XCTAssertEqual(
-            RoomLayout(points: size.width, slots: 3).outOfSight([0, 1, 2], top: 0, height: Int(size.height - bar) / 2)
-                .below, [2])
-        for zoom in [Zoom.normal, .small] {
-            narrow.zoom = zoom
+        let layout = RoomLayout(points: size.width, slots: 3)
+        XCTAssertEqual(layout.outOfSight([0, 1, 2], top: 0, height: Int(size.height - bar) / 2).below, [2])
+        XCTAssertEqual(layout.outOfSight([0, 1, 2], top: 0, height: Int(size.height - bar)).below, [], "at 50 %")
+        for step in [1, 0.5] {
+            narrow.zoom = step
             try capture(
-                zoom == .normal ? "office-narrow-1176" : "office-narrow-1176-small", size: size,
+                step == 1 ? "office-narrow-1176" : "office-narrow-1176-map-50", size: size,
                 OfficeView(fixedNow: now, panel: try panel(narrow, slot: 0, index: 0)).environmentObject(narrow))
         }
 
-        let bars = Zoom.allCases.map { zoom -> AppModel in
+        let bars = Zoom.steps.map { step -> AppModel in
             let model = team([2, 0], at: now)
-            model.zoom = zoom
+            model.zoom = step
             return model
         }
         try capture(
@@ -1280,9 +1281,10 @@ final class CaptureTests: XCTestCase {
         XCTAssertLessThan(office, 5)
     }
 
-    /// Nine sessions in the default window at normal and small (where the room's picture has four times the
-    /// pixels): still, then one teammate walking in. Written to captures/cpu-zoom.txt.
-    func testCPUAtNormalAndSmall() throws {
+    /// Nine sessions in the default window: still at 100 % and at 75 % (the room picture is the same, shown
+    /// smaller), during a pinch (the zoom changing 60 times a second between 60 and 140 %), and at 100 % with one
+    /// teammate walking in. Written to captures/cpu-zoom.txt.
+    func testCPUWhileZooming() throws {
         func cpuSeconds() -> Double {
             var usage = rusage()
             getrusage(RUSAGE_SELF, &usage)
@@ -1295,31 +1297,57 @@ final class CaptureTests: XCTestCase {
             return (cpuSeconds() - cpu) / Date().timeIntervalSince(start) * 100
         }
         let idle = percent(over: 5)
-        var line = String(format: "CPU, 9 sessions, default window (test app alone %.2f%%):", idle)
-        var still: [Zoom: Double] = [:]
-        for zoom in [Zoom.normal, .small] {
+        func office(at step: Double, zoom: OfficeZoom = OfficeZoom()) -> (AppModel, NSWindow) {
             let model = team([1, 0, 2, 0, 1, 0, 1, 0, 1], at: Date())
-            model.zoom = zoom
+            model.zoom = step
             let window = NSWindow(
                 contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled],
                 backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: OfficeView(ticksWhileHidden: true).environmentObject(model))
+            window.contentView = NSHostingView(
+                rootView: OfficeView(zoom: zoom, ticksWhileHidden: true).environmentObject(model))
             window.orderFrontRegardless()
             RunLoop.main.run(until: Date() + 3)
-            still[zoom] = percent(over: 10) - idle
-            let folder = FakeScenario.root + "/my-project"
-            model.receive(
-                HookEvent(kind: .subagentStart, session: "team-0", cwd: folder, agentID: "walker", agentType: "Plan"))
-            let walking = percent(over: 3) - idle
-            line += String(format: " %@: still %.2f%%, one walking %.2f%%;", "\(zoom)", still[zoom]!, walking)
+            return (model, window)
+        }
+        func close(_ window: NSWindow) {
             window.close()
             window.contentView = nil
             RunLoop.main.run(until: Date() + 1)
         }
+
+        var (model, window) = office(at: 1)
+        let normal = percent(over: 10) - idle
+        model.receive(
+            HookEvent(
+                kind: .subagentStart, session: "team-0", cwd: FakeScenario.root + "/my-project", agentID: "walker",
+                agentType: "Plan"))
+        let walking = percent(over: 3) - idle
+        close(window)
+
+        (model, window) = office(at: 0.75)
+        let small = percent(over: 10) - idle
+        close(window)
+
+        let zoom = OfficeZoom()
+        (model, window) = office(at: 1, zoom: zoom)
+        let began = Date()
+        let pinch = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in
+            let t = Date().timeIntervalSince(began)
+            zoom.zoom(to: 1 + 0.4 * sin(t * 2), at: CGPoint(x: 400, y: 300))
+        }
+        RunLoop.main.add(pinch, forMode: .common)
+        let pinching = percent(over: 5) - idle
+        pinch.invalidate()
+        close(window)
+
+        let line = String(
+            format: "CPU, 9 sessions, default window (test app alone %.2f%%): 100%% still %.2f%%; 75%% still %.2f%%; "
+                + "pinching %.2f%%; 100%% one walking %.2f%%",
+            idle, normal, small, pinching, walking)
         print(line)
         try (line + "\n").write(to: out.appendingPathComponent("cpu-zoom.txt"), atomically: true, encoding: .utf8)
-        XCTAssertLessThan(still[.small]!, still[.normal]! * 2, "small, still, well under four times normal")
+        XCTAssertLessThan(small, normal * 2 + 1, "zoomed out, still, about as normal")
     }
 
     func testCaptureOtherScreens() throws {

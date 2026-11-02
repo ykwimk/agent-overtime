@@ -246,8 +246,9 @@ struct OfficeView: View {
     @FocusState private var focus: OfficeFocus?
     /// Screenshots pin the clock and the animation frame.
     var fixedNow: Date?
-    /// Screenshots can hand in a stage with someone already walking.
+    /// Screenshots can hand in a stage with someone already walking, tests a zoom to drive.
     var stage: Stage?
+    var zoom: OfficeZoom?
     /// Only the CPU test sets these.
     var ticksWhileHidden = false
     var reducesMotion = false
@@ -257,11 +258,12 @@ struct OfficeView: View {
 
     /// Screenshots and tests can hand in a panel already open.
     init(
-        fixedNow: Date? = nil, stage: Stage? = nil, panel: SidePanel? = nil, ticksWhileHidden: Bool = false,
-        reducesMotion: Bool = false
+        fixedNow: Date? = nil, stage: Stage? = nil, zoom: OfficeZoom? = nil, panel: SidePanel? = nil,
+        ticksWhileHidden: Bool = false, reducesMotion: Bool = false
     ) {
         self.fixedNow = fixedNow
         self.stage = stage
+        self.zoom = zoom
         self.ticksWhileHidden = ticksWhileHidden
         self.reducesMotion = reducesMotion
         _panel = StateObject(wrappedValue: panel ?? SidePanel())
@@ -272,20 +274,20 @@ struct OfficeView: View {
             OfficeBar()
             Divider()
             GeometryReader { geometry in
-                let beside = SidePanelView.fitsBeside(width: geometry.size.width, zoom: model.zoom)
+                let beside = SidePanelView.fitsBeside(width: geometry.size.width)
                 HStack(spacing: 0) {
                     OfficeRoom(
-                        panel: panel, focus: $focus, fixedNow: fixedNow, stage: stage,
+                        panel: panel, focus: $focus, fixedNow: fixedNow, stage: stage, zoom: zoom,
                         ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion,
                         covered: !beside && panel.selection != nil ? SidePanelView.width : 0
                     )
                     .overlay {
                         // Centred on the floor left of the meeting room and lounge, when the window has them.
                         GeometryReader { geometry in
-                            let zoom = model.zoom
-                            let pillar = RoomLayout(points: geometry.size.width, slots: 0, zoom: zoom).pillar
+                            let pillar = RoomLayout(points: geometry.size.width, slots: 0).pillar
                             emptyMessage.padding(
-                                .trailing, pillar.map { geometry.size.width - CGFloat($0 * zoom.rawValue) } ?? 0)
+                                .trailing,
+                                pillar.map { geometry.size.width - CGFloat($0 * RoomLayout.pointsPerPixel) } ?? 0)
                         }
                     }
                     if beside, panel.selection != nil {
@@ -367,7 +369,8 @@ struct OfficeView: View {
     }
 }
 
-/// − and + for the office's zoom, beside Start Work; the end step's button dims. VoiceOver hears "Zoom Out, Normal".
+/// − and + for the office's zoom, a sharp step at a time, beside Start Work; the end step's button dims. VoiceOver
+/// hears "Zoom Out, 100%".
 struct ZoomButtons: View {
     @EnvironmentObject private var model: AppModel
 
@@ -378,31 +381,21 @@ struct ZoomButtons: View {
             } label: {
                 Image(systemName: "minus").frame(width: 12)
             }
-            .disabled(model.zoom.smaller == nil)
+            .disabled(Zoom.step(from: model.zoom, by: -1) == nil)
             .help(Text("Zoom Out (⌘−)"))
             .accessibilityLabel(Text("Zoom Out"))
-            .accessibilityValue(model.zoom.word)
+            .accessibilityValue(Text(verbatim: "\(Zoom.percent(model.zoom))%"))
             Button {
                 model.zoomIn()
             } label: {
                 Image(systemName: "plus").frame(width: 12)
             }
-            .disabled(model.zoom.bigger == nil)
+            .disabled(Zoom.step(from: model.zoom, by: 1) == nil)
             .help(Text("Zoom In (⌘+)"))
             .accessibilityLabel(Text("Zoom In"))
-            .accessibilityValue(model.zoom.word)
+            .accessibilityValue(Text(verbatim: "\(Zoom.percent(model.zoom))%"))
         }
         .controlSize(.large)
-    }
-}
-
-extension Zoom {
-    var word: Text {
-        switch self {
-        case .small: return Text("Small")
-        case .normal: return Text("Normal")
-        case .large: return Text("Large")
-        }
     }
 }
 
@@ -577,9 +570,9 @@ struct SidePanelView: View {
 
     /// Beside the room only while the islands stay where they are (the same columns and meeting room with the
     /// panel's width taken off); otherwise the panel floats over the room's right side.
-    static func fitsBeside(width: CGFloat, zoom: Zoom) -> Bool {
-        let whole = RoomLayout(points: width, slots: 0, zoom: zoom)
-        let narrower = RoomLayout(points: width - Self.width - 1, slots: 0, zoom: zoom)
+    static func fitsBeside(width: CGFloat) -> Bool {
+        let whole = RoomLayout(points: width, slots: 0)
+        let narrower = RoomLayout(points: width - Self.width - 1, slots: 0)
         return whole.columns == narrower.columns && (whole.pillar == nil) == (narrower.pillar == nil)
     }
 
