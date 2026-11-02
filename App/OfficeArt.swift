@@ -282,6 +282,8 @@ struct OfficeScene {
     var meetingDoorOpen = false
     /// Who sits at the meeting table.
     var room: [RoomPerson] = []
+    /// A meeting has the room: its TV is on, and at night its ceiling lights.
+    var meetingLit = false
     /// Who wears headphones (ids as `id(_:)` gives them). Only screenshots set it for now.
     var headphones: Set<String> = []
     /// Where two people talk: the top-left corner of each speaking mark.
@@ -428,6 +430,8 @@ struct OfficeRenderer {
         var screens: [(x: Int, y: Int)] = []
         /// Lamps drawn again, lit, over the night shade: sheet cell, place, mirrored.
         var litLamps: [(sx: Int, x: Int, y: Int, mirrored: Bool)] = []
+        /// The meeting room's slide, drawn again over the night shade while a meeting is on.
+        var litSlide: (x: Int, y: Int)?
         /// Bitmap pixels per MetroCity pixel, and art pixels per bitmap pixel.
         static let personScale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
         static let bitmapPixel = 1 / CGFloat(OfficeRenderer.density)
@@ -519,7 +523,7 @@ struct OfficeRenderer {
             let width = scene.layout.width
             let height = self.height
             let plan = OfficeRenderer.wallPlan(scene.layout)
-            let key = "room \(width)x\(height) open:\(scene.doorOpen)"
+            let key = "room \(width)x\(height) open:\(scene.doorOpen) lit:\(scene.meetingLit)"
             let room = art.picture(key) { [art] in
                 OfficeRenderer.picture(width: width, height: height, density: OfficeRenderer.density, art: art) {
                     room in
@@ -527,7 +531,7 @@ struct OfficeRenderer {
                     room.wall(width: width, plan: plan)
                     room.door(open: scene.doorOpen)
                     if let meeting = scene.layout.meetingRoom {
-                        room.meetingRoomBack(meeting)
+                        room.meetingRoomBack(meeting, lit: scene.meetingLit)
                         room.lounge(meeting.left)
                     }
                 }
@@ -595,14 +599,14 @@ struct OfficeRenderer {
 
         // MARK: the right-hand column
 
-        /// The back of the meeting room, drawn once with the room: the TV showing no signal, a poster, the rug and
-        /// the chairs behind the table.
-        private func meetingRoomBack(_ room: MeetingRoom) {
+        /// The back of the meeting room, drawn once with the room: the TV (showing no signal unless a meeting is on),
+        /// a poster, the rug and the chairs behind the table.
+        private func meetingRoomBack(_ room: MeetingRoom, lit: Bool) {
             let x0 = room.left
             let t = MeetingRoom.table
             let middle = x0 + t.x + t.width / 2
             sprite(Sheet.tv, 224, 0, 96, 64, middle - 47, 17)
-            sprite(Sheet.noSignal, 224, 0, 96, 64, middle - 47, 17)
+            if lit { slide(middle - 29, 35) } else { sprite(Sheet.noSignal, 224, 0, 96, 64, middle - 47, 17) }
             sprite(Sheet.posters, 128, 64, 32, 32, x0 + 158, 27)
             stretch(Sheet.rug, (192, 96, 96, 96), edges: (32, 32, 32, 32), middle - 72, t.y - 20, 144, 80)
             for seat in room.seats.prefix(3) { sprite(Sheet.chair, 0, 40, 32, 48, seat.x - 16, t.y - 17) }
@@ -614,6 +618,14 @@ struct OfficeRenderer {
         private mutating func meetingRoomFront(_ room: MeetingRoom, _ scene: OfficeScene, walkers: [Walker]) {
             let t = MeetingRoom.table
             let nod = scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
+            if scene.meetingLit {
+                // At night: the TV's glow and two pools of light over the table, like the desks' lamps.
+                let middle = room.left + t.x + t.width / 2
+                litSlide = (middle - 29, 35)
+                screens.append((middle, 45))
+                pools.append((middle - 28, t.y + 8))
+                pools.append((middle + 28, t.y + 8))
+            }
             for person in scene.room where person.seat < 3 {
                 let x = CGFloat(room.seats[person.seat].x - 24)
                 let y = CGFloat(t.y - 28) + (person.state == .resting ? nod : 0)
@@ -1043,6 +1055,21 @@ struct OfficeRenderer {
             }
         }
 
+        /// A slide on the meeting room's TV while a meeting has the room (the pack's TV is either off or shows no
+        /// signal): a title and a small bar chart.
+        private func slide(_ x: Int, _ y: Int) {
+            fill(x, y, 60, 32, 0xF2F4F7)
+            fill(x + 5, y + 4, 24, 3, 0x2B3A55)
+            fill(x + 5, y + 9, 16, 1, 0x8E95A0)
+            for (i, height) in [8, 13, 10, 17].enumerated() {
+                fill(x + 30 + i * 7, y + 27 - height, 5, height, i == 3 ? 0xD04A3A : 0x3D6FD1)
+            }
+            fill(x + 5, y + 14, 20, 1, 0xB8BEC8)
+            fill(x + 5, y + 18, 18, 1, 0xB8BEC8)
+            fill(x + 5, y + 22, 21, 1, 0xB8BEC8)
+            fill(x + 28, y + 27, 29, 1, 0x3A3F47)
+        }
+
         private func whiteboard(_ x: Int, _ y: Int) {
             let w = 56
             let h = 32
@@ -1197,6 +1224,7 @@ struct OfficeRenderer {
             context.setBlendMode(.normal)
             context.setAlpha(d)
             for lamp in litLamps { sprite(Sheet.lamp, lamp.sx, 32, 32, 32, lamp.x, lamp.y, mirrored: lamp.mirrored) }
+            if let litSlide { slide(litSlide.x, litSlide.y) }
             context.setAlpha(1)
         }
 

@@ -422,6 +422,7 @@ final class Stage: ObservableObject {
         scene.out = moment.out
         scene.talks = moment.talks
         scene.room = moment.room.sorted { $0.seat < $1.seat }
+        scene.meetingLit = layout.meetingRoom != nil && office?.meeting != nil
         scene.meetingDoorOpen = moment.meetingDoorOpen && !reduceMotion
         return (scene, moment.walkers)
     }
@@ -445,7 +446,8 @@ final class Stage: ObservableObject {
         let roomKey =
             "\(frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
             + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(height) \(layout.width) \(generation) "
-            + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen)"
+            + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
+            + "\(scene.meetingLit)"
         if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
         scene.walkers += walking
         let bounds = CGRect(x: 0, y: 0, width: layout.width, height: height)
