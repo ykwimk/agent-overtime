@@ -41,6 +41,22 @@ final class AppModel: ObservableObject {
     private struct Stored: Codable {
         var start: StartCommand?
         var desks: [String] = []
+        /// Names given in the side panel. Only here: never on the socket, in a log or in a notification.
+        var nicknames: Nicknames?
+
+        init(start: StartCommand? = nil, desks: [String] = [], nicknames: Nicknames? = nil) {
+            self.start = start
+            self.desks = desks
+            self.nicknames = nicknames
+        }
+
+        /// A nicknames entry the app can't read loses only the nicknames, not the start command and folders.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            start = try container.decodeIfPresent(StartCommand.self, forKey: .start)
+            desks = try container.decodeIfPresent([String].self, forKey: .desks) ?? []
+            nicknames = try? container.decodeIfPresent(Nicknames.self, forKey: .nicknames)
+        }
     }
 
     /// The model the running app uses (the screenshot tests read it).
@@ -96,7 +112,7 @@ final class AppModel: ObservableObject {
         try? EventServer.prepareFolder(supportFolder)
         let stored =
             (try? Data(contentsOf: configURL)).flatMap { try? JSONDecoder().decode(Stored.self, from: $0) } ?? Stored()
-        office = OfficeState(folders: stored.desks)
+        office = OfficeState(folders: stored.desks, nicknames: stored.nicknames ?? Nicknames())
         start = stored.start
     }
 
@@ -211,6 +227,11 @@ final class AppModel: ObservableObject {
         save()
     }
 
+    func forgetNicknames() {
+        office.forgetNicknames()
+        save()
+    }
+
     // MARK: start work
 
     /// The 출근 button. Runs the saved command only if the user approved exactly this folder and these arguments.
@@ -272,10 +293,10 @@ final class AppModel: ObservableObject {
             userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
     }
 
-    // MARK: storage (folder 0700, file 0600; only desks and the start command)
+    // MARK: storage (folder 0700, file 0600; only desks, the start command and nicknames)
 
     private func save() {
-        let stored = Stored(start: start, desks: office.folders)
+        let stored = Stored(start: start, desks: office.folders, nicknames: office.nicknames)
         guard let data = try? JSONEncoder.pretty.encode(stored) else { return }
         do {
             try data.write(to: configURL, options: .atomic)

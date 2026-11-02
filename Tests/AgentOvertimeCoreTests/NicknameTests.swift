@@ -63,6 +63,28 @@ final class NicknameTests: XCTestCase {
         XCTAssertEqual(office.nicknames, Nicknames())
     }
 
+    /// config.json can be edited by hand: reading it back checks each nickname as if typed and drops only the bad
+    /// ones; past 64 of a kind the rest are dropped too, and no new one is taken.
+    func testReadingBackDropsOnlyTheBadNicknames() throws {
+        let json = """
+            {"folders": {"/w/shop": "shop", "/w/long": "\(String(repeating: "a", count: 33))", "/w/hidden": "a\\u200Bb",
+                         "relative/path": "x", "/w/number": 5, "/w/spaces": " x "},
+             "agents": {"Explore": "Scout", "": "Runner", "Plan\\u202E": "y", "code-reviewer": null}}
+            """
+        let read = try JSONDecoder().decode(Nicknames.self, from: Data(json.utf8))
+        XCTAssertEqual(read.folders, ["/w/shop": "shop"])
+        XCTAssertEqual(read.agents, ["Explore": "Scout", "": "Runner"])
+        XCTAssertEqual(try JSONDecoder().decode(Nicknames.self, from: JSONEncoder().encode(read)), read)
+        XCTAssertEqual(try JSONDecoder().decode(Nicknames.self, from: Data(#"{"folders": [1, 2]}"#.utf8)), Nicknames())
+
+        let many = (0..<100).map { "\"/w/p\($0)\": \"n\($0)\"" }.joined(separator: ",")
+        var office = OfficeState(
+            nicknames: try JSONDecoder().decode(Nicknames.self, from: Data("{\"folders\": {\(many)}}".utf8)))
+        XCTAssertEqual(office.nicknames.folders.count, Nicknames.maxCount)
+        XCTAssertFalse(office.rename(folder: "/w/new", to: "new"), "full")
+        XCTAssertTrue(office.rename(folder: office.nicknames.folders.keys.first!, to: "renamed"), "a known one still")
+    }
+
     /// At most 32 characters (an emoji is one), hidden characters dropped, spaces trimmed; an empty name clears.
     func testNicknamesAreCleanedAndShort() {
         XCTAssertEqual(Nicknames.cleaned(" a\u{200B}b\u{202E}c "), "abc")

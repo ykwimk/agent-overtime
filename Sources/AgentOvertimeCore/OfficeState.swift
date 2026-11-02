@@ -147,8 +147,11 @@ public enum Seat: Equatable {
 
 /// Names given on this Mac: a session's by its folder path, a teammate's by its name (agent_type; "" for the
 /// default helper). The office shows them in place of the folder's or the teammate's own name.
-public struct Nicknames: Equatable {
+public struct Nicknames: Equatable, Codable {
     public static let maxLength = 32
+    /// Of each kind. As many as the office counts sessions or teammates at once, far more than anyone names by
+    /// hand; a config.json edited outside the app can't make it carry thousands.
+    public static let maxCount = 64
     public internal(set) var folders: [String: String] = [:]
     public internal(set) var agents: [String: String] = [:]
 
@@ -159,6 +162,42 @@ public struct Nicknames: Equatable {
     public static func cleaned(_ text: String) -> String? {
         guard let clean = Sanitize.clean(text, max: Limits.line) else { return nil }
         return clean.count <= maxLength ? clean : nil
+    }
+
+    private enum CodingKeys: String, CodingKey { case folders, agents }
+
+    /// One entry as text, or nothing when it is anything else.
+    private struct Entry: Decodable {
+        let text: String?
+        init(from decoder: Decoder) throws { text = try? decoder.singleValueContainer().decode(String.self) }
+    }
+
+    /// Read back from config.json, which can be edited outside the app: each entry is checked again as if it were
+    /// typed, and one that would not have passed is dropped on its own (too long, hidden characters, not text, a
+    /// key that is not a folder path or a name), as is anything past `maxCount`.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let folders = (try? container.decodeIfPresent([String: Entry].self, forKey: .folders)) ?? nil
+        let agents = (try? container.decodeIfPresent([String: Entry].self, forKey: .agents)) ?? nil
+        for (folder, entry) in (folders ?? [:]).sorted(by: { $0.key < $1.key }) where self.folders.count < Self.maxCount
+        {
+            guard let name = entry.text, Self.cleaned(name) == name, folder.hasPrefix("/"),
+                Sanitize.clean(folder, max: Limits.cwd) == folder
+            else { continue }
+            self.folders[folder] = name
+        }
+        for (agent, entry) in (agents ?? [:]).sorted(by: { $0.key < $1.key }) where self.agents.count < Self.maxCount {
+            guard let name = entry.text, Self.cleaned(name) == name,
+                agent.isEmpty || Sanitize.clean(agent, max: Limits.agentType) == agent
+            else { continue }
+            self.agents[agent] = name
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(folders, forKey: .folders)
+        try container.encode(agents, forKey: .agents)
     }
 }
 
@@ -213,11 +252,12 @@ public struct OfficeState: Equatable {
     }
 
     /// Gives a folder's sessions a nickname, or takes it away (nil, or nothing visible typed). False when it is
-    /// longer than `Nicknames.maxLength`.
+    /// longer than `Nicknames.maxLength`, or a new one past `Nicknames.maxCount`.
     @discardableResult
     public mutating func rename(folder: String, to text: String?) -> Bool {
         let name = text.flatMap { Sanitize.clean($0, max: Limits.line) }
         if let name, Nicknames.cleaned(name) == nil { return false }
+        if name != nil, nicknames.folders[folder] == nil, nicknames.folders.count >= Nicknames.maxCount { return false }
         nicknames.folders[folder] = name
         relabelSessions { $0 == folder }
         return true
@@ -228,6 +268,9 @@ public struct OfficeState: Equatable {
     public mutating func rename(agent: String?, to text: String?) -> Bool {
         let name = text.flatMap { Sanitize.clean($0, max: Limits.line) }
         if let name, Nicknames.cleaned(name) == nil { return false }
+        if name != nil, nicknames.agents[agent ?? ""] == nil, nicknames.agents.count >= Nicknames.maxCount {
+            return false
+        }
         nicknames.agents[agent ?? ""] = name
         relabelTeammates { $0.name == agent }
         return true
