@@ -690,17 +690,25 @@ struct OfficeRoom: View {
                             else { return }
                             panel.open(PanelSelection(seat, at: .seat(slot: at.slot, index: at.index)))
                         }
-                        // While a zoom goes on, the name tags stay laid out at the step it started from and are
-                        // stretched; they are laid out again once it settles.
-                        NameTags(
-                            pods: synced.pods, layout: synced.layout, meeting: model.office.meeting, scale: tagScale,
-                            fixedNow: fixedNow, panel: panel, focus: focus
-                        )
-                        .equatable()
-                        .scaleEffect(scale / tagScale, anchor: .topLeading)
-                        marks(slots, synced.layout, scale: scale)
+                        // While a zoom moves, the name tags step aside (drawing them stretched each frame cost
+                        // most of a core); once it settles they are laid out at the new step and fade back in.
+                        // During a pinch or ⌘-scroll the name tags step aside: laying them out or stretching them
+                        // each frame took most of a core. They fade back in at the step it settles on. A step from
+                        // the menu or the buttons keeps them (and keyboard focus), stretched for its short glide.
+                        if !zoom.gesturing {
+                            NameTags(
+                                pods: synced.pods, layout: synced.layout, meeting: model.office.meeting,
+                                scale: tagScale, fixedNow: fixedNow, panel: panel, focus: focus
+                            )
+                            .equatable()
+                            .scaleEffect(scale / tagScale, anchor: .topLeading)
+                            .transition(.opacity)
+                        }
+                        // Only the "more teams" line scrolls to these, never during a pinch.
+                        if !zoom.gesturing { marks(slots, synced.layout, scale: scale) }
                     }
                     .frame(width: size.width, height: size.height, alignment: .topLeading)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.1), value: zoom.gesturing)
                     .background {
                         GeometryReader { content in
                             Color.clear.preference(
@@ -712,7 +720,10 @@ struct OfficeRoom: View {
                         minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
                 }
                 .coordinateSpace(name: Self.space)
-                .onPreferenceChange(ScrollTop.self) { scrollTop = $0 }
+                // During a pinch the count waits for it to settle: one update a frame instead of two.
+                .onPreferenceChange(ScrollTop.self) { top in
+                    if !zoom.gesturing { scrollTop = top }
+                }
                 .overlay(alignment: .topTrailing) {
                     more(sight.above, below: false, synced.pods, proxy).padding(.trailing, covered)
                 }
@@ -856,6 +867,8 @@ final class OfficeZoom: ObservableObject {
     @Published private(set) var magnification: Double?
     /// The step the name tags are laid out at: the last one a zoom settled on.
     @Published private(set) var settled: Double?
+    /// A pinch or ⌘-scroll is going on, or settling.
+    @Published private(set) var gesturing = false
     var reduceMotion = false
     private var settle: ((Double) -> Void)?
     private weak var scrollView: NSScrollView?
@@ -937,7 +950,7 @@ final class OfficeZoom: ObservableObject {
 
     /// A pinch, or a scroll with ⌘ held, over the room (not over the side panel floating on it).
     private func handle(_ event: NSEvent) -> NSEvent? {
-        guard let scrollView, let window = scrollView.window, event.window === window, let shown = magnification,
+        guard let scrollView, let window = scrollView.window, event.window === window, magnification != nil,
             let hit = window.contentView?.hitTest(event.locationInWindow), hit.isDescendant(of: scrollView)
         else { return event }
         let factor: Double
@@ -954,18 +967,27 @@ final class OfficeZoom: ObservableObject {
         default:
             return event
         }
-        glide?.invalidate()
         let clip = scrollView.contentView
         let at = clip.convert(event.locationInWindow, from: nil)
-        let point = CGPoint(
-            x: at.x - clip.bounds.minX, y: clip.isFlipped ? at.y - clip.bounds.minY : clip.bounds.maxY - at.y)
+        pinch(
+            by: factor,
+            at: CGPoint(
+                x: at.x - clip.bounds.minX, y: clip.isFlipped ? at.y - clip.bounds.minY : clip.bounds.maxY - at.y))
+        return nil
+    }
+
+    /// One move of a pinch or ⌘-scroll at `point` (in the view, from its top left); a short pause after the last
+    /// settles it on a step.
+    func pinch(by factor: Double, at point: CGPoint) {
+        guard let shown = magnification else { return }
+        glide?.invalidate()
+        if !gesturing { gesturing = true }
         pointer = point
         zoom(to: shown * factor, at: point)
         pause?.invalidate()
         let timer = Timer(timeInterval: 0.15, repeats: false) { [weak self] _ in self?.settleOnAStep() }
         RunLoop.main.add(timer, forMode: .common)
         pause = timer
-        return nil
     }
 
     private func settleOnAStep() {
@@ -973,6 +995,7 @@ final class OfficeZoom: ObservableObject {
         let step = Zoom.nearest(shown)
         glide(to: step, at: pointer ?? middle()) { [weak self] in
             self?.settled = step
+            self?.gesturing = false
             self?.settle?(step)
         }
     }

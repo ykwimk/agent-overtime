@@ -1332,9 +1332,11 @@ final class CaptureTests: XCTestCase {
         let zoom = OfficeZoom()
         (model, window) = office(at: 1, zoom: zoom)
         let began = Date()
+        var last = 1.0
         let pinch = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in
-            let t = Date().timeIntervalSince(began)
-            zoom.zoom(to: 1 + 0.4 * sin(t * 2), at: CGPoint(x: 400, y: 300))
+            let next = 1 + 0.4 * sin(Date().timeIntervalSince(began) * 2)
+            zoom.pinch(by: next / last, at: CGPoint(x: 400, y: 300))
+            last = next
         }
         RunLoop.main.add(pinch, forMode: .common)
         let pinching = percent(over: 5) - idle
