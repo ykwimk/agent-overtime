@@ -643,6 +643,10 @@ struct SidePanelView: View {
             }
         }
         role.foregroundStyle(.secondary)
+        if state == .quiet {
+            Text("This session started before the app. Its exact state shows from its next news.")
+                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
         VStack(alignment: .leading, spacing: 4) {
             if let doing = SidePanel.doing(kind, in: office) {
                 if let started = SidePanel.doingSince(kind, in: office) {
@@ -662,7 +666,12 @@ struct SidePanelView: View {
     private func teammates(_ session: Session, in office: OfficeState) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Teammates").font(.headline)
-            if session.teammates.isEmpty { Text("No teammates").foregroundStyle(.secondary) }
+            // Found on this Mac before any news: its teammates aren't known until then.
+            if !session.heard {
+                Text("Shown with its next news").foregroundStyle(.secondary)
+            } else if session.teammates.isEmpty {
+                Text("No teammates").foregroundStyle(.secondary)
+            }
             ForEach(SidePanel.tree(session), id: \.mate.id) { mate, depth in
                 Button {
                     panel.open(PanelSelection(teammate: mate, in: office))

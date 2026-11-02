@@ -196,6 +196,24 @@ final class PanelTests: XCTestCase {
         for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
     }
 
+    /// A session found on this Mac before any news: "Quiet" with no time, VoiceOver hears the same, and nothing
+    /// is saved until its first news, which remembers its folder.
+    func testAQuietSessionIsNotSavedUntilItsNews() throws {
+        let place = folder()
+        let model = model(in: place)
+        model.receive(found: [OfficeState.Found(pid: 4242, started: t0, folder: project, busy: false)], at: t0)
+        let id = try XCTUnwrap(model.office.desks.first?.sessions.first?.id)
+        XCTAssertEqual(
+            SidePanel.spoken(.session(id), in: model.office, now: t0 + 600), "my-project, " + WorkState.quiet.spoken)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: place + "/config.json"), "nothing saved")
+
+        model.receive(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: project, pid: 4242), at: t0 + 700)
+        XCTAssertEqual(model.office.session(id)?.state, .working, "the same person, at work")
+        XCTAssertEqual(model.office.liveSessionCount, 1)
+        let saved = try String(contentsOfFile: place + "/config.json", encoding: .utf8)
+        XCTAssertTrue(saved.contains(project), saved)
+    }
+
     /// No seconds on the panel: under a minute is "just", then minutes, then hours.
     func testTimeWordsHaveNoSeconds() {
         let cases: [(TimeInterval, TimeSpan)] = [

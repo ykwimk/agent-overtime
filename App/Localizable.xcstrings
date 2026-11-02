@@ -80,6 +80,8 @@
     "Resting %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "쉼 %lld" } } } },
     "Quiet" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "조용함" } } } },
     "Quiet %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "조용함 %lld" } } } },
+    "This session started before the app. Its exact state shows from its next news." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "앱보다 먼저 켜진 세션이에요. 다음 소식부터 정확한 상태가 보여요" } } } },
+    "Shown with its next news" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "다음 소식 때 보여요" } } } },
     "Connect to see waits and teammates too" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결하면 답 기다림·팀원도 보여요" } } } },
     "Runs your start command in a new Terminal window (⇧⌘R)" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "등록한 출근 명령을 새 터미널 창에서 실행합니다 (⇧⌘R)" } } } },
     "See what it adds" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "넣을 내용 보기" } } } },
