@@ -294,6 +294,97 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: now, panel: try panel(mixed, slot: 0, index: 0)).environmentObject(mixed))
     }
 
+    /// Show Details in the side panel: the file being edited, the edits, the latest steps and the model; a task
+    /// list; teammates done; a teammate's long command; the same with Show Details off; the smallest window with a
+    /// long path. Events go through the helper's own reading, from the hook input Claude Code gives.
+    func testCaptureDetails() throws {
+        let now = today(14)
+        let project = FakeScenario.root + "/my-project"
+        func hook(_ model: AppModel, _ fields: [String: Any], at seconds: TimeInterval) throws {
+            var all = fields
+            all["session_id"] = all["session_id"] ?? "d1"
+            all["cwd"] = project
+            let data = try JSONSerialization.data(withJSONObject: all)
+            model.receive(try XCTUnwrap(HookEvent.fromHookInput(data, pid: nil, details: true)), at: now + seconds)
+        }
+        func tool(_ model: AppModel, _ name: String, _ input: [String: Any], agent: String? = nil, at: TimeInterval)
+            throws
+        {
+            var fields: [String: Any] = ["hook_event_name": "PreToolUse", "tool_name": name, "tool_input": input]
+            fields["agent_id"] = agent
+            try hook(model, fields, at: at)
+        }
+        func working(_ details: Bool = true) throws -> AppModel {
+            let model = makeModel(connected: true)
+            model.showsDetails = details
+            try hook(model, ["hook_event_name": "SessionStart", "model": "claude-opus-4-7"], at: -900)
+            try hook(model, ["hook_event_name": "UserPromptSubmit"], at: -600)
+            try tool(model, "Read", ["file_path": project + "/src/app.css"], at: -500)
+            try tool(model, "Grep", ["pattern": "button"], at: -400)
+            try tool(
+                model, "Edit", ["file_path": project + "/notes.md", "old_string": "a\nb", "new_string": "c\nd"],
+                at: -240)
+            try tool(model, "Write", ["file_path": project + "/src/ui/button.css", "content": "1\n2\n3\n"], at: -120)
+            try tool(
+                model, "Edit",
+                ["file_path": project + "/src/ui/button.css", "old_string": "x", "new_string": "y\nz\nw"], at: -10)
+            return model
+        }
+
+        let detail = try working()
+        try capture(
+            "panel-detail", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(detail, slot: 0, index: 0)).environmentObject(detail))
+        let off = try working(false)
+        XCTAssertNil(off.office.detail(session: "d1")?.model)
+        try capture(
+            "panel-detail-off", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(off, slot: 0, index: 0)).environmentObject(off))
+
+        let tasks = try working()
+        try tool(
+            tasks, "TodoWrite",
+            [
+                "todos": [
+                    ["content": "Pick the button colours", "status": "completed"],
+                    ["content": "Match the header", "status": "completed"],
+                    ["content": "Match the button colours", "status": "in_progress"],
+                ]
+            ], at: -5)
+        try tool(
+            tasks, "Edit", ["file_path": project + "/src/ui/button.css", "old_string": "x", "new_string": "y"],
+            at: -2)
+        XCTAssertEqual(tasks.office.detail(session: "d1")?.tasks.total, 3)
+        try capture(
+            "panel-detail-tasks", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(tasks, slot: 0, index: 0)).environmentObject(tasks))
+
+        let team = try working()
+        for (id, type) in [("t1", "Explore"), ("t2", "Plan"), ("t3", "code-reviewer")] {
+            try hook(
+                team, ["hook_event_name": "SubagentStart", "agent_id": id, "agent_type": type], at: -300)
+        }
+        for id in ["t1", "t2"] { try hook(team, ["hook_event_name": "SubagentStop", "agent_id": id], at: -60) }
+        XCTAssertEqual(team.office.detail(session: "d1").map { [$0.teamCalled, $0.teamDone] }, [3, 2])
+        try capture(
+            "panel-detail-team", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(team, slot: 0, index: 0)).environmentObject(team))
+
+        // code-reviewer runs one long command: "Running a command · 4 min".
+        try tool(team, "Read", ["file_path": project + "/src/app.ts"], agent: "t3", at: -280)
+        try tool(team, "Bash", ["command": "swift test"], agent: "t3", at: -240)
+        try capture(
+            "panel-detail-teammate", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(team, slot: 0, index: 3)).environmentObject(team))
+
+        let small = try working()
+        let deep = project + "/packages/web-app/src/components/navigation/very-long-component-name-for-the-header.tsx"
+        try tool(small, "Edit", ["file_path": deep, "old_string": "a", "new_string": "b"], at: -1)
+        try capture(
+            "panel-detail-small", size: OfficeView.minSize,
+            OfficeView(fixedNow: now, panel: try panel(small, slot: 0, index: 0)).environmentObject(small))
+    }
+
     /// my-project hands work to `teammates` teammates and waits for them; web-app works on with a helper, blog
     /// rests. The meeting starts once `advanceMeetings` passes 10 s after the teammates came (`now` - 200).
     private func meetingOffice(at now: Date, teammates: Int = 3) -> AppModel {
