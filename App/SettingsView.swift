@@ -102,9 +102,11 @@ struct SettingsView: View {
                 }
                 Button("Clear All Nicknames") { model.forgetNicknames() }
                     .disabled(count == 0)
-                Text("Names you gave sessions and teammates with ✏️ in the side panel. Kept only on this Mac.")
-                    .fixedSize(horizontal: false, vertical: true)
-                    .font(.callout).foregroundStyle(.secondary)
+                Text(
+                    "Names you gave sessions and teammates with the pencil button next to the name in the side panel. Kept only on this Mac."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
             } header: {
                 Text("Nicknames")
             }

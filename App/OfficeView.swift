@@ -515,7 +515,7 @@ struct SidePanelView: View {
         Text("Went home").foregroundStyle(.secondary)
     }
 
-    /// The name with ✏️ to give a nickname (the automatic name small under it, when there is one), or the field
+    /// The name with a pencil button to give a nickname (the automatic name small under it, when there is one), or the field
     /// to type it in; × to close.
     private func header(_ name: Text, auto: Text? = nil, faded: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
