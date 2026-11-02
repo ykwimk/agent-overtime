@@ -255,6 +255,177 @@ final class HookEventTests: XCTestCase {
         XCTAssertEqual(seen.a, "e1")
     }
 
+    private func details(_ tool: String, _ toolInput: [String: Any], on: Bool = true) throws -> HookEvent {
+        let fields: [String: Any] = [
+            "hook_event_name": "PreToolUse", "session_id": "s", "cwd": "/Users/me/my-project", "tool_name": tool,
+            "tool_input": toolInput,
+        ]
+        return try XCTUnwrap(HookEvent.fromHookInput(input(fields), pid: nil, details: on))
+    }
+
+    private func wire(_ event: HookEvent) -> String { String(decoding: event.wireLine(), as: UTF8.self) }
+
+    /// Each tool opens only its own fields; text becomes line counts, other fields and other items stay closed.
+    func testDetailsOpenOnlyTheirFields() throws {
+        let read = try details("Read", ["file_path": "/Users/me/my-project/src/app.ts", "offset": 10])
+        XCTAssertEqual(read.file, "src/app.ts")
+        XCTAssertNil(read.linesAdded)
+
+        let write = try details(
+            "Write", ["file_path": "/Users/me/my-project/notes.md", "content": "the launch codes\nline two\n"])
+        XCTAssertEqual(write.file, "notes.md")
+        XCTAssertEqual(write.linesAdded, 2)
+        XCTAssertEqual(write.linesRemoved, 0)
+
+        let edit = try details(
+            "Edit",
+            [
+                "file_path": "/Users/me/my-project/src/ui/button.css", "old_string": "a\nthe old secret\nc",
+                "new_string": "a\nthe new secret\nmore\nc", "replace_all": true,
+            ])
+        XCTAssertEqual(edit.file, "…/ui/button.css")
+        XCTAssertEqual(edit.linesAdded, 2)
+        XCTAssertEqual(edit.linesRemoved, 1)
+
+        let multi = try details(
+            "MultiEdit",
+            [
+                "file_path": "/Users/me/my-project/a.swift",
+                "edits": [["old_string": "x", "new_string": "y\nz"], ["old_string": 4, "new_string": "w"]],
+            ])
+        XCTAssertEqual(multi.linesAdded, 2, "only the edit with text fields counts")
+
+        let notebook = try details(
+            "NotebookEdit", ["notebook_path": "/Users/me/my-project/n.ipynb", "new_source": "the secret cell"])
+        XCTAssertEqual(notebook.file, "n.ipynb")
+        XCTAssertNil(notebook.linesAdded, "new_source is not opened")
+
+        let todo = try details(
+            "TodoWrite",
+            [
+                "todos": [
+                    ["content": "Match the button colours", "status": "completed", "activeForm": "Matching"],
+                    ["content": "Fix the header", "status": "in_progress", "activeForm": "Fixing the header"],
+                    ["content": "a private plan", "status": "pending", "activeForm": "Planning privately"],
+                ]
+            ])
+        XCTAssertEqual(todo.taskAction, .todo)
+        XCTAssertEqual(todo.todoTotal, 3)
+        XCTAssertEqual(todo.todoDone, 1)
+        XCTAssertEqual(todo.taskTitle, "Fix the header")
+
+        let create = try details(
+            "TaskCreate", ["subject": "Write tests", "description": "the secret details", "metadata": ["k": "v"]])
+        XCTAssertEqual(create.taskAction, .create)
+        XCTAssertEqual(create.taskTitle, "Write tests")
+        let update = try details(
+            "TaskUpdate",
+            ["taskId": "3", "status": "in_progress", "owner": "secret-owner", "description": "the secret details"])
+        XCTAssertEqual(update.taskID, "3")
+        XCTAssertEqual(update.taskStatus, .inProgress)
+        XCTAssertNil(update.taskTitle)
+
+        // A command, a search or a fetch that has a path in it is never opened.
+        let bash = try details("Bash", ["command": "cat /Users/me/secret", "file_path": "/Users/me/secret"])
+        XCTAssertNil(bash.file)
+        let session = try XCTUnwrap(
+            HookEvent.fromHookInput(
+                input([
+                    "hook_event_name": "SessionStart", "session_id": "s", "cwd": "/x", "model": "claude-opus-4-7",
+                    "pricing": ["input": 5], "source": "startup",
+                ]), pid: nil, details: true))
+        XCTAssertEqual(session.model, "claude-opus-4-7")
+
+        for event in [read, write, edit, multi, notebook, todo, create, update, bash, session] {
+            let line = wire(event)
+            for leaked in [
+                "launch", "secret", "private", "Planning", "Matching", "colours", "metadata", "offset", "pricing",
+                "startup", "replace",
+            ] {
+                XCTAssertFalse(line.contains(leaked), "\(leaked) crossed the socket: \(line)")
+            }
+            XCTAssertFalse(event.file?.contains("/Users") ?? false, "never the full path")
+        }
+    }
+
+    /// With Show Details off nothing of it is opened: v0.3's line.
+    func testDetailsOffOpensNothing() throws {
+        let edit = try details(
+            "Edit", ["file_path": "/Users/me/my-project/a.swift", "old_string": "a", "new_string": "b"], on: false)
+        XCTAssertEqual(edit, HookEvent(kind: .preToolUse, session: "s", cwd: "/Users/me/my-project", toolKind: .edit))
+        let todo = try details("TodoWrite", ["todos": [["content": "x", "status": "in_progress"]]], on: false)
+        XCTAssertNil(todo.taskAction)
+        XCTAssertNil(todo.taskTitle)
+    }
+
+    /// Near the 8 MiB input limit the helper's work stays well inside 0.5 s, and no text crosses.
+    func testAHugeWriteIsCountedQuicklyAndNeverSent() throws {
+        let content = String(repeating: "secret line of code\n", count: 380_000)  // 7.6 MB
+        let data = input([
+            "hook_event_name": "PreToolUse", "session_id": "s", "cwd": "/Users/me/my-project", "tool_name": "Write",
+            "tool_input": ["file_path": "/Users/me/my-project/big.txt", "content": content],
+        ])
+        XCTAssertLessThan(data.count, Limits.hookInput)
+        let started = Date()
+        let event = try XCTUnwrap(HookEvent.fromHookInput(data, pid: nil, details: true))
+        let line = event.wireLine()
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.5)
+        XCTAssertEqual(event.linesAdded, 380_000)
+        XCTAssertFalse(String(decoding: line, as: UTF8.self).contains("secret"))
+    }
+
+    /// One socket line at most: past it the details go in turn (title, model, file, line counts), the rest stays.
+    func testAnOverlongLineDropsTheDetailsInTurn() throws {
+        // A folder of 3801 bytes: with the file the line is too long, without it and the title it fits.
+        var event = HookEvent(
+            kind: .preToolUse, session: "s", cwd: "/" + String(repeating: "😀", count: 950), toolKind: .edit)
+        event.file = String(repeating: "파", count: 128)
+        event.linesAdded = 5
+        event.linesRemoved = 2
+        event.taskAction = .create
+        event.taskTitle = String(repeating: "제", count: 80)
+        let line = event.wireLine()
+        XCTAssertLessThanOrEqual(line.count, Limits.line)
+        let back = try XCTUnwrap(HookEvent.fromWire(line.dropLast()))
+        XCTAssertNil(back.taskTitle, "the title goes first")
+        XCTAssertNil(back.file, "then the file")
+        XCTAssertEqual(back.linesAdded, 5, "the counts stay while they fit")
+        XCTAssertEqual(back.cwd, event.cwd, "v0.3's fields are never touched")
+
+        event.taskTitle = "short"
+        event.file = "app.ts"
+        XCTAssertEqual(try XCTUnwrap(HookEvent.fromWire(event.wireLine().dropLast())).taskTitle, "short", "fits")
+    }
+
+    /// The app checks every detail again; one that fails is dropped on its own and the event is kept.
+    func testTheAppChecksEachDetailOnItsOwn() throws {
+        let long = String(repeating: "a", count: 300)
+        let line = Data(
+            #"{"e":"PreToolUse","s":"s","d":"/x","k":"edit","f":"ev‮il\#(long)","la":-1,"lr":3,"ta":"update","ti":"\#(long)","ts":"bogus","tt":"t","mo":"claude-x"}"#
+                .utf8)
+        let event = try XCTUnwrap(HookEvent.fromWire(line))
+        XCTAssertEqual(event.file?.count, Detail.file)
+        XCTAssertEqual(event.file?.hasPrefix("evil"), true)
+        XCTAssertNil(event.linesAdded, "out of range")
+        XCTAssertEqual(event.linesRemoved, 3)
+        XCTAssertNil(event.taskID, "too long: dropped whole")
+        XCTAssertNil(event.taskAction, "an update needs its id")
+        XCTAssertNil(event.taskTitle)
+        XCTAssertNil(event.model, "only on SessionStart")
+        XCTAssertEqual(event.toolKind, .edit)
+
+        let todo = try XCTUnwrap(
+            HookEvent.fromWire(Data(#"{"e":"PreToolUse","s":"s","d":"/x","ta":"todo","tn":3,"td":5}"#.utf8)))
+        XCTAssertNil(todo.todoDone, "more done than there are")
+        XCTAssertNil(todo.todoTotal)
+        let stop = try XCTUnwrap(
+            HookEvent.fromWire(Data(#"{"e":"Stop","s":"s","d":"/x","f":"a.ts","la":1,"ta":"todo","tn":1,"td":1}"#.utf8))
+        )
+        XCTAssertNil(stop.file, "details only on the events that have them")
+        XCTAssertNil(stop.linesAdded)
+        XCTAssertNil(stop.taskAction)
+    }
+
     func testWireRoundTripAndRecheck() throws {
         let event = HookEvent(
             kind: .subagentStart, session: "s", cwd: "/a/b", agentID: "x", agentType: "Plan", pid: 77)

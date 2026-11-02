@@ -69,6 +69,39 @@ public struct HookEvent: Codable, Equatable {
     /// The Claude Code process, so the app can tell when a session is gone without a SessionEnd.
     public var pid: Int32?
 
+    /// What a task tool did to the task list.
+    public enum TaskAction: String, Codable {
+        /// TodoWrite: the whole list again.
+        case todo
+        /// TaskCreate: one more task, its id not known yet.
+        case create
+        /// TaskUpdate: one task by its id.
+        case update
+    }
+
+    public enum TaskStatus: String, Codable {
+        case pending, completed, deleted
+        case inProgress = "in_progress"
+    }
+
+    // Details, only with Show Details on (see `fromHookInput`), each one that is wrong or too long dropped on its own.
+    /// The file a Read, Write, Edit or NotebookEdit works on, shortened in the helper (`Detail.shortPath`).
+    public var file: String?
+    /// Lines an edit adds and removes, counted in the helper; the text itself never leaves it.
+    public var linesAdded: Int?
+    public var linesRemoved: Int?
+    public var taskAction: TaskAction?
+    /// TodoWrite's whole list: how many tasks, and how many done.
+    public var todoTotal: Int?
+    public var todoDone: Int?
+    /// TaskUpdate's task.
+    public var taskID: String?
+    public var taskStatus: TaskStatus?
+    /// The task in progress (TodoWrite), the new one (TaskCreate) or the one changed (TaskUpdate).
+    public var taskTitle: String?
+    /// The session's model, from SessionStart.
+    public var model: String?
+
     enum CodingKeys: String, CodingKey {
         case kind = "e"
         case session = "s"
@@ -81,6 +114,16 @@ public struct HookEvent: Codable, Equatable {
         case sendsMessage = "m"
         case recipient = "r"
         case pid = "p"
+        case file = "f"
+        case linesAdded = "la"
+        case linesRemoved = "lr"
+        case taskAction = "ta"
+        case todoTotal = "tn"
+        case todoDone = "td"
+        case taskID = "ti"
+        case taskStatus = "ts"
+        case taskTitle = "tt"
+        case model = "mo"
     }
 
     public init(
@@ -116,12 +159,23 @@ public struct HookEvent: Codable, Equatable {
         sendsMessage = (try? c.decodeIfPresent(Bool.self, forKey: .sendsMessage)) ?? false
         recipient = try? c.decodeIfPresent(String.self, forKey: .recipient)
         pid = try c.decodeIfPresent(Int32.self, forKey: .pid)
+        file = (try? c.decodeIfPresent(String.self, forKey: .file)) ?? nil
+        linesAdded = (try? c.decodeIfPresent(Int.self, forKey: .linesAdded)) ?? nil
+        linesRemoved = (try? c.decodeIfPresent(Int.self, forKey: .linesRemoved)) ?? nil
+        taskAction = (try? c.decodeIfPresent(TaskAction.self, forKey: .taskAction)) ?? nil
+        todoTotal = (try? c.decodeIfPresent(Int.self, forKey: .todoTotal)) ?? nil
+        todoDone = (try? c.decodeIfPresent(Int.self, forKey: .todoDone)) ?? nil
+        taskID = (try? c.decodeIfPresent(String.self, forKey: .taskID)) ?? nil
+        taskStatus = (try? c.decodeIfPresent(TaskStatus.self, forKey: .taskStatus)) ?? nil
+        taskTitle = (try? c.decodeIfPresent(String.self, forKey: .taskTitle)) ?? nil
+        model = (try? c.decodeIfPresent(String.self, forKey: .model)) ?? nil
     }
 
     // MARK: helper side
 
-    /// Reads Claude Code's hook JSON and keeps only the allowlisted fields.
-    public static func fromHookInput(_ data: Data, pid: Int32?) -> HookEvent? {
+    /// Reads Claude Code's hook JSON and keeps only the allowlisted fields; with `details`, also the few fields
+    /// `readDetails` opens.
+    public static func fromHookInput(_ data: Data, pid: Int32?, details: Bool = false) -> HookEvent? {
         guard data.count <= Limits.hookInput,
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let name = object["hook_event_name"] as? String,
@@ -133,7 +187,7 @@ public struct HookEvent: Codable, Equatable {
         // SendMessage's input is opened, for its `to` alone.
         let tool = kind == .preToolUse ? object["tool_name"] : nil
         let sendsMessage = tool as? String == "SendMessage"
-        let event = HookEvent(
+        var event = HookEvent(
             kind: kind, session: session, cwd: cwd,
             agentID: object["agent_id"] as? String,
             agentType: object["agent_type"] as? String,
@@ -144,11 +198,82 @@ public struct HookEvent: Codable, Equatable {
             recipient: sendsMessage ? (object["tool_input"] as? [String: Any])?["to"] as? String : nil,
             pid: pid
         )
+        if details { event.readDetails(object) }
         return event.cleaned()
     }
 
+    /// The detail fields, each from the one or two input fields named here and nothing else of the input; a field
+    /// of another type is dropped. Edit texts and file contents only ever become line counts.
+    private mutating func readDetails(_ object: [String: Any]) {
+        if kind == .sessionStart { model = object["model"] as? String }
+        guard kind == .preToolUse, let input = object["tool_input"] as? [String: Any] else { return }
+        let folder = cwd
+        let path = { (key: String) in (input[key] as? String).flatMap { Detail.shortPath($0, in: folder) } }
+        switch object["tool_name"] as? String {
+        case "Read":
+            file = path("file_path")
+        case "Write":
+            file = path("file_path")
+            if let content = input["content"] as? String { (linesAdded, linesRemoved) = (Detail.lines(content), 0) }
+        case "Edit":
+            // replace_all changes every match, but how many there are is not known: counted as one.
+            file = path("file_path")
+            if let old = input["old_string"] as? String, let new = input["new_string"] as? String {
+                (linesAdded, linesRemoved) = Detail.lineChange(old: old, new: new)
+            }
+        case "MultiEdit":
+            file = path("file_path")
+            if let edits = input["edits"] as? [[String: Any]] {
+                let changes = edits.compactMap { edit -> (added: Int, removed: Int)? in
+                    guard let old = edit["old_string"] as? String, let new = edit["new_string"] as? String else {
+                        return nil
+                    }
+                    return Detail.lineChange(old: old, new: new)
+                }
+                linesAdded = min(changes.reduce(0) { $0 + $1.added }, Detail.maxLines)
+                linesRemoved = min(changes.reduce(0) { $0 + $1.removed }, Detail.maxLines)
+            }
+        case "NotebookEdit":
+            file = path("notebook_path")
+        case "TodoWrite":
+            // The statuses of all, the words of the one in progress only.
+            guard let todos = input["todos"] as? [[String: Any]] else { return }
+            taskAction = .todo
+            todoTotal = min(todos.count, Detail.maxTasks)
+            todoDone = min(todos.filter { $0["status"] as? String == "completed" }.count, Detail.maxTasks)
+            if let doing = todos.first(where: { $0["status"] as? String == "in_progress" }) {
+                taskTitle = doing["content"] as? String ?? doing["activeForm"] as? String
+            }
+        case "TaskCreate":
+            taskAction = .create
+            taskTitle = input["subject"] as? String ?? input["activeForm"] as? String
+        case "TaskUpdate":
+            guard let id = input["taskId"] as? String else { return }
+            taskAction = .update
+            taskID = id
+            taskStatus = (input["status"] as? String).flatMap(TaskStatus.init)
+            taskTitle = input["subject"] as? String
+        default:
+            break
+        }
+    }
+
+    /// One line for the socket, newline included, at most `Limits.line` bytes: past that the details go one at a
+    /// time (the task title, the model, the file, the line counts) and the rest is kept.
     public func wireLine() -> Data {
-        var data = (try? JSONEncoder().encode(self)) ?? Data()
+        var event = self
+        let drops: [(inout HookEvent) -> Void] = [
+            { $0.taskTitle = nil }, { $0.model = nil }, { $0.file = nil },
+            {
+                $0.linesAdded = nil
+                $0.linesRemoved = nil
+            },
+        ]
+        var data = (try? JSONEncoder().encode(event)) ?? Data()
+        for drop in drops where data.count >= Limits.line {
+            drop(&event)
+            data = (try? JSONEncoder().encode(event)) ?? Data()
+        }
         data.append(0x0A)
         return data
     }
@@ -189,7 +314,31 @@ public struct HookEvent: Codable, Equatable {
             event.recipient = clean
         }
         if let pid, pid <= 1 { event.pid = nil }
+        event.cleanDetails()
         return event
+    }
+
+    /// The details again, each on its own: only on the events that carry them, in range, hidden characters dropped
+    /// and capped. One that fails is dropped, the event kept.
+    private mutating func cleanDetails() {
+        let tool = kind == .preToolUse
+        let within = { (value: Int?, max: Int) in value.flatMap { (0...max).contains($0) ? $0 : nil } }
+        file = tool ? file.flatMap { Detail.capped($0, Detail.file) } : nil
+        linesAdded = tool ? within(linesAdded, Detail.maxLines) : nil
+        linesRemoved = tool ? within(linesRemoved, Detail.maxLines) : nil
+        if !tool { taskAction = nil }
+        let todo = taskAction == .todo
+        todoTotal = todo ? within(todoTotal, Detail.maxTasks) : nil
+        todoDone = todo ? todoTotal.flatMap { within(todoDone, $0) } : nil
+        if todoDone == nil { todoTotal = nil }
+        // An id is matched against others, so one too long is dropped whole rather than cut.
+        let update = taskAction == .update
+        taskID =
+            update ? taskID.flatMap { Sanitize.clean($0, max: .max) }.flatMap { $0.count <= Limits.id ? $0 : nil } : nil
+        if update, taskID == nil { taskAction = nil }
+        taskStatus = taskAction == .update ? taskStatus : nil
+        taskTitle = taskAction == nil ? nil : taskTitle.flatMap { Detail.capped($0, Detail.title) }
+        model = kind == .sessionStart ? model.flatMap { Detail.capped($0, Detail.model) } : nil
     }
 }
 
