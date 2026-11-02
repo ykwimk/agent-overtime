@@ -152,7 +152,7 @@ final class SidePanel: ObservableObject {
             guard let (mate, session) = office.teammate(id) else { return nil }
             return
                 ([mate.label, String(localized: "teammate of \(session.label)")]
-                + state(mate.state, since: mate.since, meets: session.meets) + now).joined(separator: ", ")
+                + state(mate.state, since: mate.since, meets: session.meets(with: mate)) + now).joined(separator: ", ")
         case .off:
             return nil
         }
@@ -499,7 +499,8 @@ struct SidePanelView: View {
                 header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
                 details(
                     role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
-                    meets: session.meets, teammateWaiting: false, doing: SidePanel.doing(selection.kind, in: office),
+                    meets: session.meets(with: mate), teammateWaiting: false,
+                    doing: SidePanel.doing(selection.kind, in: office),
                     news: news)
             case .wentHome(let name):
                 wentHome(name)

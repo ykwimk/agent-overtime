@@ -88,6 +88,10 @@ final class TeamTests: XCTestCase {
         start(&office, "a4")
         office.advance(to: t0 + 60 + OfficeState.meetingDelay)
         XCTAssertEqual(office.meeting?.members.map(\.id), ["a3", "a4"], "those with headphones stay at their desks")
+        // Only those two count as meeting: the name tag's number and "In a meeting" go by them.
+        let session = office.desks[0].sessions[0]
+        XCTAssertEqual(session.direct.count, 2)
+        XCTAssertEqual(session.teammates.filter { session.meets(with: $0) }.map(\.id), ["a3", "a4"])
         // The session works again: the meeting ends and they put headphones on too, never both at once.
         work(&office, nil, .command, at: 80)
         XCTAssertNil(office.meeting)
@@ -104,6 +108,21 @@ final class TeamTests: XCTestCase {
         XCTAssertEqual(wearing(office), ["a1"], "the session's work: its own teammate")
         work(&office, "a1", .read)
         XCTAssertEqual(wearing(office), ["a1", "b1"])
+    }
+
+    /// A teammate another teammate called never counts as meeting, even while the session meets.
+    func testATeammatesOwnTeammateDoesNotMeet() {
+        var office = OfficeState()
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder), now: t0)
+        start(&office, "a1")
+        call(&office, from: "a1")
+        start(&office, "b1", "Plan")
+        start(&office, "a2")
+        office.advance(to: t0 + 60)
+        let session = office.desks[0].sessions[0]
+        XCTAssertTrue(session.meets)
+        XCTAssertEqual(session.teammates.filter { session.meets(with: $0) }.map(\.id), ["a1", "a2"])
+        XCTAssertEqual(office.meeting?.members.map(\.id), ["a1", "a2"])
     }
 
     private func message(_ office: inout OfficeState, from agent: String?, to: String?, session: String = "s1") {

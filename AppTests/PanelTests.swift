@@ -202,4 +202,29 @@ final class PanelTests: XCTestCase {
         XCTAssertEqual(Set(phrases).count, 6)
         for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
     }
+
+    /// In a meeting: only the teammates at it say so. One with headphones keeps working as it was, in the panel
+    /// and to VoiceOver.
+    func testOnlyTheTeammatesAtTheMeetingAreInIt() throws {
+        let model = model(in: folder())
+        model.receive(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: project), at: t0)
+        model.receive(
+            HookEvent(kind: .subagentStart, session: "s1", cwd: project, agentID: "h1", agentType: "Explore"), at: t0)
+        model.receive(HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit), at: t0 + 1)
+        for id in ["p1", "p2"] {
+            model.receive(
+                HookEvent(kind: .subagentStart, session: "s1", cwd: project, agentID: id, agentType: "Plan"), at: t0 + 2
+            )
+        }
+        model.advanceMeetings(to: t0 + 60)
+        let session = try XCTUnwrap(model.office.session("s1"))
+        XCTAssertTrue(session.meets)
+        XCTAssertEqual(session.direct.count, 2, "the name tag says 2 teammates, not 3")
+        let meeting = String(localized: "In a meeting")
+        let away = try XCTUnwrap(SidePanel.spoken(.teammate("h1"), in: model.office, now: t0 + 60))
+        XCTAssertFalse(away.contains(meeting), away)
+        XCTAssertTrue(away.contains(WorkState.working.spoken), away)
+        let met = try XCTUnwrap(SidePanel.spoken(.teammate("p1"), in: model.office, now: t0 + 60))
+        XCTAssertTrue(met.contains(meeting), met)
+    }
 }

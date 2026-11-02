@@ -170,7 +170,7 @@ final class Stage: ObservableObject {
                 case .teammate(let mate, let session):
                     people[id] = Person(
                         look: look, slot: pod.slot, seat: index, arrived: mate.arrived, session: session.id,
-                        isSession: false, state: mate.state, meets: session.meets, caller: mate.calledBy)
+                        isSession: false, state: mate.state, meets: session.meets(with: mate), caller: mate.calledBy)
                     if meeting?.session.id == session.id,
                         let turn = meeting?.members.firstIndex(where: { $0.id == mate.id })
                     {
@@ -765,7 +765,7 @@ struct SeatTag: View {
                     Text("Teammate waiting").font(.subheadline).foregroundStyle(Style.waiting)
                 }
                 if session.meets {
-                    Text("In a meeting · \(session.teammates.count) teammates").font(.subheadline).foregroundStyle(
+                    Text("In a meeting · \(session.direct.count) teammates").font(.subheadline).foregroundStyle(
                         Style.tagText)
                 }
             }
@@ -795,7 +795,7 @@ struct SeatTag: View {
             if session.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
             if session.meets {
                 // "my-project, In a meeting, 3 teammates, Explore waiting": who waits, by name.
-                text = text + comma + Text("In a meeting") + comma + Text("\(session.teammates.count) teammates")
+                text = text + comma + Text("In a meeting") + comma + Text("\(session.direct.count) teammates")
                 for mate in session.teammates where mate.state == .waiting {
                     text = text + comma + Text("\(mate.label) waiting")
                 }
@@ -808,7 +808,7 @@ struct SeatTag: View {
             var text = mate.displayName + comma + Text("teammate of \(session.label)") + comma + mate.state.word
             let minutes = Int(now.timeIntervalSince(mate.since) / 60)
             if mate.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
-            if session.meets { text = text + comma + Text("In a meeting") }
+            if session.meets(with: mate) { text = text + comma + Text("In a meeting") }
             return text
         case .off(let name, _):
             return Text(verbatim: name) + comma + Text("Off duty")

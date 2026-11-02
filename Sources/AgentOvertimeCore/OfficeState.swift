@@ -73,6 +73,10 @@ public struct Session: Equatable, Identifiable {
     /// The teammates the session called itself and waits on: the ones that meet with it (not those with headphones).
     public var direct: [Teammate] { teammates.filter { $0.calledBy == nil && !$0.headphones } }
 
+    /// Whether a teammate is in its meeting: at the table, or one of the "+n" past its seats. Teammates with
+    /// headphones and those another teammate called go on as they are.
+    public func meets(with mate: Teammate) -> Bool { meets && direct.contains { $0.id == mate.id } }
+
     /// After a teammate came or went. Coming counts again from the newcomer until the meeting starts; once it has,
     /// it goes on with one teammate and ends with none. Only the session's own teammates count.
     mutating func recount(_ kind: HookEvent.Kind, now: Date) {
