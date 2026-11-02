@@ -283,11 +283,15 @@ final class CaptureTests: XCTestCase {
         let layout = RoomLayout(points: size.width, slots: 3)
         XCTAssertEqual(layout.outOfSight([0, 1, 2], top: 0, height: Int(size.height - bar) / 2).below, [2])
         XCTAssertEqual(layout.outOfSight([0, 1, 2], top: 0, height: Int(size.height - bar)).below, [], "at 50 %")
-        for step in [1, 0.5] {
+        for (step, hour) in [(1, 14), (0.75, 14), (0.5, 14), (0.5, 22)] {
             narrow.zoom = step
             try capture(
-                step == 1 ? "office-narrow-1176" : "office-narrow-1176-map-50", size: size,
-                OfficeView(fixedNow: now, panel: try panel(narrow, slot: 0, index: 0)).environmentObject(narrow))
+                step == 1
+                    ? "office-narrow-1176"
+                    : "office-narrow-1176-map-\(Zoom.percent(step))"
+                        + (hour == 22 ? "-night" : ""), size: size,
+                OfficeView(fixedNow: today(hour), panel: try panel(narrow, slot: 0, index: 0)).environmentObject(narrow)
+            )
         }
 
         let bars = Zoom.steps.map { step -> AppModel in
@@ -1023,6 +1027,44 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(image?.height, 300 * RoomLayout.pointsPerPixel)
     }
 
+    /// Zoomed out, the office goes on past the room with no seam, by day and by night: the backdrop's wall (top
+    /// edge, paint, skirting) and floor are the room's own, pixel for pixel, where both are drawn; it is drawn at one
+    /// bitmap pixel per art pixel and never has more pixels than the room's picture.
+    func testBackdropContinuesTheRoomWithoutASeam() throws {
+        func pixel(_ image: CGImage, _ x: Int, _ y: Int) throws -> [UInt8] {
+            let data = try XCTUnwrap(image.dataProvider?.data as Data?)
+            let at = y * image.bytesPerRow + x * image.bitsPerPixel / 8
+            return Array(data[at..<at + 4])
+        }
+        let view = CGSize(width: 1176, height: 702)  // the narrow window under the top bar
+        let layout = RoomLayout(points: view.width, slots: 0)
+        let height = Int(view.height) / RoomLayout.pointsPerPixel
+        for darkness in [0.0, 1] {
+            let room = try XCTUnwrap(
+                OfficeRenderer().render(
+                    OfficeScene(layout: layout, height: height, pods: [], darkness: darkness, frame: 0, now: today(14)))
+            )
+            let width = Int(view.width)
+            let back = try XCTUnwrap(
+                OfficeRenderer().backdrop(
+                    width: width, height: Int(view.height), room: layout.width, darkness: darkness))
+            XCTAssertEqual([back.width, back.height], [width, Int(view.height)], "one bitmap pixel per art pixel")
+            XCTAssertLessThanOrEqual(back.width * back.height, room.width * room.height * 2)
+            let d = RoomLayout.pointsPerPixel
+            let edge = layout.width - 2
+            for (x, y, what) in [
+                (edge, 4, "top edge"), (edge, 50, "paint"), (edge, RoomLayout.wall - 2, "skirting"),
+                (10, height - 1, "floor"), (edge, height - 1, "floor at the corner"),
+            ] {
+                XCTAssertEqual(try pixel(room, x * d, y * d), try pixel(back, x, y), "\(what), darkness \(darkness)")
+            }
+            // Past the room: the same tiles carry on.
+            XCTAssertEqual(try pixel(back, layout.width + 30, 50), try pixel(back, layout.width - 2, 50))
+            XCTAssertEqual(
+                try pixel(back, layout.width + 5, height + 40), try pixel(back, layout.width + 5 - 32, height + 40))
+        }
+    }
+
     /// The room without walkers with each walker's box laid over it is the one picture, pixel for pixel: walkers
     /// stay under the night light, behind lit lamps and bubbles, and the door opens for them.
     func testWalkerBoxesOverTheRoomMakeTheSamePicture() throws {
@@ -1281,9 +1323,9 @@ final class CaptureTests: XCTestCase {
         XCTAssertLessThan(office, 5)
     }
 
-    /// Nine sessions in the default window: still at 100 % and at 75 % (the room picture is the same, shown
-    /// smaller), during a pinch (the zoom changing 60 times a second between 60 and 140 %), and at 100 % with one
-    /// teammate walking in. Written to captures/cpu-zoom.txt.
+    /// Nine sessions in the default window: still at 100 % and at 50 % (the room picture is the same, shown
+    /// smaller, with the office drawn on past it once), during a pinch (the zoom changing 60 times a second between
+    /// 60 and 140 %), and at 100 % with one teammate walking in. Written to captures/cpu-zoom.txt.
     func testCPUWhileZooming() throws {
         func cpuSeconds() -> Double {
             var usage = rusage()
@@ -1325,7 +1367,7 @@ final class CaptureTests: XCTestCase {
         let walking = percent(over: 3) - idle
         close(window)
 
-        (model, window) = office(at: 0.75)
+        (model, window) = office(at: 0.5)
         let small = percent(over: 10) - idle
         close(window)
 
@@ -1344,7 +1386,7 @@ final class CaptureTests: XCTestCase {
         close(window)
 
         let line = String(
-            format: "CPU, 9 sessions, default window (test app alone %.2f%%): 100%% still %.2f%%; 75%% still %.2f%%; "
+            format: "CPU, 9 sessions, default window (test app alone %.2f%%): 100%% still %.2f%%; 50%% still %.2f%%; "
                 + "pinching %.2f%%; 100%% one walking %.2f%%",
             idle, normal, small, pinching, walking)
         print(line)

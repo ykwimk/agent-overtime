@@ -396,6 +396,17 @@ struct OfficeRenderer {
         return (image, lights)
     }
 
+    /// The office past the room, behind a view zoomed out beyond it: the back wall (its paint, top edge and skirting,
+    /// and a window every 92 art pixels from just past the room's right end, `room`, showing the city after dark)
+    /// and the wood floor, in step with the room's own tiles so no seam shows, under the same night shade. Nothing
+    /// in it moves, so it is drawn once per size and light, at one bitmap pixel per art pixel: never more pixels than
+    /// the room's own picture.
+    func backdrop(width: Int, height: Int, room: Int, darkness: Double) -> CGImage? {
+        Self.picture(width: width, height: height, density: 1, art: art) {
+            $0.backdrop(width: width, room: room, darkness: darkness)
+        }
+    }
+
     /// A new bitmap `density` times the art size, painted in top-left art-pixel coordinates. Pictures reused
     /// inside the office (the empty room, glows, night views) stay at 1 and are scaled up without smoothing.
     private static func picture(
@@ -644,15 +655,7 @@ struct OfficeRenderer {
         /// A bright plain wall: the pack's paint without its rail and moulding, a thin top edge, and a pale
         /// skirting line where it meets the floor.
         private func wall(width: Int, plan: (glass: [CGRect], shelf: Bool, painting: Int?)) {
-            let top = 8
-            for x in stride(from: 0, to: width, by: 32) {
-                sprite(Sheet.border, 48, 0, 32, top, x, 0)
-                for y in stride(from: top, to: RoomLayout.wall, by: 32) {
-                    sprite(Sheet.wall, 224, 16, 32, min(32, RoomLayout.wall - y), x, y)
-                }
-            }
-            fill(0, RoomLayout.wall - 3, width, 1, 0xD9D9CF)
-            fill(0, RoomLayout.wall - 2, width, 2, 0xC2C1B4)
+            paint(width: width)
             whiteboard(50, 14)
             for glass in plan.glass { window(Int(glass.minX) - 2, 8, 76, 50) }
             if let x = plan.painting {
@@ -662,6 +665,37 @@ struct OfficeRenderer {
                 if plan.shelf { sprite(Sheet.cabinet, 64, 96, 64, 80, width - 108, RoomLayout.wall - 74) }
                 sprite(Sheet.cooler, 32, 0, 32, 64, width - 40, RoomLayout.wall - 58)
             }
+        }
+
+        /// The wall's paint, its top edge and the skirting line, tiled from the left edge.
+        private func paint(width: Int) {
+            let top = 8
+            for x in stride(from: 0, to: width, by: 32) {
+                sprite(Sheet.border, 48, 0, 32, top, x, 0)
+                for y in stride(from: top, to: RoomLayout.wall, by: 32) {
+                    sprite(Sheet.wall, 224, 16, 32, min(32, RoomLayout.wall - y), x, y)
+                }
+            }
+            fill(0, RoomLayout.wall - 3, width, 1, 0xD9D9CF)
+            fill(0, RoomLayout.wall - 2, width, 2, 0xC2C1B4)
+        }
+
+        /// See `OfficeRenderer.backdrop`.
+        func backdrop(width: Int, room: Int, darkness: Double) {
+            floor(width: width)
+            paint(width: width)
+            let panes = stride(from: room + 40, through: width - 76, by: 92).map {
+                CGRect(x: $0 + 2, y: 19, width: 72, height: 36)
+            }
+            for pane in panes { window(Int(pane.minX) - 2, 8, 76, 50) }
+            let d = CGFloat(darkness)
+            guard d > 0 else { return }
+            context.setBlendMode(.multiply)
+            fill(0, 0, width, height, Self.mix(0xFFFFFF, 0x262C58, Double(d)))
+            context.setBlendMode(.normal)
+            context.setAlpha(d)
+            for (index, pane) in panes.enumerated() { stamp(nightPane(pane, seed: 100 + index), Int(pane.minX), 19) }
+            context.setAlpha(1)
         }
 
         // MARK: the right-hand column
@@ -1268,14 +1302,7 @@ struct OfficeRenderer {
 
             context.setAlpha(d)
             for (index, pane) in glass.enumerated() {
-                let view = art.picture("night \(index)") { [art] in
-                    OfficeRenderer.picture(
-                        width: Int(pane.width), height: Int(pane.height), density: OfficeRenderer.density, art: art
-                    ) {
-                        $0.nightView(CGRect(origin: .zero, size: pane.size), seed: index)
-                    }
-                }
-                stamp(view, Int(pane.minX), Int(pane.minY))
+                stamp(nightPane(pane, seed: index), Int(pane.minX), Int(pane.minY))
             }
             context.setAlpha(1)
 
@@ -1291,6 +1318,17 @@ struct OfficeRenderer {
             for lamp in litLamps { sprite(Sheet.lamp, lamp.sx, 32, 32, 32, lamp.x, lamp.y, mirrored: lamp.mirrored) }
             if let litSlide { slide(litSlide.x, litSlide.y) }
             context.setAlpha(1)
+        }
+
+        /// What one window shows at night, drawn once.
+        private func nightPane(_ pane: CGRect, seed: Int) -> CGImage? {
+            art.picture("night \(seed)") { [art] in
+                OfficeRenderer.picture(
+                    width: Int(pane.width), height: Int(pane.height), density: OfficeRenderer.density, art: art
+                ) {
+                    $0.nightView(CGRect(origin: .zero, size: pane.size), seed: seed)
+                }
+            }
         }
 
         /// Dark sky and a few lit windows in the buildings across the street: someone else works late too.

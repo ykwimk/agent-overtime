@@ -580,6 +580,18 @@ final class Stage: ObservableObject {
     /// The room without walkers, and a piece of the finished picture around each walker.
     typealias Picture = (room: CGImage?, walkers: [(box: CGRect, image: CGImage?)])
 
+    private var backdrop: (key: String, image: CGImage?)?
+
+    /// The wall and floor past the room, `width` by `height` art pixels, for a view zoomed out beyond the room: drawn
+    /// again only for a new size or light (`OfficeRenderer.backdrop`).
+    func backdrop(width: Int, height: Int, darkness: Double) -> CGImage? {
+        let key = "\(width)x\(height) \(layout.width) \(Int(darkness * 100))"
+        if let backdrop, backdrop.key == key { return backdrop.image }
+        let image = OfficeRenderer().backdrop(width: width, height: height, room: layout.width, darkness: darkness)
+        backdrop = (key, image)
+        return image
+    }
+
     private var last: (key: String, picture: Picture)?
     private var room: (key: String, image: CGImage?, lights: Lights)?
     /// The 2.5-a-second frame held while someone walks: drawing the whole room again under the walkers cost more
@@ -624,7 +636,7 @@ final class Stage: ObservableObject {
 /// The office as one picture, laid out for the window at normal size and shown at the zoom like a map (`Zoom`),
 /// with system-font name tags on the floor in front of each desk. Pods fill rows from the door; more pods add rows
 /// and the room scrolls, with a line at the edge for islands out of sight. Zoomed in, the room also scrolls
-/// sideways; zoomed out, it sits at the top left.
+/// sideways; zoomed out, it sits at the top left and the wall and floor go on to the view's edges.
 struct OfficeRoom: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var systemReducesMotion
@@ -715,9 +727,16 @@ struct OfficeRoom: View {
                                 key: ScrollTop.self, value: -content.frame(in: .named(Self.space)).minY)
                         }
                     }
-                    // Zoomed out, the room keeps to the top left of the view.
+                    // Zoomed out, the room keeps to the top left of the view and the office goes on past it.
                     .frame(
-                        minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading)
+                        minWidth: geometry.size.width, minHeight: geometry.size.height, alignment: .topLeading
+                    )
+                    .background(alignment: .topLeading) {
+                        if scale < CGFloat(normal) {
+                            beyond(synced.layout, height: height, view: geometry.size, scale: scale)
+                        }
+                    }
+                    .clipped()
                 }
                 .coordinateSpace(name: Self.space)
                 // During a pinch the count waits for it to settle: one update a frame instead of two.
@@ -739,6 +758,25 @@ struct OfficeRoom: View {
         // A step from the menu or the buttons glides there around the middle of the view.
         .onChange(of: model.zoom) { zoom.go(to: $0) }
         .onChange(of: reduceMotion) { zoom.reduceMotion = $0 }
+    }
+
+    /// The wall and floor going on past the room, as far as the view reaches at the smallest zoom: one picture
+    /// for the window's size (whatever the zoom), stretched like the room. The light follows the clock by the minute.
+    @ViewBuilder private func beyond(_ layout: RoomLayout, height: Int, view: CGSize, scale: CGFloat) -> some View {
+        let reach = 1 / (CGFloat(RoomLayout.pointsPerPixel) * Zoom.range.lowerBound)  // art pixels per point
+        let width = max(layout.width, Int(view.width * reach))
+        let tall = max(height, Int(view.height * reach))
+        let picture = { (now: Date) in
+            stage.backdrop(width: width, height: tall, darkness: Daylight.darkness(at: now)).map {
+                Image(decorative: $0, scale: 1).resizable().interpolation(.none)
+                    .frame(width: CGFloat(width) * scale, height: CGFloat(tall) * scale)
+            }
+        }
+        if let fixedNow {
+            picture(fixedNow)
+        } else {
+            TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 60)) { picture($0.date) }
+        }
     }
 
     /// Where the room can scroll to: each island from its far name tags to its near ones.
