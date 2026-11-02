@@ -118,8 +118,8 @@ Shelf
   LICENSE: OGA-BY 3.0
   DETAILS: Original by Eliza Wyatt.
 
--- Used here: Objects/Furniture/TV, Widescreen.png and
-   Objects/Furniture/TV, Widescreen - No Service.png
+-- Used here: Objects/Furniture/TV, Widescreen.png
+-- Used here: Objects/Furniture/TV, Widescreen - No Service.png
 Tv, Widescreen; Tv, Widescreen - No Service display
 -------------------
   ARTIST(S): Eliza Wyatt (DeathsDarling)

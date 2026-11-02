@@ -10,7 +10,8 @@ struct SettingsView: View {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
     }
 
-    static let artists = ["Eliza Wyatt", "Lanea \"Sharm\" Zimmerman"]
+    /// Everyone named on an ARTIST(S) line of the credits; a test keeps the two in step.
+    static let artists = ["Eliza Wyatt", "Lanea \"Sharm\" Zimmerman", "BlueCarrot16", "Richard \"Jetrel\" Kettering"]
     static let artLicenseURL = URL(string: "https://static.opengameart.org/OGA-BY-3.0.txt")!
     static let peopleURL = URL(string: "https://jik-a-4.itch.io/metrocity-free-topdown-character-pack")!
 

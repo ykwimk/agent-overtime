@@ -328,6 +328,37 @@ final class CaptureTests: XCTestCase {
         }
     }
 
+    /// Every pack picture inside the app has its own line in the credits, every credited file is there, and
+    /// Settings > Art names every artist on an ARTIST(S) line.
+    func testCreditsCoverEveryPictureInTheBundle() throws {
+        let art = try XCTUnwrap(Bundle.main.resourceURL?.appendingPathComponent("Art"))
+        let credits = try String(contentsOf: art.appendingPathComponent("CREDITS.txt"), encoding: .utf8)
+        let files = try XCTUnwrap(FileManager.default.enumerator(atPath: art.path))
+            .compactMap { $0 as? String }.filter { $0.hasSuffix(".png") }
+        XCTAssertGreaterThanOrEqual(files.count, 30, "the folder was found")
+        for file in files where !file.hasPrefix("MetroCity/") {
+            XCTAssertTrue(credits.contains("-- Used here: " + file), file)
+        }
+        for file in files where file.hasPrefix("MetroCity/") {
+            XCTAssertTrue(credits.contains(file) || credits.contains((file as NSString).lastPathComponent), file)
+        }
+        let used = credits.components(separatedBy: "\n").filter { $0.hasPrefix("-- Used here: ") }
+            .map { String($0.dropFirst("-- Used here: ".count)) }
+        XCTAssertGreaterThanOrEqual(used.count, 25)
+        for file in used { XCTAssertTrue(files.contains(file), "credited but missing: \(file)") }
+
+        let artists = credits.components(separatedBy: "\n").filter { $0.contains("ARTIST(S):") }
+            .flatMap { $0.components(separatedBy: "ARTIST(S):")[1].components(separatedBy: ",") }
+            .map { $0.replacingOccurrences(of: #"\(.*\)"#, with: "", options: .regularExpression) }
+        XCTAssertGreaterThanOrEqual(Set(artists).count, 4)
+        for artist in artists {
+            let words = artist.split(separator: " ")
+            XCTAssertTrue(
+                SettingsView.artists.contains { name in words.allSatisfy { name.contains($0) } },
+                "Settings > Art misses \(artist)")
+        }
+    }
+
     /// People get LPC-like colours: black outlines one step lighter, no pure white, a little less saturated.
     func testPeopleColoursMoveTowardTheRoom() {
         let black = ArtStore.nearRoom(0, 0, 0)
