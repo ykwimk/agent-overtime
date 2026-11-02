@@ -42,7 +42,7 @@ Apple 공증을 받지 않은 앱이라 처음 열면 맥이 막습니다. **시
 앱이 처음 여는 창의 **연결 명령 복사** 를 누르고, Claude Code 에 두 줄을 붙여 넣습니다.
 
 ```
-/plugin marketplace add ykwimk/agent-overtime#v0.2.0
+/plugin marketplace add ykwimk/agent-overtime#v0.3.0
 /plugin install agent-overtime@agent-overtime
 ```
 

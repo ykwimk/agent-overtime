@@ -42,7 +42,7 @@ The first launch is blocked because the app is not notarized by Apple. Open **Sy
 Click **Copy Connect Commands** in the app's first window and paste the two lines into Claude Code:
 
 ```
-/plugin marketplace add ykwimk/agent-overtime#v0.2.0
+/plugin marketplace add ykwimk/agent-overtime#v0.3.0
 /plugin install agent-overtime@agent-overtime
 ```
 
