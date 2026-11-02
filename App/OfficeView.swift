@@ -309,14 +309,16 @@ struct OfficeView: View {
     }
 
     @ViewBuilder private var emptyMessage: some View {
-        if !model.everConnected {
+        if model.office.liveSessionCount > 0 {
+            EmptyView()
+        } else if !model.everConnected {
             EmptyOffice(
                 title: "Connection needed",
                 detail: "Install the plugin so Claude Code tells this app when it works."
             ) {
                 Button("Connect…") { openWindow(id: "welcome") }
             }
-        } else if model.office.liveSessionCount == 0 {
+        } else {
             EmptyOffice(
                 title: "Nobody's at work yet",
                 detail:
@@ -387,7 +389,12 @@ struct OfficeBar: View {
                     Button("Check connection") { openWindow(id: "welcome") }.buttonStyle(.link)
                 }
             case .idle, .starting:
-                EmptyView()
+                // Sessions found on this Mac, but no news ever: the plugin isn't connected yet.
+                if !model.everConnected, model.office.liveSessionCount > 0 {
+                    message(Text("Connect to see waits and teammates too"), color: .secondary) {
+                        Button("Connect…") { openWindow(id: "welcome") }.buttonStyle(.link)
+                    }
+                }
             }
         }
     }
