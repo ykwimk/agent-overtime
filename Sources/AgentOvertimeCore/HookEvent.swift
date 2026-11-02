@@ -193,6 +193,88 @@ public struct HookEvent: Codable, Equatable {
     }
 }
 
+/// What the side panel's details show of the file a tool works on and of how much an edit changes, worked out
+/// inside the helper from the text alone: nothing here looks at the file system.
+public enum Detail {
+    public static let file = 128
+    public static let title = 80
+    public static let model = 64
+    public static let maxLines = 999_999
+    public static let maxTasks = 999
+
+    /// A file as the side panel shows it. Inside the session's folder, its path from there (`src/app.ts`) or, deeper,
+    /// `…/` and its last two parts; anywhere else, and for any path with a `.` or `..` part, its name alone. Never
+    /// the full path. nil for a path that isn't absolute or leaves nothing to show.
+    public static func shortPath(_ path: String, in folder: String) -> String? {
+        guard path.hasPrefix("/"), let name = path.split(separator: "/").last else { return nil }
+        let parts = path.split(separator: "/")
+        let base = folder.split(separator: "/")
+        let dotted = { (parts: [Substring]) in parts.contains { $0 == "." || $0 == ".." } }
+        var shown = String(name)
+        // Part by part, never by the text's start (/a/proj2 is not inside /a/proj); and a folder of fewer than two
+        // parts (/, /Users) would put an account's name in the last two parts.
+        if base.count >= 2, parts.count > base.count, !dotted(parts), !dotted(base), parts.starts(with: base) {
+            let inside = parts.dropFirst(base.count)
+            shown = inside.count <= 2 ? inside.joined(separator: "/") : "…/" + inside.suffix(2).joined(separator: "/")
+        }
+        return capped(shown, file)
+    }
+
+    /// Hidden characters dropped and at most `max` characters, with "…" at the end of one cut short; nil if empty.
+    public static func capped(_ text: String, _ max: Int) -> String? {
+        guard let clean = Sanitize.clean(text, max: max + 1) else { return nil }
+        guard clean.unicodeScalars.count > max else { return clean }
+        return String(String.UnicodeScalarView(clean.unicodeScalars.prefix(max - 1))) + "…"
+    }
+
+    /// The lines an edit adds and removes: `new` against `old`, leaving out the whole lines both begin and end with.
+    /// One pass over the bytes from each end, no diff and no list of lines, so a huge edit stays fast. Capped.
+    public static func lineChange(old: String, new: String) -> (added: Int, removed: Int) {
+        var old = old
+        var new = new
+        // Native UTF-8, read in place.
+        return old.withUTF8 { a in new.withUTF8 { b in lineChange(a, b) } }
+    }
+
+    private static func lineChange(_ a: UnsafeBufferPointer<UInt8>, _ b: UnsafeBufferPointer<UInt8>) -> (Int, Int) {
+        // Whole lines in common at the start: up to the last newline of the common prefix.
+        var i = 0
+        var head = 0
+        while i < a.count, i < b.count, a[i] == b[i] {
+            if a[i] == 0x0A { head = i + 1 }
+            i += 1
+        }
+        if i == a.count, i == b.count { return (0, 0) }
+        // Whole lines in common at the end: a common suffix that starts a line in both, past the head.
+        var j = 0
+        var tail = 0
+        while j < a.count - head, j < b.count - head, a[a.count - 1 - j] == b[b.count - 1 - j] {
+            j += 1
+            let (x, y) = (a.count - j, b.count - j)
+            if x == head || a[x - 1] == 0x0A, y == head || b[y - 1] == 0x0A { tail = j }
+        }
+        return (lines(b, head..<(b.count - tail)), lines(a, head..<(a.count - tail)))
+    }
+
+    /// Lines in some text: its newlines, and one more for a last line without one. Capped.
+    public static func lines(_ text: String) -> Int {
+        var text = text
+        return text.withUTF8 { lines($0, 0..<$0.count) }
+    }
+
+    private static func lines(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Int {
+        guard let base = bytes.baseAddress, !range.isEmpty else { return 0 }
+        var count = 0
+        var at = base + range.lowerBound
+        let end = base + range.upperBound
+        while at < end, let found = memchr(at, 0x0A, end - at) {
+            count += 1
+            at = UnsafePointer(found.assumingMemoryBound(to: UInt8.self)) + 1
+        }
+        return min(count + (bytes[range.upperBound - 1] == 0x0A ? 0 : 1), maxLines)
+    }
+}
+
 public enum Limits {
     public static let id = 128
     public static let cwd = 1024
