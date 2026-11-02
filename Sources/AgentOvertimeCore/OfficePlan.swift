@@ -128,16 +128,73 @@ public struct RoomLayout: Equatable {
     /// The line people walk along under an island's near name tags.
     func aisle(belowRow row: Int) -> Int { Self.firstRow + row * Self.rowPitch + Self.islandDepth - 2 }
 
+    /// Where the lane runs, under the door.
+    static let laneX = lane / 2 + 4
+
+    /// The aisle a seat is reached from: above the island across the desks (along the foot of the wall in the
+    /// first row), below it for the seats with their backs to the room.
+    func aisle(slot: Int, seat: Int) -> Int {
+        let row = slot / columns
+        return Self.isAcross(seat) ? (row == 0 ? Self.wall + 2 : aisle(belowRow: row - 1)) : aisle(belowRow: row)
+    }
+
     /// The door's feet point and the walking route from it to a seat: down the lane, along the aisle between
     /// rows (under the wall for the first row's far seats), then up or down to the seat. Nobody walks over the
     /// heads of people sitting there.
     public func route(slot: Int, seat: Int) -> [(x: Int, y: Int)] {
         let stand = standPoint(slot: slot, seat: seat)
-        let laneX = Self.lane / 2 + 4
-        let door = Self.wall + 2
-        let row = slot / columns
-        let aisle = Self.isAcross(seat) ? (row == 0 ? door : aisle(belowRow: row - 1)) : aisle(belowRow: row)
-        return [(laneX, door), (laneX, aisle), (stand.x, aisle), stand]
+        let aisle = aisle(slot: slot, seat: seat)
+        return [(Self.laneX, Self.wall + 2), (Self.laneX, aisle), (stand.x, aisle), stand]
+    }
+
+    /// A place people walk to: the aisle it is reached from, where on that aisle they turn off, and the points
+    /// from there on.
+    public struct Spot {
+        public let aisle: Int
+        public let x: Int
+        public let tail: [(x: Int, y: Int)]
+    }
+
+    /// Just inside the front door.
+    public var doorSpot: Spot { Spot(aisle: Self.wall + 2, x: Self.laneX, tail: []) }
+
+    /// A seat, reached the way `route(slot:seat:)` reaches it.
+    public func deskSpot(slot: Int, seat: Int) -> Spot {
+        let stand = standPoint(slot: slot, seat: seat)
+        return Spot(aisle: aisle(slot: slot, seat: seat), x: stand.x, tail: [stand])
+    }
+
+    /// On the aisle by a seat, a step to the island's outer side: where someone stands to talk with the person
+    /// sitting there.
+    public func besideSpot(slot: Int, seat: Int) -> Spot {
+        Spot(
+            aisle: aisle(slot: slot, seat: seat), x: standPoint(slot: slot, seat: seat).x + (seat < 2 ? -20 : 20),
+            tail: [])
+    }
+
+    /// A seat of the meeting room: up from the aisle under the first row, through the glass door, left of the
+    /// table, and behind its chairs to the seats facing the room. nil without the right-hand column.
+    public func roomSpot(_ seat: Int) -> Spot? {
+        guard let room = meetingRoom else { return nil }
+        let place = room.seats[seat]
+        let step = room.doorstep
+        let inside = seat < 3 ? [(step.x, MeetingRoom.behind), (place.x, MeetingRoom.behind)] : [(step.x, place.y)]
+        return Spot(aisle: aisle(belowRow: 0), x: step.x, tail: [step] + inside + [place])
+    }
+
+    /// The walk from one spot to another: back to the first spot's aisle, along it, down the lane or the
+    /// passage beside the right-hand column (whichever is shorter) when the aisles differ, along the second
+    /// aisle, and on to the spot.
+    public func path(from a: Spot, to b: Spot) -> [(x: Int, y: Int)] {
+        var points = a.tail.reversed() + [(a.x, a.aisle)]
+        if a.aisle != b.aisle {
+            // The passage keeps a step clear of the islands and of the pot beside the meeting room's glass.
+            let ways = [Self.laneX] + (pillar.map { [$0 - 20] } ?? [])
+            let way = ways.min { abs(a.x - $0) + abs(b.x - $0) < abs(a.x - $1) + abs(b.x - $1) }!
+            points += [(way, a.aisle), (way, b.aisle)]
+        }
+        points += [(b.x, b.aisle)] + b.tail
+        return points.indices.filter { $0 == 0 || points[$0 - 1] != points[$0] }.map { points[$0] }
     }
 }
 
@@ -156,6 +213,8 @@ public struct MeetingRoom {
     public static let table = (x: 56, y: RoomLayout.wall + 28, width: 96, depth: 24)
     /// How far down the lounge under the meeting room reaches.
     public static let columnDepth = 340
+    /// The line inside the room behind the chairs facing the room, under the TV.
+    public static let behind = RoomLayout.wall + 6
 
     public init(left: Int) { self.left = left }
 

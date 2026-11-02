@@ -266,6 +266,9 @@ struct OfficeScene {
     var walkers: [Walker] = []
     /// People still walking in: their desks look empty until they arrive.
     var away: Set<String> = []
+    /// People away from their desks for a while: the chair stays in and the laptop on, unlike a desk someone
+    /// went home from.
+    var out: Set<String> = []
     var doorOpen = false
     /// The meeting room's glass door; nobody walks to a meeting yet, so it stays shut.
     var meetingDoorOpen = false
@@ -725,11 +728,12 @@ struct OfficeRenderer {
             let near = y0 + RoomLayout.nearDesk
             // Who is at each seat right now: people still walking in are not there yet.
             let here = pod.seats.map { seat -> (look: Look, state: WorkState, headphones: Bool)? in
-                guard let seat, let id = OfficeScene.id(seat), !scene.away.contains(id),
+                guard let seat, let id = OfficeScene.id(seat), !scene.away.contains(id), !scene.out.contains(id),
                     let look = OfficeScene.look(seat), let state = OfficeScene.state(seat)
                 else { return nil }
                 return (look, state, scene.headphones.contains(id))
             }
+            let out = pod.seats.map { seat in seat.flatMap(OfficeScene.id).map(scene.out.contains) ?? false }
             let wentHome = pod.seats.map { seat -> Bool in
                 if case .off? = seat { return true }
                 return false
@@ -757,16 +761,18 @@ struct OfficeRenderer {
             for seat in [1, 3] {
                 let cx = x0 + RoomLayout.personX(seat)
                 // The back of the open laptop (the closed lid, standing), its logo lit while the screen is on.
-                if let person = here[seat] {
-                    sprite(Sheet.laptop, person.state == .resting ? 0 : 32, 96, 32, 32, cx - 15, far - 6)
-                    if person.state != .resting { screens.append((cx, far + 4)) }
+                if here[seat] != nil || out[seat] {
+                    sprite(Sheet.laptop, here[seat]?.state == .resting ? 0 : 32, 96, 32, 32, cx - 15, far - 6)
+                    if here[seat]?.state != .resting { screens.append((cx, far + 4)) }
                     pools.append((cx - 3, far - 4))
                 } else if wentHome[seat] {
                     sprite(Sheet.laptop, 0, 96, 32, 32, cx - 15, far - 4)
                 }
                 if let occupant = pod.seats[seat] {
                     let x = x0 + RoomLayout.deskX(seat)
-                    prop(OfficeScene.prop(occupant), x: x, base: far + 6, across: true, lit: lit && here[seat] != nil)
+                    prop(
+                        OfficeScene.prop(occupant), x: x, base: far + 6, across: true,
+                        lit: lit && (here[seat] != nil || out[seat]))
                 }
             }
 
@@ -778,16 +784,17 @@ struct OfficeRenderer {
                 // Laptop: closed where someone went home, dark while resting, on (and typing) while working.
                 if wentHome[seat] {
                     sprite(Sheet.laptop, 0, 96, 32, 32, dx + 2, near - 6)
-                } else if let person = here[seat] {
-                    sprite(Sheet.laptop, person.state == .resting ? 0 : 32, 0, 32, 32, dx + 2, near - 8)
-                    if person.state != .resting { screens.append((dx + 18, near + 2)) }
-                    if person.state == .working { typing(dx + 2, near - 8, frame: scene.frame + seat) }
+                } else if here[seat] != nil || out[seat] {
+                    let state = here[seat]?.state
+                    sprite(Sheet.laptop, state == .resting ? 0 : 32, 0, 32, 32, dx + 2, near - 8)
+                    if state != .resting { screens.append((dx + 18, near + 2)) }
+                    if state == .working { typing(dx + 2, near - 8, frame: scene.frame + seat) }
                     pools.append((dx + 44, near + 21))
                 }
                 if let occupant = pod.seats[seat] {
                     prop(
-                        OfficeScene.prop(occupant), x: dx, base: near + 17, across: false, lit: lit && here[seat] != nil
-                    )
+                        OfficeScene.prop(occupant), x: dx, base: near + 17, across: false,
+                        lit: lit && (here[seat] != nil || out[seat]))
                 }
             }
             for seat in [0, 2] {

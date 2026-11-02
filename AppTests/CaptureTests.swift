@@ -483,15 +483,12 @@ final class CaptureTests: XCTestCase {
             let now = today(hour)
             let (model, stage) = scenario(at: now, walked: walked)
             let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
-            let (pods, layout) = stage.sync(model.office, width: width, now: now, animate: true)
+            let (_, layout) = stage.sync(model.office, width: width, now: now, animate: true)
             let height = layout.contentHeight + 20
             let parts = stage.picture(at: now, frame: 3, height: height, reduceMotion: false)
             XCTAssertFalse(parts.walkers.isEmpty)
-            let moment = stage.moment(at: now)
-            let scene = OfficeScene(
-                layout: layout, height: height, pods: pods,
-                darkness: (Daylight.darkness(at: now) * 100).rounded() / 100,
-                frame: 3, now: now, walkers: moment.walkers, away: moment.away, doorOpen: moment.doorOpen)
+            var (scene, walking) = stage.scene(at: now, frame: 3, height: height, reduceMotion: false)
+            scene.walkers += walking
             let whole = try XCTUnwrap(OfficeRenderer().render(scene))
             func pixels(_ paint: (CGContext) throws -> Void) throws -> [UInt8] {
                 var bytes = [UInt8](repeating: 0, count: whole.width * whole.height * 4)

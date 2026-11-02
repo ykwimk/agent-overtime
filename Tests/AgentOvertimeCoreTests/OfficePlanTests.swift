@@ -164,6 +164,34 @@ final class OfficePlanTests: XCTestCase {
         }
     }
 
+    /// From any seat to beside any other: straight lines only, along aisles (never across an island), between
+    /// rows by the lane or the passage beside the right-hand column, whichever is shorter.
+    func testWalksBetweenSeatsKeepToTheAislesAndPassages() {
+        let layout = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 4)
+        let passage = layout.pillar! - 20
+        let aisles = Set((0..<4).flatMap { slot in (0..<Island.size).map { layout.aisle(slot: slot, seat: $0) } })
+        for a in 0..<16 {
+            for b in 0..<16 where a != b {
+                let from = layout.deskSpot(slot: a / 4, seat: a % 4)
+                let to = layout.besideSpot(slot: b / 4, seat: b % 4)
+                let path = layout.path(from: from, to: to)
+                XCTAssertEqual(path.first!.x, from.tail[0].x)
+                XCTAssertEqual(path.first!.y, from.tail[0].y)
+                XCTAssertEqual(path.last!.x, to.x)
+                XCTAssertEqual(path.last!.y, to.aisle)
+                for (p, q) in zip(path, path.dropFirst()) {
+                    XCTAssert(p.x == q.x || p.y == q.y, "\(a) → \(b): \(path)")
+                    if p.y == q.y { XCTAssert(aisles.contains(p.y), "along an aisle: \(a) → \(b): \(path)") }
+                    if p.x == q.x, p.x != from.x, p.x != to.x {
+                        XCTAssert([RoomLayout.laneX, passage].contains(p.x), "\(a) → \(b): \(path)")
+                    }
+                }
+            }
+        }
+        let far = layout.path(from: layout.deskSpot(slot: 3, seat: 2), to: layout.besideSpot(slot: 1, seat: 3))
+        XCTAssert(far.contains { $0.x == passage }, "the right-hand islands use the passage, not the lane")
+    }
+
     /// A teammate keeps its seat while others come and go around it.
     func testTeammatesKeepTheirSeats() {
         var office = OfficeState()

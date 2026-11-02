@@ -1,23 +1,66 @@
 import AppKit
 import SwiftUI
 
-/// Who walks where: each time the office changes it lays out the islands and times walks in through the door
-/// and out.
+/// Who walks where: each time the office changes it lays out the islands and plans the walks: in through the
+/// door and out, and over to a newcomer's desk to talk.
 final class Stage: ObservableObject {
-    private struct Walk {
-        let look: Look
-        /// Door to desk; walked backwards when leaving.
-        let route: [(x: Int, y: Int)]
-        let start: Date
-        let duration: TimeInterval
-        let leaving: Bool
+    typealias Point = (x: Int, y: Int)
+
+    /// Where someone is when they are not walking.
+    enum Place: Equatable {
+        case desk
     }
 
-    private struct Seated {
+    /// A stretch of a trip: a walk along points, or a pause where the walker stands and talks.
+    private struct Leg {
+        var points: [Point]
+        var pause: TimeInterval = 0
+        /// Which way they look during a pause, and the speaking mark's corner.
+        var facing = Walker.Facing.down
+        var talk: Point?
+
+        var duration: TimeInterval { points.count > 1 ? Stage.length(points) / Stage.speed : pause }
+    }
+
+    /// One person's way from a place to another (nil: the front door), from `start`.
+    private struct Trip {
+        let look: Look
+        var start: Date
+        var legs: [Leg]
+        var from: Place?
+        var to: Place?
+        /// On the way in for the first time: their desk looks empty meanwhile. Anyone else's desk keeps its
+        /// laptop on while they are away.
+        var arriving = false
+        /// Whom the walk is a visit to.
+        var partner: String?
+
+        var end: Date { start + legs.reduce(0) { $0 + $1.duration } }
+    }
+
+    /// Someone at a seat of an island.
+    private struct Person {
         let look: Look
         let slot: Int
         let seat: Int
         let arrived: Date?
+        let session: String
+        let isSession: Bool
+        var place = Place.desk
+    }
+
+    /// Everyone on the move at one moment.
+    struct Moment {
+        /// Walking: drawn each frame in their own small boxes over the room.
+        var walkers: [Walker] = []
+        /// Standing still to talk, drawn into the room with their speaking marks.
+        var standing: [Walker] = []
+        var talks: [Point] = []
+        /// Still on their way in: their desks look empty.
+        var away: Set<String> = []
+        /// Away from their desks for a while: chair in, laptop on.
+        var out: Set<String> = []
+        var doorOpen = false
     }
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
@@ -28,8 +71,8 @@ final class Stage: ObservableObject {
     private var office: OfficeState?
     private var layout = RoomLayout(width: 0, slots: 0)
     private var pods: [Pod] = []
-    private var present: [String: Seated] = [:]
-    private var walks: [String: Walk] = [:]
+    private var present: [String: Person] = [:]
+    private var trips: [String: Trip] = [:]
     /// Goes up whenever the pods or the room change, so a cached picture is never reused across a change.
     private var generation = 0
 
@@ -39,6 +82,8 @@ final class Stage: ObservableObject {
     /// Pixels walked per frame of the six-frame walk, so the feet keep pace with the floor at any speed (10 frames
     /// a second at 120 px/s).
     private static let stride = 12.0
+    /// How long two people stand and talk.
+    static let talkTime: TimeInterval = 2
 
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.
     func sync(_ office: OfficeState, width: Int, now: Date, animate: Bool) -> (pods: [Pod], layout: RoomLayout) {
@@ -48,82 +93,156 @@ final class Stage: ObservableObject {
         self.office = office
         pods = office.pods
         layout = RoomLayout(width: width, slots: (pods.last?.slot ?? -1) + 1)
+        trips = trips.filter { $0.value.end > now }
 
-        var seated: [String: Seated] = [:]
-        for pod in pods {
-            for (index, seat) in pod.seats.enumerated() {
-                guard let seat, let id = OfficeScene.id(seat), let look = OfficeScene.look(seat) else { continue }
-                let arrived: Date? =
-                    switch seat {
-                    case .session(let session, _): session.arrived
-                    case .teammate(let mate, _): mate.arrived
-                    case .off: nil
-                    }
-                seated[id] = Seated(look: look, slot: pod.slot, seat: index, arrived: arrived)
-            }
-        }
+        let people = Self.people(pods)
         if animate {
             // A walk in starts when the person arrived, not when the window first draws it: a window drawn late
             // still shows the walk, or the person seated once it would be over.
-            for (id, person) in seated where present[id] == nil {
+            for (id, person) in people where present[id] == nil {
                 guard let arrived = person.arrived else { continue }
-                walks[id] = walk(person.look, layout.route(slot: person.slot, seat: person.seat), arrived, false)
+                trips[id] = Trip(
+                    look: person.look, start: arrived,
+                    legs: [Leg(points: layout.route(slot: person.slot, seat: person.seat))],
+                    from: nil, to: .desk, arriving: true)
             }
-            for (id, person) in present where seated[id] == nil {
-                walks[id] = walk(person.look, before.route(slot: person.slot, seat: person.seat), now, true)
+            for (id, person) in present where people[id] == nil {
+                trips[id] = Trip(
+                    look: person.look, start: now,
+                    legs: [Leg(points: Array(before.route(slot: person.slot, seat: person.seat).reversed()))],
+                    from: .desk, to: nil)
             }
+            for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people) }
         }
-        walks = walks.filter { now.timeIntervalSince($0.value.start) < $0.value.duration }
-        present = seated
+        present = people
 
-        busyUntil = walks.values.map { $0.start + $0.duration }.max() ?? .distantPast
+        busyUntil = trips.values.map(\.end).max() ?? .distantPast
         return (pods, layout)
     }
 
-    private func walk(_ look: Look, _ route: [(x: Int, y: Int)], _ start: Date, _ leaving: Bool) -> Walk {
-        Walk(look: look, route: route, start: start, duration: Self.length(route) / Self.speed, leaving: leaving)
+    private static func people(_ pods: [Pod]) -> [String: Person] {
+        var people: [String: Person] = [:]
+        for pod in pods {
+            for (index, seat) in pod.seats.enumerated() {
+                guard let seat, let id = OfficeScene.id(seat), let look = OfficeScene.look(seat) else { continue }
+                switch seat {
+                case .session(let session, _):
+                    people[id] = Person(
+                        look: look, slot: pod.slot, seat: index, arrived: session.arrived, session: session.id,
+                        isSession: true)
+                case .teammate(let mate, let session):
+                    people[id] = Person(
+                        look: look, slot: pod.slot, seat: index, arrived: mate.arrived, session: session.id,
+                        isSession: false)
+                case .off:
+                    break
+                }
+            }
+        }
+        return people
+    }
+
+    /// ① Once a newcomer sits down, their session walks over to their desk, talks for a moment and walks back.
+    private func visit(_ id: String, _ mate: Person, _ people: [String: Person]) {
+        let host = "p:" + mate.session
+        guard let session = people[host], session.place == .desk, trips[host] == nil, let arrived = mate.arrived
+        else { return }
+        let home = layout.deskSpot(slot: session.slot, seat: session.seat)
+        let there = layout.path(from: home, to: layout.besideSpot(slot: mate.slot, seat: mate.seat))
+        trips[host] = Trip(
+            look: session.look, start: trips[id]?.end ?? arrived,
+            legs: [Leg(points: there), talk(at: there.last!, with: mate), Leg(points: Array(there.reversed()))],
+            from: .desk, to: .desk, partner: id)
+    }
+
+    /// Standing at `at` and talking with the person at `other`'s seat: facing them, the speaking mark beside the
+    /// head on their side.
+    private func talk(at: Point, with other: Person) -> Leg {
+        let x = layout.origin(of: other.slot).x + RoomLayout.personX(other.seat)
+        return Leg(
+            points: [at], pause: Self.talkTime, facing: RoomLayout.isAcross(other.seat) ? .down : .up,
+            talk: (x >= at.x ? at.x + 5 : at.x - 21, at.y - 50))
     }
 
     static func length(_ route: [(x: Int, y: Int)]) -> Double {
         zip(route, route.dropFirst()).reduce(0) { $0 + hypot(Double($1.1.x - $1.0.x), Double($1.1.y - $1.0.y)) }
     }
 
-    /// Where everyone on the move is at `now`. People walking in are "away": their desk still looks empty.
-    func moment(at now: Date) -> (walkers: [Walker], away: Set<String>, doorOpen: Bool) {
-        var walkers: [Walker] = []
-        var away: Set<String> = []
-        var doorOpen = false
-        for (id, walk) in walks {
-            let elapsed = now.timeIntervalSince(walk.start)
-            guard elapsed < walk.duration else { continue }
-            if !walk.leaving { away.insert(id) }
-            let route = walk.leaving ? Array(walk.route.reversed()) : walk.route
-            let total = Self.length(route)
-            var left = max(0, elapsed) / walk.duration * total
-            var point = route[0]
-            var facing = Walker.Facing.down
-            for (from, to) in zip(route, route.dropFirst()) {
-                let segment = hypot(Double(to.x - from.x), Double(to.y - from.y))
-                guard segment > 0 else { continue }
-                if to.x != from.x {
-                    facing = to.x > from.x ? .right : .left
-                } else {
-                    facing = to.y > from.y ? .down : .up
-                }
-                let t = min(1, left / segment)
-                point = (
-                    from.x + Int((Double(to.x - from.x) * t).rounded()),
-                    from.y + Int((Double(to.y - from.y) * t).rounded())
-                )
-                left -= segment
-                if left <= 0 { break }
+    /// The point `distance` pixels along a route, and which way the walker faces there.
+    private static func along(_ route: [Point], _ distance: Double) -> (point: Point, facing: Walker.Facing) {
+        var left = distance
+        var point = route[0]
+        var facing = Walker.Facing.down
+        for (from, to) in zip(route, route.dropFirst()) {
+            let segment = hypot(Double(to.x - from.x), Double(to.y - from.y))
+            guard segment > 0 else { continue }
+            if to.x != from.x {
+                facing = to.x > from.x ? .right : .left
+            } else {
+                facing = to.y > from.y ? .down : .up
             }
-            let door = walk.route[0]
-            if abs(point.x - door.x) + abs(point.y - door.y) < 30 { doorOpen = true }
-            let step = Int((max(0, elapsed) / walk.duration * total / Self.stride).rounded(.down))
-            walkers.append(Walker(look: walk.look, x: point.x, y: point.y, facing: facing, step: step))
+            let t = min(1, left / segment)
+            point = (
+                from.x + Int((Double(to.x - from.x) * t).rounded()),
+                from.y + Int((Double(to.y - from.y) * t).rounded())
+            )
+            left -= segment
+            if left <= 0 { break }
         }
-        return (walkers, away, doorOpen)
+        return (point, facing)
+    }
+
+    /// Where a trip has someone at `now`, and the speaking mark if they stand and talk; nil before it starts and
+    /// once it is over.
+    private static func walker(_ trip: Trip, at now: Date) -> (walker: Walker, talk: Point?)? {
+        var elapsed = now.timeIntervalSince(trip.start)
+        guard elapsed >= 0, now < trip.end else { return nil }
+        for (index, leg) in trip.legs.enumerated() {
+            if elapsed >= leg.duration, index < trip.legs.count - 1 {
+                elapsed -= leg.duration
+                continue
+            }
+            guard leg.points.count > 1 else {
+                let at = leg.points[0]
+                return (Walker(look: trip.look, x: at.x, y: at.y, facing: leg.facing, step: 0), leg.talk)
+            }
+            let (point, facing) = along(leg.points, elapsed * speed)
+            let step = Int((elapsed * speed / stride).rounded(.down))
+            return (Walker(look: trip.look, x: point.x, y: point.y, facing: facing, step: step), nil)
+        }
+        return nil
+    }
+
+    /// Where everyone on the move is at `now`.
+    func moment(at now: Date) -> Moment {
+        var moment = Moment()
+        let door = layout.doorSpot
+        for (id, trip) in trips {
+            guard let (walker, talk) = Self.walker(trip, at: now) else { continue }
+            if trip.arriving { moment.away.insert(id) } else { moment.out.insert(id) }
+            if let talk {
+                moment.standing.append(walker)
+                moment.talks.append(talk)
+            } else {
+                moment.walkers.append(walker)
+            }
+            if abs(walker.x - door.x) + abs(walker.y - door.aisle) < 30 { moment.doorOpen = true }
+        }
+        return moment
+    }
+
+    /// The office at `now` with the people standing still, and those walking (drawn in their own boxes).
+    func scene(at now: Date, frame: Int, height: Int, reduceMotion: Bool) -> (scene: OfficeScene, walkers: [Walker]) {
+        let moment = moment(at: now)
+        // Rounded so the room and the boxes, drawn at different moments, share one light.
+        let darkness = (Daylight.darkness(at: now) * 100).rounded() / 100
+        var scene = OfficeScene(
+            layout: layout, height: height, pods: pods, darkness: darkness, frame: frame, now: now,
+            walkers: moment.standing, away: moment.away, doorOpen: moment.doorOpen && !reduceMotion,
+            headphones: headphones)
+        scene.out = moment.out
+        scene.talks = moment.talks
+        return (scene, moment.walkers)
     }
 
     /// The room without walkers, and a piece of the finished picture around each walker.
@@ -133,26 +252,23 @@ final class Stage: ObservableObject {
     private var room: (key: String, image: CGImage?)?
 
     /// The office at `now`. The room is drawn again only when it changes (the 2.5-a-second frame, the clock's
-    /// minute, the light, the door, someone sitting down); each frame of a walk draws only the walkers' boxes.
-    /// A box is the whole office drawn inside it, so a walker stays under the night light and behind lit lamps
-    /// and bubbles exactly as in one picture. A tick can draw the view twice; the second time reuses the first.
+    /// minute, the light, the door, someone sitting down or standing to talk); each frame of a walk draws only
+    /// the walkers' boxes. A box is the whole office drawn inside it, so a walker stays under the night light and
+    /// behind lit lamps and bubbles exactly as in one picture. A tick can draw the view twice; the second time
+    /// reuses the first.
     func picture(at now: Date, frame: Int, height: Int, reduceMotion: Bool) -> Picture {
         let key = "\(now.timeIntervalSinceReferenceDate) \(frame) \(height) \(layout.width) \(generation)"
         if let last, last.key == key { return last.picture }
-        let moment = moment(at: now)
-        // Rounded so the room and the boxes, drawn at different moments, share one light.
-        let darkness = (Daylight.darkness(at: now) * 100).rounded() / 100
-        var scene = OfficeScene(
-            layout: layout, height: height, pods: pods, darkness: darkness, frame: frame, now: now,
-            away: moment.away, doorOpen: moment.doorOpen && !reduceMotion, headphones: headphones)
+        var (scene, walking) = scene(at: now, frame: frame, height: height, reduceMotion: reduceMotion)
         let minute = Int(now.timeIntervalSinceReferenceDate / 60)
         let roomKey =
-            "\(frame) \(minute) \(darkness) \(scene.doorOpen) \(moment.away.sorted()) \(height) \(layout.width) "
-            + "\(generation) \(headphones.sorted())"
+            "\(frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
+            + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(height) \(layout.width) \(generation) "
+            + "\(headphones.sorted())"
         if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
-        scene.walkers = moment.walkers
+        scene.walkers += walking
         let bounds = CGRect(x: 0, y: 0, width: layout.width, height: height)
-        let walkers = moment.walkers.map { walker -> (box: CGRect, image: CGImage?) in
+        let walkers = walking.map { walker -> (box: CGRect, image: CGImage?) in
             let box = walker.box.intersection(bounds)
             return (box, box.isEmpty ? nil : OfficeRenderer().render(scene, crop: box))
         }
