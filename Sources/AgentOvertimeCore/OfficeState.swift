@@ -19,6 +19,9 @@ public struct Teammate: Equatable, Identifiable {
     /// name: shown in place of `name` and `number`, which stay for its look.
     public internal(set) var nickname: String? = nil
     public internal(set) var labelNumber = 1
+    /// The teammate that called it, when another teammate did (nil: the session itself). When the caller leaves,
+    /// whoever called the caller takes its place.
+    public internal(set) var calledBy: String? = nil
 
     mutating func set(_ newState: WorkState, now: Date) {
         if state != newState { since = now }
@@ -64,13 +67,17 @@ public struct Session: Equatable, Identifiable {
         meets = false
     }
 
+    /// The teammates the session called itself: the ones that meet with it.
+    public var direct: [Teammate] { teammates.filter { $0.calledBy == nil } }
+
     /// After a teammate came or went. Coming counts again from the newcomer until the meeting starts; once it has,
-    /// it goes on with one teammate and ends with none.
+    /// it goes on with one teammate and ends with none. Only the session's own teammates count.
     mutating func recount(_ kind: HookEvent.Kind, now: Date) {
         let started = meets || quietSince.map { now >= $0 + OfficeState.meetingDelay } ?? false
+        let count = direct.count
         switch kind {
-        case .subagentStart where teammates.count >= 2 && !started: quietSince = now
-        case .subagentStop where teammates.isEmpty || (teammates.count < 2 && !started): endMeeting()
+        case .subagentStart where count >= 2 && !started: quietSince = now
+        case .subagentStop where count == 0 || (count < 2 && !started): endMeeting()
         default: break
         }
     }
@@ -231,6 +238,12 @@ public struct OfficeState: Equatable {
     /// by the app's clock, and the kind of tool each is running. Memory only, and gone with them.
     private var news: [String: Date] = [:]
     private var kinds: [String: HookEvent.ToolKind] = [:]
+    /// For each session, who called a teammate and is still waiting for it to come, first first: a teammate's id,
+    /// or nil for the session itself. A SubagentStart says nothing of who called, so the next one to come goes with
+    /// the first call still open; with none open, the session called it.
+    private var calls: [String: [String?]] = [:]
+    /// Open calls kept per session: a call that never brought anyone (refused, say) can't pile up.
+    static let maxCalls = 16
 
     public private(set) var nicknames: Nicknames
 
@@ -294,12 +307,17 @@ public struct OfficeState: Equatable {
     public func toolKind(session id: String) -> HookEvent.ToolKind? { kinds["s:" + id] }
     public func toolKind(teammate id: String) -> HookEvent.ToolKind? { kinds["a:" + id] }
 
-    /// Keeps the latest kind of tool under `key`, and forgets it when a new prompt or the end of a turn comes.
+    /// Keeps the latest kind of tool under `key`, and forgets it when a new prompt or the end of a turn comes. A
+    /// call for a teammate (a teammate tool other than SendMessage) waits for the next newcomer.
     private mutating func note(_ event: HookEvent, at key: String) {
         if let kind = event.toolKind {
             kinds[key] = kind
         } else if [.userPromptSubmit, .stop, .sessionStart, .subagentStop].contains(event.kind) {
             kinds[key] = nil
+        }
+        if event.toolKind == .team, !event.sendsMessage {
+            calls[event.session, default: []].append(event.agentID)
+            if calls[event.session]!.count > Self.maxCalls { calls[event.session]!.removeFirst() }
         }
     }
 
@@ -358,7 +376,8 @@ public struct OfficeState: Equatable {
         note(event, at: "a:" + agentID)
         switch (event.kind, index) {
         case (.subagentStop, let i?):
-            mates.remove(at: i)
+            let leaving = mates.remove(at: i)
+            for k in mates.indices where mates[k].calledBy == agentID { mates[k].calledBy = leaving.calledBy }
             news["a:" + agentID] = nil
             vacate(.teammate(agentID))
             closeEmptyIslands()
@@ -377,8 +396,12 @@ public struct OfficeState: Equatable {
                 mate.labelNumber = Self.number(
                     keeping: mate.nickname == nil ? mate.number : nil,
                     taken: teammateNumbers(showing: mate.shownName))
+                if event.kind == .subagentStart, let caller = calls[event.session]?.first {
+                    calls[event.session]!.removeFirst()
+                    mate.calledBy = caller.flatMap { id in mates.contains { $0.id == id } ? id : nil }
+                }
                 mates.append(mate)
-                sit(.teammate(agentID), folder: desks[d].folder, near: event.session)
+                sit(.teammate(agentID), folder: desks[d].folder, near: event.session, caller: mate.calledBy)
             }
         }
         desks[d].sessions[s].teammates = mates
@@ -420,9 +443,10 @@ public struct OfficeState: Equatable {
             ($0.quietSince ?? .distantPast, $0.id) < ($1.quietSince ?? .distantPast, $1.id)
         }
         return first.map { session in
-            Meeting(
-                session: session, members: Array(session.teammates.prefix(Self.meetingSeats - 1)),
-                more: max(0, session.teammates.count - (Self.meetingSeats - 1)))
+            let direct = session.direct
+            return Meeting(
+                session: session, members: Array(direct.prefix(Self.meetingSeats - 1)),
+                more: max(0, direct.count - (Self.meetingSeats - 1)))
         }
     }
 
@@ -580,10 +604,13 @@ public struct OfficeState: Equatable {
     }
 
     /// Seats someone who just arrived. A session takes the island nearest the door that has room. A teammate
-    /// sits at its session's island, else at the island with room nearest to it, else at a new island. A new
-    /// island takes the free place nearest the door; no island ever moves.
-    private mutating func sit(_ who: Occupant, folder: String, near session: String? = nil) {
-        let home = session.flatMap { id in islands.first { $0.seats.contains(.session(id)) }?.slot } ?? 0
+    /// sits at its caller's island (the teammate that called it, else its session), else at the island with room
+    /// nearest to it, else at a new island. A new island takes the free place nearest the door; no island ever
+    /// moves.
+    private mutating func sit(_ who: Occupant, folder: String, near session: String? = nil, caller: String? = nil) {
+        let placed = islands
+        let callers = [caller.map(Occupant.teammate), session.map(Occupant.session)].compactMap { $0 }
+        let home = callers.compactMap { occupant in placed.first { $0.seats.contains(occupant) }?.slot }.first ?? 0
         let open = islands.indices.filter { islands[$0].seat(for: folder) != nil }.map { i in
             (i: i, distance: abs(islands[i].slot - home), slot: islands[i].slot)
         }
@@ -627,6 +654,7 @@ public struct OfficeState: Equatable {
                 vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.label))
                 news["s:" + session.id] = nil
                 kinds["s:" + session.id] = nil
+                calls[session.id] = nil
                 for mate in session.teammates {
                     vacate(.teammate(mate.id))
                     news["a:" + mate.id] = nil

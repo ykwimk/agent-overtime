@@ -51,8 +51,12 @@ final class Stage: ObservableObject {
         let state: WorkState
         /// Its session is in a meeting.
         let meets: Bool
+        /// The teammate that called this one, if a teammate did.
+        var caller: String? = nil
         var place = Place.desk
         var waits: Bool { state == .waiting }
+        /// Who a teammate goes to and comes from: the teammate that called it, else its session.
+        var host: String { caller.map { "m:" + $0 } ?? "p:" + session }
     }
 
     /// Everyone on the move at one moment.
@@ -156,7 +160,7 @@ final class Stage: ObservableObject {
                 case .teammate(let mate, let session):
                     people[id] = Person(
                         look: look, slot: pod.slot, seat: index, arrived: mate.arrived, session: session.id,
-                        isSession: false, state: mate.state, meets: session.meets)
+                        isSession: false, state: mate.state, meets: session.meets, caller: mate.calledBy)
                     if meeting?.session.id == session.id,
                         let turn = meeting?.members.firstIndex(where: { $0.id == mate.id })
                     {
@@ -219,11 +223,11 @@ final class Stage: ObservableObject {
                 to: person.place))
     }
 
-    /// ① Once a newcomer sits down, their session walks over to their desk, talks for a moment and walks back.
-    /// Not while the session waits for an answer, and not when two or more came within `together`: they may meet
-    /// instead (③).
+    /// ① Once a newcomer sits down, whoever called it (its session, or the teammate that called it) walks over to
+    /// its desk, talks for a moment and walks back. Not while the caller waits for an answer or meets, and not when
+    /// two or more came within `together`: they may meet instead (③).
     private func visit(_ id: String, _ mate: Person, _ people: [String: Person], _ now: Date) {
-        let host = "p:" + mate.session
+        let host = mate.host
         guard let arrived = mate.arrived else { return }
         let others = Self.cameWith(id, mate, people)
         if !others.isEmpty {
@@ -246,20 +250,20 @@ final class Stage: ObservableObject {
                 from: .desk, to: .desk, partner: id))
     }
 
-    /// The session's other teammates that came within `together` of this one.
+    /// The other teammates of the same caller that came within `together` of this one.
     private static func cameWith(_ id: String, _ mate: Person, _ people: [String: Person]) -> Set<String> {
         guard let arrived = mate.arrived else { return [] }
         return Set(
             people.filter { other in
-                other.key != id && !other.value.isSession && other.value.session == mate.session
+                other.key != id && !other.value.isSession && other.value.host == mate.host
                     && other.value.arrived.map { abs($0.timeIntervalSince(arrived)) < Self.together } ?? false
             }.keys)
     }
 
-    /// ② The session a leaving teammate reports to: at its desk (not in the meeting room), and only after the
+    /// ② Who a leaving teammate reports to, its caller: at its desk (not in the meeting room), and only after the
     /// teammate worked a while.
     private func host(reportedToBy person: Person, _ people: [String: Person], _ now: Date) -> Person? {
-        let id = "p:" + person.session
+        let id = person.host
         guard !person.isSession, person.place == .desk, let host = people[id], host.place == .desk,
             present[id]?.place == .desk, now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
         else { return nil }
@@ -279,16 +283,16 @@ final class Stage: ObservableObject {
                 seatTalks.removeAll { $0.start > now && others.contains($0.partner ?? "") }
                 continue
             }
-            let host = "p:" + mate.session
-            guard let arrived = mate.arrived, let session = people[host], session.place == .desk, !session.waits,
-                !session.meets
+            let host = mate.host
+            guard let arrived = mate.arrived, let caller = people[host], caller.place == .desk, !caller.waits,
+                !caller.meets
             else { continue }
             let start = arrived + Self.together
-            seatTalks.append((start, start + Self.talkTime, markAtSeat(session), host, id))
+            seatTalks.append((start, start + Self.talkTime, markAtSeat(caller), host, id))
         }
         for (id, mate) in present where people[id] == nil {
-            guard let session = host(reportedToBy: mate, people, now) else { continue }
-            seatTalks.append((now, now + Self.talkTime, markAtSeat(session), "p:" + mate.session, nil))
+            guard let caller = host(reportedToBy: mate, people, now) else { continue }
+            seatTalks.append((now, now + Self.talkTime, markAtSeat(caller), mate.host, nil))
         }
     }
 

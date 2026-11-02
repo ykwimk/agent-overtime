@@ -158,6 +158,22 @@ final class SidePanel: ObservableObject {
         }
     }
 
+    /// A session's teammates in the panel's order: each teammate's own teammates under it, a step further in.
+    static func tree(_ session: Session) -> [(mate: Teammate, depth: Int)] {
+        let ids = Set(session.teammates.map(\.id))
+        var rows: [(mate: Teammate, depth: Int)] = []
+        func add(under caller: String?, depth: Int) {
+            for mate in session.teammates
+            where mate.calledBy == caller || (caller == nil && !ids.contains(mate.calledBy ?? "")) {
+                guard !rows.contains(where: { $0.mate.id == mate.id }) else { continue }
+                rows.append((mate, depth))
+                add(under: mate.id, depth: depth + 1)
+            }
+        }
+        add(under: nil, depth: 0)
+        return rows
+    }
+
     /// What someone shown is doing now: only while they work, and only as a kind of tool.
     static func doing(_ kind: PanelSelection.Kind, in office: OfficeState) -> HookEvent.ToolKind? {
         switch kind {
@@ -597,12 +613,13 @@ struct SidePanelView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Teammates").font(.headline)
             if session.teammates.isEmpty { Text("No teammates").foregroundStyle(.secondary) }
-            ForEach(session.teammates) { mate in
+            ForEach(SidePanel.tree(session), id: \.mate.id) { mate, depth in
                 Button {
                     panel.open(PanelSelection(teammate: mate, in: office))
                 } label: {
                     HStack {
                         Text(verbatim: mate.label).lineLimit(1).truncationMode(.middle)
+                            .padding(.leading, CGFloat(min(depth, 4)) * 14)
                         Spacer(minLength: 8)
                         ticking(every: 30) { now in
                             mate.state.label(since: mate.since, now: now).foregroundStyle(mate.state.color)
