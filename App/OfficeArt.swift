@@ -630,6 +630,23 @@ struct OfficeRenderer {
             }
             for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 20) }
             for walker in walkers where walker.y >= t.y + 10 { self.walker(walker) }
+            // Bubbles as at the desks: beside the head facing the room, at the shoulder with the back to it (the
+            // outer side at the ends). Someone waiting stays seated with a hopping "!", and the glass door shows
+            // one too, for a room seen from across the office.
+            let hop = scene.frame % 2 == 1 ? 2 : 0
+            for person in scene.room {
+                let x = room.seats[person.seat].x
+                let y = person.state == .waiting ? -hop : 0
+                switch person.seat {
+                case 0..<3: marks.append((Mark(person.state), x + 9, t.y - 25 + y, .down))
+                case 3: marks.append((Mark(person.state), x - 27, t.y + 17 + y, .right))
+                default: marks.append((Mark(person.state), x + 14, t.y + 17 + y, .left))
+                }
+            }
+            if scene.room.contains(where: { $0.state == .waiting }) {
+                let top = MeetingRoom.front - MeetingRoom.glassHeight
+                marks.append((.bang, room.left + MeetingRoom.doorX + 5, top + 6 - hop, .down))
+            }
             glass(left: room.left, right: scene.layout.width, doorOpen: scene.meetingDoorOpen)
             // Pots along the glass: a tall one left of the door, low ones taking turns to its right.
             for (index, pot) in room.planters.enumerated() {
