@@ -31,7 +31,7 @@
     "Clear Recent Folders" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "최근 폴더 지우기" } } } },
     "Helper" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "도우미" } } } },
     "In a meeting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "회의 중" } } } },
-    "In a meeting · %lld teammates" : { "localizations" : { "en" : { "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "In a meeting · %lld teammate" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "In a meeting · %lld teammates" } } } } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "회의 중 · 팀원 %lld" } } } },
+    "In a meeting · %lld teammates" : { "localizations" : { "en" : { "variations" : { "plural" : { "one" : { "stringUnit" : { "state" : "translated", "value" : "Meeting with %lld" } }, "other" : { "stringUnit" : { "state" : "translated", "value" : "Meeting with %lld" } } } } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "회의 중 · 팀원 %lld" } } } },
     "Install the plugin so Claude Code tells this app when it works." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code 가 일할 때 이 앱에 알리도록 플러그인을 설치해 주세요." } } } },
     "It opens a new Terminal window. The app never adds options to your command." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "새 터미널 창에서 열립니다. 앱은 명령에 옵션을 덧붙이지 않습니다." } } } },
     "Later" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "나중에" } } } },
