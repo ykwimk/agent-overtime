@@ -692,18 +692,32 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// The README picture (copied by hand to docs/images/): the example office in the default window, my-project
-    /// meeting its three teammates (Plan waiting for an answer at the table), the others at their islands. Light
-    /// by day, dark by night.
+    /// The README picture (copied by hand to docs/images/): the example office in the default window, one island a
+    /// session, my-project's side panel open with its details. Light by day, dark by night.
     func testCaptureReadme() throws {
+        let project = FakeScenario.root + "/my-project"
         for (time, hour) in [("day", 14), ("night", 22)] {
+            let now = today(hour)
             let model = makeModel(connected: true)
-            for event in FakeScenario.events { model.receive(event, at: today(hour) - 200) }
-            model.advanceMeetings(to: today(hour))
-            XCTAssertEqual(model.office.meeting?.members.count, 3)
+            for event in FakeScenario.events { model.receive(event, at: now - 200) }
+            // my-project's side panel, Show Details on: its model, task list, edits and what it does now.
+            func send(_ seconds: TimeInterval, _ change: (inout HookEvent) -> Void) {
+                var event = HookEvent(kind: .preToolUse, session: "demo-b1", cwd: project)
+                change(&event)
+                model.receive(event, at: now - seconds)
+            }
+            send(190) { ($0.kind, $0.model) = (.postModelSwitch, "claude-opus-4-7") }
+            send(180) { ($0.toolKind, $0.file) = (.read, "src/app.css") }
+            send(150) {
+                ($0.toolKind, $0.taskAction, $0.todoTotal, $0.todoDone) = (.tasks, .todo, 3, 1)
+                $0.taskTitle = "Match the button colours"
+            }
+            send(120) { ($0.toolKind, $0.file, $0.linesAdded, $0.linesRemoved) = (.edit, "notes.md", 2, 2) }
+            send(30) { ($0.toolKind, $0.file, $0.linesAdded, $0.linesRemoved) = (.edit, "…/ui/button.css", 5, 1) }
+            XCTAssertEqual(model.office.islands.map(\.slot), [0, 1, 2, 3])
             try capture(
                 "readme-\(time)", size: OfficeView.defaultSize,
-                OfficeView(fixedNow: today(hour)).environmentObject(model))
+                OfficeView(fixedNow: now, panel: try panel(model, slot: 0, index: 0)).environmentObject(model))
         }
     }
 

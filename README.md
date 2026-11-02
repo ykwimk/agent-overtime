@@ -8,7 +8,7 @@ Works with Claude Code. Not affiliated with Anthropic.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
-  <img alt="The office window: sessions and their subagents at islands of four desks, one session meeting its subagents in the glass meeting room, and a lounge" src="docs/images/office-light.png">
+  <img alt="The office window: each session at its own island of four desks with its subagents, and one session's side panel open with its state, what it is doing, its tasks, edited lines and latest steps" src="docs/images/office-light.png">
 </picture>
 
 | State | What it means | What you see |

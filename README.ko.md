@@ -8,7 +8,7 @@ Claude Code 와 함께 씁니다. Anthropic 과 관계없는 오픈소스 앱입
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
-  <img alt="사무실 창: 세션과 서브에이전트가 책상 네 개짜리 섬에 앉고, 한 세션은 통유리 회의실에서 서브에이전트들과 회의하고, 옆에 라운지가 있습니다" src="docs/images/office-light.png">
+  <img alt="사무실 창: 세션마다 책상 네 개짜리 섬에 서브에이전트와 함께 앉고, 한 세션의 옆 창에 상태·지금 하는 일·할 일·고친 줄·최근 한 일이 열려 있습니다" src="docs/images/office-light.png">
 </picture>
 
 | 상태 | 뜻 | 화면 |
