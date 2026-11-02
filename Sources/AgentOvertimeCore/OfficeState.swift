@@ -128,6 +128,7 @@ public struct PersonDetail: Equatable {
 
     static let maxSteps = 4
     static let maxEdits = 20
+    static let maxCalled = 128
 
     /// The latest steps, newest last (the last may be what they do now); one for a run of the same kind on the same
     /// file.
@@ -590,7 +591,10 @@ public struct OfficeState: Equatable {
                 }
                 mates.append(mate)
                 sit(.teammate(agentID), at: event.session)
-                if event.kind == .subagentStart {
+                // Capped: starts and stops over and over between two prompts can't pile up ids.
+                if event.kind == .subagentStart,
+                    details["s:" + event.session]?.called.count ?? 0 < PersonDetail.maxCalled
+                {
                     details["s:" + event.session, default: PersonDetail()].called[agentID] = false
                 }
             }

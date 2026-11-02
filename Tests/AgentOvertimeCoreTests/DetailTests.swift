@@ -152,6 +152,18 @@ final class PersonDetailTests: XCTestCase {
         XCTAssertEqual(tasks()?.total, TaskList.maxTasks, "the oldest go")
     }
 
+    /// Teammates starting and stopping over and over between two prompts can't make the count grow without end.
+    func testTheTeammateCountIsCapped() {
+        var office = OfficeState()
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder), now: t0)
+        for i in 0..<200 {
+            office.apply(HookEvent(kind: .subagentStart, session: "s1", cwd: folder, agentID: "x\(i)"), now: t0)
+            office.apply(HookEvent(kind: .subagentStop, session: "s1", cwd: folder, agentID: "x\(i)"), now: t0)
+        }
+        XCTAssertLessThanOrEqual(office.detail(session: "s1")?.teamCalled ?? 0, 128)
+        XCTAssertEqual(office.detail(session: "s1")?.teamDone, office.detail(session: "s1")?.teamCalled)
+    }
+
     /// The session's teammates since its last prompt; details go with whoever leaves, and nobody unseated has any.
     func testTeammatesAndCleanUp() throws {
         var office = OfficeState()
