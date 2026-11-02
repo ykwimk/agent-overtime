@@ -80,6 +80,33 @@ extension WorkState {
     }
 }
 
+extension HookEvent.ToolKind {
+    /// What someone working is doing now, in one of six fixed phrases: only these words ever show, never a tool's
+    /// name or anything received.
+    var phrase: Text {
+        switch self {
+        case .read: return Text("Reading files")
+        case .edit: return Text("Editing files")
+        case .command: return Text("Running a command")
+        case .web: return Text("Searching the web")
+        case .team: return Text("Calling teammates")
+        case .other: return Text("Using another tool")
+        }
+    }
+
+    /// The same phrase for VoiceOver to say.
+    var spoken: String {
+        switch self {
+        case .read: return String(localized: "Reading files")
+        case .edit: return String(localized: "Editing files")
+        case .command: return String(localized: "Running a command")
+        case .web: return String(localized: "Searching the web")
+        case .team: return String(localized: "Calling teammates")
+        case .other: return String(localized: "Using another tool")
+        }
+    }
+}
+
 extension Teammate {
     /// "Explore", or "Explore 2" while another Explore works too; its nickname in place of its name if it has one.
     var displayName: Text {

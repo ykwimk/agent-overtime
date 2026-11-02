@@ -228,8 +228,9 @@ public struct OfficeState: Equatable {
     /// Islands in use, nearest the door first. Kept in memory only: after a restart nobody's seat is remembered.
     public private(set) var islands: [Island] = []
     /// When each session ("s:" and its id) and teammate ("a:" and its id) last sent news while the app listened,
-    /// by the app's clock. Memory only, and gone with them.
+    /// by the app's clock, and the kind of tool each is running. Memory only, and gone with them.
     private var news: [String: Date] = [:]
+    private var kinds: [String: HookEvent.ToolKind] = [:]
 
     public private(set) var nicknames: Nicknames
 
@@ -289,6 +290,19 @@ public struct OfficeState: Equatable {
     public func lastNews(session id: String) -> Date? { news["s:" + id] }
     public func lastNews(teammate id: String) -> Date? { news["a:" + id] }
 
+    /// The kind of tool a session or teammate last started, until its turn ends or it is asked something new.
+    public func toolKind(session id: String) -> HookEvent.ToolKind? { kinds["s:" + id] }
+    public func toolKind(teammate id: String) -> HookEvent.ToolKind? { kinds["a:" + id] }
+
+    /// Keeps the latest kind of tool under `key`, and forgets it when a new prompt or the end of a turn comes.
+    private mutating func note(_ event: HookEvent, at key: String) {
+        if let kind = event.toolKind {
+            kinds[key] = kind
+        } else if [.userPromptSubmit, .stop, .sessionStart, .subagentStop].contains(event.kind) {
+            kinds[key] = nil
+        }
+    }
+
     public func session(_ id: String) -> Session? {
         desks.lazy.flatMap(\.sessions).first { $0.id == id }
     }
@@ -330,6 +344,7 @@ public struct OfficeState: Equatable {
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
         guard let agentID = event.agentID else {
             news["s:" + event.session] = now
+            note(event, at: "s:" + event.session)
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
@@ -340,6 +355,7 @@ public struct OfficeState: Equatable {
         var mates = desks[d].sessions[s].teammates
         let index = mates.firstIndex { $0.id == agentID }
         news["a:" + agentID] = now
+        note(event, at: "a:" + agentID)
         switch (event.kind, index) {
         case (.subagentStop, let i?):
             mates.remove(at: i)
@@ -610,9 +626,11 @@ public struct OfficeState: Equatable {
             for session in leaving {
                 vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.label))
                 news["s:" + session.id] = nil
+                kinds["s:" + session.id] = nil
                 for mate in session.teammates {
                     vacate(.teammate(mate.id))
                     news["a:" + mate.id] = nil
+                    kinds["a:" + mate.id] = nil
                 }
             }
             desks[d].sessions.removeAll { session in leaving.contains { $0.id == session.id } }

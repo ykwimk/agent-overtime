@@ -298,4 +298,28 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertTrue(office.hasLiveSession(in: FakeScenario.root), "a start script may open sessions in subfolders")
         XCTAssertFalse(office.hasLiveSession(in: FakeScenario.root + "/web"), "a name prefix is not a subfolder")
     }
+
+    /// The latest kind of tool stays in memory for the side panel until the turn ends, and goes with the session or
+    /// teammate. It changes nothing drawn, so the office stays equal.
+    func testTheLatestToolKindIsKeptInMemoryOnly() {
+        var office = OfficeState()
+        office.apply(event(.userPromptSubmit), now: t0)
+        let before = office
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .edit), now: t0 + 1)
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .command), now: t0 + 2)
+        XCTAssertEqual(office.toolKind(session: "s1"), .command)
+        XCTAssertEqual(office, before, "the same picture")
+        office.apply(
+            HookEvent(kind: .preToolUse, session: "s1", cwd: shop, agentID: "a1", toolKind: .read), now: t0 + 3)
+        XCTAssertEqual(office.toolKind(teammate: "a1"), .read)
+        office.apply(event(.permissionRequest), now: t0 + 4)
+        XCTAssertEqual(office.toolKind(session: "s1"), .command, "a wait keeps it")
+        office.apply(event(.stop), now: t0 + 5)
+        XCTAssertNil(office.toolKind(session: "s1"), "the turn ended")
+        office.apply(event(.subagentStop, agent: "a1"), now: t0 + 6)
+        XCTAssertNil(office.toolKind(teammate: "a1"))
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .web), now: t0 + 7)
+        office.apply(event(.sessionEnd), now: t0 + 8)
+        XCTAssertNil(office.toolKind(session: "s1"))
+    }
 }

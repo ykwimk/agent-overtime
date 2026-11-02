@@ -142,16 +142,29 @@ final class SidePanel: ObservableObject {
             if meets { words.append(String(localized: "In a meeting")) }
             return words
         }
+        let now = doing(kind, in: office).map { [$0.spoken] } ?? []
         switch kind {
         case .session(let id):
             guard let session = office.session(id) else { return nil }
-            return ([session.label] + state(session.state, since: session.since, meets: session.meets))
+            return ([session.label] + state(session.state, since: session.since, meets: session.meets) + now)
                 .joined(separator: ", ")
         case .teammate(let id):
             guard let (mate, session) = office.teammate(id) else { return nil }
             return
                 ([mate.label, String(localized: "teammate of \(session.label)")]
-                + state(mate.state, since: mate.since, meets: session.meets)).joined(separator: ", ")
+                + state(mate.state, since: mate.since, meets: session.meets) + now).joined(separator: ", ")
+        case .off:
+            return nil
+        }
+    }
+
+    /// What someone shown is doing now: only while they work, and only as a kind of tool.
+    static func doing(_ kind: PanelSelection.Kind, in office: OfficeState) -> HookEvent.ToolKind? {
+        switch kind {
+        case .session(let id):
+            return office.session(id)?.state == .working ? office.toolKind(session: id) : nil
+        case .teammate(let id):
+            return office.teammate(id)?.teammate.state == .working ? office.toolKind(teammate: id) : nil
         case .off:
             return nil
         }
@@ -463,13 +476,15 @@ struct SidePanelView: View {
                 header(Text(verbatim: session.label), auto: named ? Text(verbatim: session.name) : nil)
                 details(
                     role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
-                    teammateWaiting: session.teammateWaiting, news: news)
+                    teammateWaiting: session.teammateWaiting, doing: SidePanel.doing(selection.kind, in: office),
+                    news: news)
                 teammates(session, in: office)
             case .teammate(let mate, let session, let news):
                 header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
                 details(
                     role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
-                    meets: session.meets, teammateWaiting: false, news: news)
+                    meets: session.meets, teammateWaiting: false, doing: SidePanel.doing(selection.kind, in: office),
+                    news: news)
             case .wentHome(let name):
                 wentHome(name)
             }
@@ -550,7 +565,8 @@ struct SidePanelView: View {
     /// "Session" or "Teammate of my-project", the state and for how long (a wait first, then the meeting), and
     /// when the app last heard from them.
     @ViewBuilder private func details(
-        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool, news: Date?
+        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool,
+        doing: HookEvent.ToolKind?, news: Date?
     ) -> some View {
         role.foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 4) {
@@ -561,6 +577,7 @@ struct SidePanelView: View {
                         .foregroundStyle(state.color)
                 }
             }
+            if let doing { doing.phrase }
             if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
             if meets { Text("In a meeting") }
         }
