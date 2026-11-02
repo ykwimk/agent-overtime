@@ -495,7 +495,7 @@ struct OfficeRoom: View {
                     )
                     .frame(width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale))
                     .accessibilityHidden(true)
-                    tags(synced.pods, synced.layout)
+                    tags(synced.pods, synced.layout, meeting: model.office.meeting)
                 }
                 .frame(
                     width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale),
@@ -505,18 +505,26 @@ struct OfficeRoom: View {
     }
 
     /// Name tags only change by the minute ("Waiting · 3 min"), so they tick slowly on their own.
-    @ViewBuilder private func tags(_ pods: [Pod], _ layout: RoomLayout) -> some View {
+    @ViewBuilder private func tags(_ pods: [Pod], _ layout: RoomLayout, meeting: OfficeState.Meeting?) -> some View {
         if let fixedNow {
-            tagLayer(pods, layout, now: fixedNow)
+            tagLayer(pods, layout, meeting: meeting, now: fixedNow)
         } else {
             TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 30)) { context in
-                tagLayer(pods, layout, now: context.date)
+                tagLayer(pods, layout, meeting: meeting, now: context.date)
             }
         }
     }
 
-    private func tagLayer(_ pods: [Pod], _ layout: RoomLayout, now: Date) -> some View {
+    private func tagLayer(_ pods: [Pod], _ layout: RoomLayout, meeting: OfficeState.Meeting?, now: Date) -> some View {
         ZStack(alignment: .topLeading) {
+            if let meeting, let room = layout.meetingRoom {
+                let pixel = CGFloat(RoomLayout.pointsPerPixel)
+                let door = CGFloat(room.left + MeetingRoom.doorX + MeetingRoom.doorWidth / 2) * pixel
+                let top = CGFloat(MeetingRoom.front - MeetingRoom.glassHeight - 1) * pixel
+                MeetingTag(name: meeting.session.name, more: meeting.more)
+                    .frame(width: SeatTag.deskPoints, height: 40, alignment: .bottom)
+                    .offset(x: door - SeatTag.deskPoints / 2, y: top - 40)
+            }
             ForEach(pods) { pod in
                 let origin = layout.origin(of: pod.slot)
                 ForEach(0..<Island.size, id: \.self) { index in
@@ -580,10 +588,17 @@ struct SeatTag: View {
                         Text("+\(unseated)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
                     }
                 }
-                session.state.label(since: session.since, now: now).font(.subheadline).foregroundStyle(
-                    session.state.tagColor)
+                // In a meeting the meeting takes the place of "Working" or "Resting"; a wait still comes first.
+                if !session.meets || session.state == .waiting {
+                    session.state.label(since: session.since, now: now).font(.subheadline).foregroundStyle(
+                        session.state.tagColor)
+                }
                 if session.teammateWaiting {
                     Text("Teammate waiting").font(.subheadline).foregroundStyle(Style.waiting)
+                }
+                if session.meets {
+                    Text("In a meeting · \(session.teammates.count) teammates").font(.subheadline).foregroundStyle(
+                        Style.tagText)
                 }
             }
         case .teammate(let mate, _):
@@ -646,6 +661,26 @@ final class KeyboardNavigation: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { NSApp.postEvent(event, atStart: true) }
             return nil
         }
+    }
+}
+
+/// Over the meeting room's glass door: whose meeting it is, and "+n" for teammates with no seat left at the
+/// table. VoiceOver hears it from the session's own seat.
+private struct MeetingTag: View {
+    let name: String
+    let more: Int
+
+    var body: some View {
+        Tag {
+            HStack(spacing: 4) {
+                Text(verbatim: name).font(.subheadline.weight(.semibold)).truncationMode(.middle)
+                    .foregroundStyle(Style.tagText)
+                if more > 0 {
+                    Text("+\(more)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
