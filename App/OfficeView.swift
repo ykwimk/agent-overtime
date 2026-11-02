@@ -356,11 +356,13 @@ struct OfficeBar: View {
         let office = model.office
         guard office.liveSessionCount > 0 else { return Text("No sessions running").foregroundColor(.secondary) }
         let waiting = office.count(.waiting)
+        let quiet = office.count(.quiet)
         return Text("Working \(office.count(.working))")
             + Text(verbatim: " · ")
             + Text("Waiting \(waiting)").foregroundColor(waiting > 0 ? Style.waiting : .primary)
             + Text(verbatim: " · ")
             + Text("Resting \(office.count(.resting))")
+            + (quiet > 0 ? Text(verbatim: " · ") + Text("Quiet \(quiet)") : Text(verbatim: ""))
     }
 
     /// One message under the summary. It wraps and puts its links on the next line, so nothing is cut at 420 pt.
