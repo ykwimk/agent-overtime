@@ -440,6 +440,32 @@ final class Stage: ObservableObject {
             .min()
     }
 
+    /// Whose desk a point of the picture (art pixels) shows: someone sitting there, or someone at the meeting
+    /// table (their own desk's seat is given). Nobody while they walk.
+    func seat(at point: (x: Int, y: Int), now: Date) -> (slot: Int, index: Int)? {
+        let walking = Set(trips.filter { $0.value.start <= now && now < $0.value.end }.keys)
+        if let room = layout.meetingRoom {
+            let table = MeetingRoom.table
+            for (id, person) in present where !walking.contains(id) {
+                guard case .room(let seat) = person.place else { continue }
+                let top = seat < 3 ? table.y - 28 : table.y + 10
+                if abs(point.x - room.seats[seat].x) <= 14, (top..<top + 36).contains(point.y) {
+                    return (person.slot, person.seat)
+                }
+            }
+        }
+        for pod in pods {
+            let origin = layout.origin(of: pod.slot)
+            guard (origin.x..<origin.x + RoomLayout.islandWidth).contains(point.x),
+                (origin.y..<origin.y + RoomLayout.islandDepth).contains(point.y)
+            else { continue }
+            let index =
+                (point.x < origin.x + RoomLayout.deskWidth ? 0 : 2) + (point.y < origin.y + RoomLayout.nearDesk ? 1 : 0)
+            return pod.seats[index] == nil ? nil : (pod.slot, index)
+        }
+        return nil
+    }
+
     /// Where everyone on the move is at `now`, and who sits in the meeting room.
     func moment(at now: Date) -> Moment {
         var moment = Moment()
@@ -538,6 +564,8 @@ struct OfficeRoom: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var systemReducesMotion
     @StateObject private var stage: Stage
+    @ObservedObject var panel: SidePanel
+    var focus: FocusState<OfficeFocus?>.Binding
     /// Screenshots pin the clock; the frame then stays at 0.
     let fixedNow: Date?
     /// Only the CPU test sets this: its window may open behind a full-screen app, where nothing would tick.
@@ -546,7 +574,12 @@ struct OfficeRoom: View {
     let reducesMotion: Bool
     private var reduceMotion: Bool { systemReducesMotion || reducesMotion }
 
-    init(fixedNow: Date? = nil, stage: Stage? = nil, ticksWhileHidden: Bool = false, reducesMotion: Bool = false) {
+    init(
+        panel: SidePanel, focus: FocusState<OfficeFocus?>.Binding, fixedNow: Date? = nil, stage: Stage? = nil,
+        ticksWhileHidden: Bool = false, reducesMotion: Bool = false
+    ) {
+        self.panel = panel
+        self.focus = focus
         self.fixedNow = fixedNow
         self.ticksWhileHidden = ticksWhileHidden
         self.reducesMotion = reducesMotion
@@ -568,6 +601,14 @@ struct OfficeRoom: View {
                     )
                     .frame(width: CGFloat(synced.layout.width * scale), height: CGFloat(height * scale))
                     .accessibilityHidden(true)
+                    // Pressing a character opens its panel, at a desk or at the meeting table.
+                    .onTapGesture { location in
+                        let point = (x: Int(location.x) / scale, y: Int(location.y) / scale)
+                        guard let at = stage.seat(at: point, now: fixedNow ?? Date()),
+                            let seat = synced.pods.first(where: { $0.slot == at.slot })?.seats[at.index]
+                        else { return }
+                        panel.open(PanelSelection(seat, at: .seat(slot: at.slot, index: at.index)))
+                    }
                     tags(synced.pods, synced.layout, meeting: model.office.meeting)
                 }
                 .frame(
@@ -602,7 +643,12 @@ struct OfficeRoom: View {
                 let origin = layout.origin(of: pod.slot)
                 ForEach(0..<Island.size, id: \.self) { index in
                     if let seat = pod.seats[index] {
+                        let place = OfficeFocus.seat(slot: pod.slot, index: index)
                         SeatTag(seat: seat, across: RoomLayout.isAcross(index), now: now)
+                            .focused(focus, equals: place)
+                            .onTapGesture { panel.open(PanelSelection(seat, at: place)) }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { panel.open(PanelSelection(seat, at: place)) }
                             .offset(
                                 x: CGFloat((origin.x + RoomLayout.deskX(index)) * RoomLayout.pointsPerPixel),
                                 y: CGFloat(
@@ -727,6 +773,10 @@ struct SeatTag: View {
 final class KeyboardNavigation: ObservableObject {
     static let shared = KeyboardNavigation()
     @Published var active = false
+    /// What Space (outside text fields) and Esc do in the office window: open the focused seat's panel, press the
+    /// focused button in it, close it. Set by the office view, since macOS 13 has no onKeyPress. True when used.
+    var space: (() -> Bool)?
+    var escape: (() -> Bool)?
     private var monitor: Any?
 
     private init() {
@@ -736,6 +786,11 @@ final class KeyboardNavigation: ObservableObject {
             guard event.type == .keyDown else {
                 if self.active { self.active = false }
                 return event
+            }
+            if event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty {
+                let typing = event.window?.firstResponder is NSText
+                if event.keyCode == 49, !typing, self.space?() == true { return nil }  // 49: Space
+                if event.keyCode == 53, self.escape?() == true { return nil }  // 53: Esc
             }
             guard event.keyCode == 48, !self.active else { return event }  // 48: Tab
             self.active = true

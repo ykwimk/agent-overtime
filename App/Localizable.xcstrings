@@ -41,6 +41,7 @@
     "No start command yet." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "등록한 출근 명령이 없어요." } } } },
     "Nobody's at work yet" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "아직 아무도 출근 안 했어요" } } } },
     "Not connected · Connect…" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "연결 안 됨 · 연결하기…" } } } },
+    "Close" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "닫기" } } } },
     "Off duty" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "퇴근" } } } },
     "Open Office" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "사무실 열기" } } } },
     "Open Settings" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "설정 열기" } } } },
