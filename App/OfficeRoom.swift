@@ -741,8 +741,8 @@ struct OfficeRoom: View {
     }
 
     /// "2 more teams below · Waiting 1 ↓" in a right-hand corner, over the lounge when the window has one (else the
-    /// floor past the islands): the islands out of sight that way, and how many of them wait. Pressing it scrolls the
-    /// nearest into sight.
+    /// floor past the islands): the islands out of sight that way, and how many of them wait, in the waiting colour as
+    /// in the summary. Pressing it scrolls the nearest into sight.
     @ViewBuilder private func more(_ slots: [Int], below: Bool, _ pods: [Pod], _ proxy: ScrollViewProxy) -> some View {
         if let nearest = slots.first {
             let waiting = pods.filter { slots.contains($0.slot) && Self.waits($0) }.count
@@ -752,7 +752,9 @@ struct OfficeRoom: View {
                 }
             } label: {
                 (below ? Text("\(slots.count) more teams below") : Text("\(slots.count) more teams above"))
-                    + (waiting > 0 ? Text(verbatim: " · ") + Text("Waiting \(waiting)") : Text(verbatim: ""))
+                    + (waiting > 0
+                        ? Text(verbatim: " · ") + Text("Waiting \(waiting)").foregroundColor(Style.waiting)
+                        : Text(verbatim: ""))
                     + Text(verbatim: below ? " ↓" : " ↑")
             }
             .buttonStyle(.plain)

@@ -288,7 +288,7 @@ final class PanelTests: XCTestCase {
     }
 
     /// The panel's state badges read at 4.5:1 or more, light and dark: the word on its own fill, Quiet's on the
-    /// panel's background.
+    /// panel's background; and the waiting colour on a name tag's plate.
     func testStateBadgesKeepTheirContrast() throws {
         func luminance(_ color: NSColor) throws -> Double {
             let c = try XCTUnwrap(color.usingColorSpace(.sRGB))
@@ -311,6 +311,23 @@ final class PanelTests: XCTestCase {
                     let ratio = (max(text, fill) + 0.05) / (min(text, fill) + 0.05)
                     lines.append(String(format: "%@ %@ %.2f", name.rawValue, state.rawValue, ratio))
                     XCTAssertGreaterThanOrEqual(ratio, 4.5, "\(name.rawValue) \(state)")
+                }
+                // The waiting colour on a name tag's plate (and the "more teams" line), over the darkest and the
+                // lightest room behind the plate's slight see-through.
+                guard let plate = NSColor(Style.tagPlate).usingColorSpace(.sRGB),
+                    let waiting = try? luminance(NSColor(Style.waiting))
+                else { return XCTFail("plate") }
+                for behind in [0.0, 1.0] {
+                    let mixed = { (v: CGFloat) in
+                        v * plate.alphaComponent + CGFloat(behind) * (1 - plate.alphaComponent)
+                    }
+                    let back = NSColor(
+                        srgbRed: mixed(plate.redComponent), green: mixed(plate.greenComponent),
+                        blue: mixed(plate.blueComponent), alpha: 1)
+                    guard let fill = try? luminance(back) else { return XCTFail("plate") }
+                    let ratio = (max(waiting, fill) + 0.05) / (min(waiting, fill) + 0.05)
+                    lines.append(String(format: "%@ waiting on plate %.2f", name.rawValue, ratio))
+                    XCTAssertGreaterThanOrEqual(ratio, 4.5, "\(name.rawValue) waiting on plate")
                 }
             }
         }
