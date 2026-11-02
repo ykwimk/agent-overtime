@@ -769,10 +769,16 @@ struct SeatTag: View {
                         Style.tagText)
                 }
             }
-        case .teammate(let mate, _):
+        case .teammate(let mate, let session):
+            // At the meeting its empty seat says so, like the session's own tag; a wait still comes first.
+            let meets = session.meets(with: mate)
             Tag {
                 mate.displayName.font(.subheadline.weight(.medium))
-                mate.state.label(since: mate.since, now: now).font(.subheadline).foregroundStyle(mate.state.tagColor)
+                if !meets || mate.state == .waiting {
+                    mate.state.label(since: mate.since, now: now).font(.subheadline).foregroundStyle(
+                        mate.state.tagColor)
+                }
+                if meets { Text("In a meeting").font(.subheadline).foregroundStyle(Style.tagText) }
             }
         case .off(let name, _):
             // Faded: the name of someone who went home, while others still work at this island.
@@ -805,10 +811,12 @@ struct SeatTag: View {
             if unseated > 0 { text = text + comma + Text("\(unseated) more teammates") }
             return text
         case .teammate(let mate, let session):
-            var text = mate.displayName + comma + Text("teammate of \(session.label)") + comma + mate.state.word
+            let meets = session.meets(with: mate)
+            var text = mate.displayName + comma + Text("teammate of \(session.label)")
+            if !meets || mate.state == .waiting { text = text + comma + mate.state.word }
             let minutes = Int(now.timeIntervalSince(mate.since) / 60)
             if mate.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
-            if session.meets(with: mate) { text = text + comma + Text("In a meeting") }
+            if meets { text = text + comma + Text("In a meeting") }
             return text
         case .off(let name, _):
             return Text(verbatim: name) + comma + Text("Off duty")
