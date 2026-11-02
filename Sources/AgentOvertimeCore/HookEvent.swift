@@ -2,7 +2,8 @@ import Foundation
 
 /// One status event, cut down to the fields the office needs.
 /// Claude Code's hook input also carries tool names and input, prompts, file paths and transcripts. `fromHookInput`
-/// derives only a coarse tool kind (and a SendMessage recipient) from them; nothing else crosses the socket.
+/// derives only a tool kind (and a SendMessage recipient) from them. With Show Details on, `readDetails` also takes a
+/// shortened file path, line counts, a task's title, status and id, and the model; nothing else crosses the socket.
 public struct HookEvent: Codable, Equatable {
     /// What a PreToolUse is about to do, from a fixed list of Claude Code's built-in tools. One short value on the
     /// socket; the tool's name never is. The first six are v0.3's values, read the same; an app that doesn't know a
@@ -186,7 +187,8 @@ public struct HookEvent: Codable, Equatable {
             let cwd = object["cwd"] as? String
         else { return nil }
         // Only a PreToolUse's tool is looked at (a PermissionRequest's tool name and input are not read), and only
-        // SendMessage's input is opened, for its `to` alone.
+        // SendMessage's input is opened, for its `to` alone (and, with Show Details on, the few fields `readDetails`
+        // names).
         let tool = kind == .preToolUse ? object["tool_name"] : nil
         let sendsMessage = tool as? String == "SendMessage"
         var event = HookEvent(
