@@ -21,14 +21,46 @@ enum Style {
     static let tagText = dynamic(light: (0.11, 0.11, 0.12, 1), dark: (1, 1, 1, 1))
     static let tagSecondary = dynamic(light: (0.33, 0.33, 0.35, 1), dark: (0.72, 0.72, 0.74, 1))
 
+    /// The side panel's state badge: a soft fill with strong text of the same hue, the waiting yellow of the room's
+    /// "!" bubble. Quiet has no fill, only a grey border. 4.5:1 or more, light and dark (a test measures it).
+    static func badge(_ state: WorkState) -> (fill: NSColor, text: NSColor, border: NSColor) {
+        switch state {
+        case .working:
+            return (
+                ns(light: (0.906, 0.941, 0.996, 1), dark: (0.129, 0.200, 0.310, 1)),
+                ns(light: (0.102, 0.310, 0.561, 1), dark: (0.659, 0.788, 1, 1)), .clear
+            )
+        case .waiting:
+            return (
+                ns(light: (1, 0.953, 0.776, 1), dark: (0.271, 0.220, 0.059, 1)),
+                ns(light: (0.420, 0.290, 0, 1), dark: (1, 0.824, 0.247, 1)), .clear
+            )
+        case .resting:
+            return (
+                ns(light: (0.937, 0.937, 0.945, 1), dark: (0.200, 0.200, 0.220, 1)),
+                ns(light: (0.290, 0.290, 0.310, 1), dark: (0.850, 0.850, 0.870, 1)), .clear
+            )
+        case .quiet:
+            return (
+                .clear, ns(light: (0.330, 0.330, 0.350, 1), dark: (0.780, 0.780, 0.800, 1)),
+                ns(light: (0.780, 0.780, 0.800, 1), dark: (0.400, 0.400, 0.430, 1))
+            )
+        }
+    }
+
     private static func dynamic(
         light: (CGFloat, CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat, CGFloat)
     ) -> Color {
-        Color(
-            nsColor: NSColor(name: nil) { appearance in
-                let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-                return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: c.3)
-            })
+        Color(nsColor: ns(light: light, dark: dark))
+    }
+
+    private static func ns(
+        light: (CGFloat, CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat, CGFloat)
+    ) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: c.3)
+        }
     }
 }
 
@@ -50,6 +82,16 @@ extension WorkState {
         case .waiting: return Text("Waiting")
         case .resting: return Text("Resting")
         case .quiet: return Text("Quiet")
+        }
+    }
+
+    /// The room bubble's mark, beside the word on the panel's badge; none for Quiet.
+    var mark: String? {
+        switch self {
+        case .working: return "…"
+        case .waiting: return "!"
+        case .resting: return "z"
+        case .quiet: return nil
         }
     }
 

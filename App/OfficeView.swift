@@ -445,6 +445,27 @@ struct NewsSchedule: TimelineSchedule {
     }
 }
 
+/// The state at the top of the side panel: a soft rounded badge with the room bubble's mark and the word, so it
+/// never goes by colour alone.
+struct StateBadge: View {
+    let state: WorkState
+    let word: Text
+
+    var body: some View {
+        let style = Style.badge(state)
+        HStack(spacing: 5) {
+            if let mark = state.mark { Text(verbatim: mark).accessibilityHidden(true) }
+            word
+        }
+        .font(.title3.weight(.semibold))
+        .foregroundStyle(Color(nsColor: style.text))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Color(nsColor: style.fill)))
+        .overlay(Capsule().strokeBorder(Color(nsColor: style.border)))
+    }
+}
+
 /// The side panel: a closer look at one person, to read only (a nickname is the one thing it changes).
 struct SidePanelView: View {
     /// Wide enough for a 32-character nickname and a teammate row ("code-reviewer · Waiting · 12 min"); over the
@@ -576,24 +597,28 @@ struct SidePanelView: View {
         }
     }
 
-    /// "Session" or "Teammate of my-project", the state and for how long (a wait first, then the meeting), and
-    /// when the app last heard from them.
+    /// The state first, on a badge, and for how long; then "Session" or "Teammate of my-project", and when the app
+    /// last heard from them.
     @ViewBuilder private func details(
         role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool,
         doing: HookEvent.ToolKind?, news: Date?
     ) -> some View {
-        role.foregroundStyle(.secondary)
-        VStack(alignment: .leading, spacing: 4) {
-            if !meets || state == .waiting {
+        // In a meeting the meeting takes the badge, as on the name tag; a wait still comes first.
+        let meeting = meets && state != .waiting
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            StateBadge(state: meeting ? .quiet : state, word: meeting ? Text("In a meeting") : state.word)
+            if !meeting, state != .quiet {
                 ticking(every: 30) { now in
                     let minutes = Int(now.timeIntervalSince(since) / 60)
-                    (state.word + (minutes >= 1 ? Text(verbatim: " · ") + Text("\(minutes) min") : Text(verbatim: "")))
-                        .foregroundStyle(state.color)
+                    if minutes >= 1 { Text("\(minutes) min").foregroundStyle(.secondary) }
                 }
             }
+        }
+        role.foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 4) {
             if let doing { doing.phrase }
             if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
-            if meets { Text("In a meeting") }
+            if meets, !meeting { Text("In a meeting") }
         }
         HStack {
             Text("Last news").foregroundStyle(.secondary)

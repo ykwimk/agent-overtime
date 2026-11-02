@@ -201,6 +201,36 @@ final class PanelTests: XCTestCase {
         for phrase in phrases { XCTAssertFalse(phrase.contains("rm"), phrase) }
     }
 
+    /// The panel's state badges read at 4.5:1 or more, light and dark: the word on its own fill, Quiet's on the
+    /// panel's background.
+    func testStateBadgesKeepTheirContrast() throws {
+        func luminance(_ color: NSColor) throws -> Double {
+            let c = try XCTUnwrap(color.usingColorSpace(.sRGB))
+            let channel = { (v: CGFloat) -> Double in
+                let v = Double(v)
+                return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(c.redComponent) + 0.7152 * channel(c.greenComponent)
+                + 0.0722 * channel(c.blueComponent)
+        }
+        var lines: [String] = []
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            try XCTUnwrap(NSAppearance(named: name)).performAsCurrentDrawingAppearance {
+                for state in WorkState.allCases {
+                    let badge = Style.badge(state)
+                    let back = state == .quiet ? NSColor.windowBackgroundColor : badge.fill
+                    guard let text = try? luminance(badge.text), let fill = try? luminance(back) else {
+                        return XCTFail("\(state)")
+                    }
+                    let ratio = (max(text, fill) + 0.05) / (min(text, fill) + 0.05)
+                    lines.append(String(format: "%@ %@ %.2f", name.rawValue, state.rawValue, ratio))
+                    XCTAssertGreaterThanOrEqual(ratio, 4.5, "\(name.rawValue) \(state)")
+                }
+            }
+        }
+        print("Badge contrast: " + lines.joined(separator: ", "))
+    }
+
     /// In a meeting: only the teammates at it say so. One with headphones keeps working as it was, in the panel
     /// and to VoiceOver.
     func testOnlyTheTeammatesAtTheMeetingAreInIt() throws {
