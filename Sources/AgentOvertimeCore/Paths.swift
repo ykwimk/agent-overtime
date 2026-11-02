@@ -29,6 +29,22 @@ public enum Paths {
     }
 }
 
+/// Show Details (Settings > Side Panel): one Bool in the app's preferences, which the helper reads by the app's
+/// id. The helper reads nothing else of the app's, and never config.json (nicknames stay away from it).
+public enum ShowDetails {
+    public static let key = "showDetails"
+    public static let appID = "io.github.ykwimk.AgentOvertime"
+
+    /// On only when the value is exactly true; missing, unreadable or anything else is off.
+    public static func isOn(in domain: String = appID) -> Bool {
+        CFPreferencesAppSynchronize(domain as CFString)
+        guard let value = CFPreferencesCopyAppValue(key as CFString, domain as CFString),
+            CFGetTypeID(value) == CFBooleanGetTypeID()
+        else { return false }
+        return CFBooleanGetValue((value as! CFBoolean))
+    }
+}
+
 /// The plugin's hooks call the helper only at these two fixed paths, so the app must live there.
 public enum AppLocation: Equatable {
     case ok
@@ -57,7 +73,7 @@ public enum HookCommand {
 /// hooks by itself. Both READMEs quote these commands; a test keeps them the same.
 public enum Release {
     public static let repository = "ykwimk/agent-overtime"
-    public static let tag = "v0.3.0"
+    public static let tag = "v0.4.0"
     public static var connectCommands: String {
         "/plugin marketplace add \(repository)#\(tag)\n/plugin install agent-overtime@agent-overtime"
     }

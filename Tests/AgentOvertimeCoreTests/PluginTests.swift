@@ -15,6 +15,8 @@ final class PluginTests: XCTestCase {
     func testHooksCallOnlyTheFixedHelperPaths() throws {
         let hooks = try XCTUnwrap(try json("plugin/hooks/hooks.json")["hooks"] as? [String: [[String: Any]]])
         XCTAssertEqual(Set(hooks.keys), Set(HookEvent.Kind.allCases.map(\.rawValue)))
+        XCTAssertEqual(hooks.count, 10)
+        XCTAssertNil(hooks["PostModelSwitch"]?.first?["matcher"], "every switch")
 
         for (event, groups) in hooks {
             for group in groups {
@@ -33,6 +35,36 @@ final class PluginTests: XCTestCase {
         }
         let notification = try XCTUnwrap(hooks["Notification"]?.first?["matcher"] as? String)
         XCTAssertEqual(Set(notification.split(separator: "|").map(String.init)), HookEvent.notifications)
+    }
+
+    /// The helper reads Show Details as the app writes it, from another process, by the app's id: on only for an
+    /// exact true. A scratch domain stands in for the app's, so the real settings are never touched.
+    func testTheHelperReadsShowDetailsOnlyWhenExactlyTrue() throws {
+        let domain = "io.github.ykwimk.AgentOvertime.test-\(UUID().uuidString)"
+        func defaults(_ arguments: [String]) throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+            process.arguments = arguments
+            try process.run()
+            process.waitUntilExit()
+        }
+        defer { try? defaults(["delete", domain]) }
+        XCTAssertFalse(ShowDetails.isOn(in: domain), "missing: off")
+        for (type, value, on) in [("-bool", "true", true), ("-bool", "false", false), ("-int", "1", false)] {
+            try defaults(["write", domain, ShowDetails.key, type, value])
+            XCTAssertEqual(ShowDetails.isOn(in: domain), on, "\(type) \(value)")
+        }
+        try defaults(["write", domain, ShowDetails.key, "-string", "true"])
+        XCTAssertFalse(ShowDetails.isOn(in: domain), "text: off")
+    }
+
+    /// The helper never opens the app's config.json, where nicknames and the start command live.
+    func testTheHelperNeverNamesTheConfigFile() throws {
+        let helper = repo.appendingPathComponent("Helper")
+        for file in try FileManager.default.contentsOfDirectory(atPath: helper.path) {
+            let text = try String(contentsOf: helper.appendingPathComponent(file), encoding: .utf8)
+            XCTAssertFalse(text.contains("config.json"), file)
+        }
     }
 
     func testHookCommandQuoting() {

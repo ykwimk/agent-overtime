@@ -2,23 +2,35 @@ import Foundation
 
 /// One status event, cut down to the fields the office needs.
 /// Claude Code's hook input also carries tool names and input, prompts, file paths and transcripts. `fromHookInput`
-/// derives only a coarse tool kind (and a SendMessage recipient) from them; nothing else crosses the socket.
+/// derives only a tool kind (and a SendMessage recipient) from them. With Show Details on, `readDetails` also takes a
+/// shortened file path, line counts, a task's title, status and id, and the model; nothing else crosses the socket.
 public struct HookEvent: Codable, Equatable {
     /// What a PreToolUse is about to do, from a fixed list of Claude Code's built-in tools. One short value on the
-    /// socket; the tool's name never is.
+    /// socket; the tool's name never is. The first six are v0.3's values, read the same; an app that doesn't know a
+    /// value reads none.
     public enum ToolKind: String, Codable, CaseIterable {
         case read, edit, command, web, team, other
+        case find, grep, lsp, write, monitor, fetch, talk, tasks, skill
 
         /// Compared letter for letter with the built-in tools' names (code.claude.com/docs/en/tools-reference).
         /// MCP tools (`mcp__server__tool`), names not on the list and anything that is not text are `.other`; no
         /// prefix or substring test, so a server's own naming never lands in a built-in kind.
         public static func of(_ toolName: Any?) -> ToolKind {
             switch toolName as? String {
-            case "Read", "Glob", "Grep", "LS", "LSP", "NotebookRead": return .read
-            case "Edit", "Write", "MultiEdit", "NotebookEdit": return .edit
-            case "Bash", "PowerShell", "Monitor": return .command
-            case "WebSearch", "WebFetch": return .web
-            case "Agent", "Task", "SendMessage": return .team
+            case "Read", "NotebookRead": return .read
+            case "Glob", "LS": return .find
+            case "Grep": return .grep
+            case "LSP": return .lsp
+            case "Edit", "MultiEdit", "NotebookEdit": return .edit
+            case "Write": return .write
+            case "Bash", "PowerShell": return .command
+            case "Monitor": return .monitor
+            case "WebSearch": return .web
+            case "WebFetch": return .fetch
+            case "Agent", "Task": return .team
+            case "SendMessage": return .talk
+            case "TodoWrite", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList": return .tasks
+            case "Skill": return .skill
             default: return .other
             }
         }
@@ -34,6 +46,8 @@ public struct HookEvent: Codable, Equatable {
         case stop = "Stop"
         case subagentStart = "SubagentStart"
         case subagentStop = "SubagentStop"
+        /// Only its `to_model`, with Show Details on.
+        case postModelSwitch = "PostModelSwitch"
     }
 
     /// Notification types that change a state. Everything else (auth_success, quota_*, plugin_notification…) is dropped.
@@ -58,6 +72,39 @@ public struct HookEvent: Codable, Equatable {
     /// The Claude Code process, so the app can tell when a session is gone without a SessionEnd.
     public var pid: Int32?
 
+    /// What a task tool did to the task list.
+    public enum TaskAction: String, Codable {
+        /// TodoWrite: the whole list again.
+        case todo
+        /// TaskCreate: one more task, its id not known yet.
+        case create
+        /// TaskUpdate: one task by its id.
+        case update
+    }
+
+    public enum TaskStatus: String, Codable {
+        case pending, completed, deleted
+        case inProgress = "in_progress"
+    }
+
+    // Details, only with Show Details on (see `fromHookInput`), each one that is wrong or too long dropped on its own.
+    /// The file a Read, Write, Edit or NotebookEdit works on, shortened in the helper (`Detail.shortPath`).
+    public var file: String?
+    /// Lines an edit adds and removes, counted in the helper; the text itself never leaves it.
+    public var linesAdded: Int?
+    public var linesRemoved: Int?
+    public var taskAction: TaskAction?
+    /// TodoWrite's whole list: how many tasks, and how many done.
+    public var todoTotal: Int?
+    public var todoDone: Int?
+    /// TaskUpdate's task.
+    public var taskID: String?
+    public var taskStatus: TaskStatus?
+    /// The task in progress (TodoWrite), the new one (TaskCreate) or the one changed (TaskUpdate).
+    public var taskTitle: String?
+    /// The session's model, from SessionStart.
+    public var model: String?
+
     enum CodingKeys: String, CodingKey {
         case kind = "e"
         case session = "s"
@@ -70,6 +117,16 @@ public struct HookEvent: Codable, Equatable {
         case sendsMessage = "m"
         case recipient = "r"
         case pid = "p"
+        case file = "f"
+        case linesAdded = "la"
+        case linesRemoved = "lr"
+        case taskAction = "ta"
+        case todoTotal = "tn"
+        case todoDone = "td"
+        case taskID = "ti"
+        case taskStatus = "ts"
+        case taskTitle = "tt"
+        case model = "mo"
     }
 
     public init(
@@ -105,12 +162,23 @@ public struct HookEvent: Codable, Equatable {
         sendsMessage = (try? c.decodeIfPresent(Bool.self, forKey: .sendsMessage)) ?? false
         recipient = try? c.decodeIfPresent(String.self, forKey: .recipient)
         pid = try c.decodeIfPresent(Int32.self, forKey: .pid)
+        file = (try? c.decodeIfPresent(String.self, forKey: .file)) ?? nil
+        linesAdded = (try? c.decodeIfPresent(Int.self, forKey: .linesAdded)) ?? nil
+        linesRemoved = (try? c.decodeIfPresent(Int.self, forKey: .linesRemoved)) ?? nil
+        taskAction = (try? c.decodeIfPresent(TaskAction.self, forKey: .taskAction)) ?? nil
+        todoTotal = (try? c.decodeIfPresent(Int.self, forKey: .todoTotal)) ?? nil
+        todoDone = (try? c.decodeIfPresent(Int.self, forKey: .todoDone)) ?? nil
+        taskID = (try? c.decodeIfPresent(String.self, forKey: .taskID)) ?? nil
+        taskStatus = (try? c.decodeIfPresent(TaskStatus.self, forKey: .taskStatus)) ?? nil
+        taskTitle = (try? c.decodeIfPresent(String.self, forKey: .taskTitle)) ?? nil
+        model = (try? c.decodeIfPresent(String.self, forKey: .model)) ?? nil
     }
 
     // MARK: helper side
 
-    /// Reads Claude Code's hook JSON and keeps only the allowlisted fields.
-    public static func fromHookInput(_ data: Data, pid: Int32?) -> HookEvent? {
+    /// Reads Claude Code's hook JSON and keeps only the allowlisted fields; with `details`, also the few fields
+    /// `readDetails` opens.
+    public static func fromHookInput(_ data: Data, pid: Int32?, details: Bool = false) -> HookEvent? {
         guard data.count <= Limits.hookInput,
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
             let name = object["hook_event_name"] as? String,
@@ -119,10 +187,11 @@ public struct HookEvent: Codable, Equatable {
             let cwd = object["cwd"] as? String
         else { return nil }
         // Only a PreToolUse's tool is looked at (a PermissionRequest's tool name and input are not read), and only
-        // SendMessage's input is opened, for its `to` alone.
+        // SendMessage's input is opened, for its `to` alone (and, with Show Details on, the few fields `readDetails`
+        // names).
         let tool = kind == .preToolUse ? object["tool_name"] : nil
         let sendsMessage = tool as? String == "SendMessage"
-        let event = HookEvent(
+        var event = HookEvent(
             kind: kind, session: session, cwd: cwd,
             agentID: object["agent_id"] as? String,
             agentType: object["agent_type"] as? String,
@@ -133,11 +202,84 @@ public struct HookEvent: Codable, Equatable {
             recipient: sendsMessage ? (object["tool_input"] as? [String: Any])?["to"] as? String : nil,
             pid: pid
         )
+        if details { event.readDetails(object) }
         return event.cleaned()
     }
 
+    /// The detail fields, each from the one or two input fields named here and nothing else of the input; a field
+    /// of another type is dropped. Edit texts and file contents only ever become line counts.
+    private mutating func readDetails(_ object: [String: Any]) {
+        // The model name only: never the cost and token figures that come with it, or the model switched from.
+        if kind == .sessionStart { model = object["model"] as? String }
+        if kind == .postModelSwitch { model = object["to_model"] as? String }
+        guard kind == .preToolUse, let input = object["tool_input"] as? [String: Any] else { return }
+        let folder = cwd
+        let path = { (key: String) in (input[key] as? String).flatMap { Detail.shortPath($0, in: folder) } }
+        switch object["tool_name"] as? String {
+        case "Read":
+            file = path("file_path")
+        case "Write":
+            file = path("file_path")
+            if let content = input["content"] as? String { (linesAdded, linesRemoved) = (Detail.lines(content), 0) }
+        case "Edit":
+            // replace_all changes every match, but how many there are is not known: counted as one.
+            file = path("file_path")
+            if let old = input["old_string"] as? String, let new = input["new_string"] as? String {
+                (linesAdded, linesRemoved) = Detail.lineChange(old: old, new: new)
+            }
+        case "MultiEdit":
+            file = path("file_path")
+            if let edits = input["edits"] as? [[String: Any]] {
+                let changes = edits.compactMap { edit -> (added: Int, removed: Int)? in
+                    guard let old = edit["old_string"] as? String, let new = edit["new_string"] as? String else {
+                        return nil
+                    }
+                    return Detail.lineChange(old: old, new: new)
+                }
+                linesAdded = min(changes.reduce(0) { $0 + $1.added }, Detail.maxLines)
+                linesRemoved = min(changes.reduce(0) { $0 + $1.removed }, Detail.maxLines)
+            }
+        case "NotebookEdit":
+            file = path("notebook_path")
+        case "TodoWrite":
+            // The statuses of all, the words of the one in progress only.
+            guard let todos = input["todos"] as? [[String: Any]] else { return }
+            taskAction = .todo
+            todoTotal = min(todos.count, Detail.maxTasks)
+            todoDone = min(todos.filter { $0["status"] as? String == "completed" }.count, Detail.maxTasks)
+            if let doing = todos.first(where: { $0["status"] as? String == "in_progress" }) {
+                taskTitle = doing["content"] as? String ?? doing["activeForm"] as? String
+            }
+        case "TaskCreate":
+            taskAction = .create
+            taskTitle = input["subject"] as? String ?? input["activeForm"] as? String
+        case "TaskUpdate":
+            guard let id = input["taskId"] as? String else { return }
+            taskAction = .update
+            taskID = id
+            taskStatus = (input["status"] as? String).flatMap(TaskStatus.init)
+            taskTitle = input["subject"] as? String
+        default:
+            break
+        }
+    }
+
+    /// One line for the socket, newline included, at most `Limits.line` bytes: past that the details go one at a
+    /// time (the task title, the model, the file, the line counts) and the rest is kept.
     public func wireLine() -> Data {
-        var data = (try? JSONEncoder().encode(self)) ?? Data()
+        var event = self
+        let drops: [(inout HookEvent) -> Void] = [
+            { $0.taskTitle = nil }, { $0.model = nil }, { $0.file = nil },
+            {
+                $0.linesAdded = nil
+                $0.linesRemoved = nil
+            },
+        ]
+        var data = (try? JSONEncoder().encode(event)) ?? Data()
+        for drop in drops where data.count >= Limits.line {
+            drop(&event)
+            data = (try? JSONEncoder().encode(event)) ?? Data()
+        }
         data.append(0x0A)
         return data
     }
@@ -178,7 +320,130 @@ public struct HookEvent: Codable, Equatable {
             event.recipient = clean
         }
         if let pid, pid <= 1 { event.pid = nil }
+        event.cleanDetails()
         return event
+    }
+
+    /// The event without its details: what the app keeps while Show Details is off.
+    public var withoutDetails: HookEvent {
+        var event = self
+        (event.file, event.linesAdded, event.linesRemoved, event.taskAction) = (nil, nil, nil, nil)
+        (event.todoTotal, event.todoDone, event.taskID, event.taskStatus) = (nil, nil, nil, nil)
+        (event.taskTitle, event.model) = (nil, nil)
+        return event
+    }
+
+    /// The details again, each on its own: only on the events that carry them, in range, hidden characters dropped
+    /// and capped. One that fails is dropped, the event kept.
+    private mutating func cleanDetails() {
+        let tool = kind == .preToolUse
+        let within = { (value: Int?, max: Int) in value.flatMap { (0...max).contains($0) ? $0 : nil } }
+        file = tool ? file.flatMap { Detail.capped($0, Detail.file) } : nil
+        linesAdded = tool ? within(linesAdded, Detail.maxLines) : nil
+        linesRemoved = tool ? within(linesRemoved, Detail.maxLines) : nil
+        if !tool { taskAction = nil }
+        let todo = taskAction == .todo
+        todoTotal = todo ? within(todoTotal, Detail.maxTasks) : nil
+        todoDone = todo ? todoTotal.flatMap { within(todoDone, $0) } : nil
+        if todoDone == nil { todoTotal = nil }
+        // An id is matched against others, so one too long is dropped whole rather than cut.
+        let update = taskAction == .update
+        taskID =
+            update ? taskID.flatMap { Sanitize.clean($0, max: .max) }.flatMap { $0.count <= Limits.id ? $0 : nil } : nil
+        if update, taskID == nil { taskAction = nil }
+        taskStatus = taskAction == .update ? taskStatus : nil
+        taskTitle = taskAction == nil ? nil : taskTitle.flatMap { Detail.capped($0, Detail.title) }
+        let modelNews = kind == .sessionStart || kind == .postModelSwitch
+        model = modelNews ? model.flatMap { Detail.capped($0, Detail.model) } : nil
+    }
+}
+
+/// What the side panel's details show of the file a tool works on and of how much an edit changes, worked out
+/// inside the helper from the text alone: nothing here looks at the file system.
+public enum Detail {
+    public static let file = 128
+    public static let title = 80
+    public static let model = 64
+    public static let maxLines = 999_999
+    public static let maxTasks = 999
+
+    /// A model as the side panel shows it: a known shape such as `claude-opus-4-7` (a date at the end left out) as
+    /// "Opus 4.7"; any other shape as it came, without `claude-`.
+    public static func modelName(_ model: String) -> String {
+        let name = model.hasPrefix("claude-") ? String(model.dropFirst(7)) : model
+        guard let match = name.wholeMatch(of: #/(opus|sonnet|haiku|fable)-(\d{1,2})(?:-(\d{1,2}))?(?:-\d{8})?/#)
+        else { return name }
+        return match.1.capitalized + " " + (match.3.map { "\(match.2).\($0)" } ?? String(match.2))
+    }
+
+    /// A file as the side panel shows it. Inside the session's folder, its path from there (`src/app.ts`) or, deeper,
+    /// `…/` and its last two parts; anywhere else, and for any path with a `.` or `..` part, its name alone. Never
+    /// the full path. nil for a path that isn't absolute or leaves nothing to show.
+    public static func shortPath(_ path: String, in folder: String) -> String? {
+        guard path.hasPrefix("/"), let name = path.split(separator: "/").last else { return nil }
+        let parts = path.split(separator: "/")
+        let base = folder.split(separator: "/")
+        let dotted = { (parts: [Substring]) in parts.contains { $0 == "." || $0 == ".." } }
+        var shown = String(name)
+        // Part by part, never by the text's start (/a/proj2 is not inside /a/proj); and a folder of fewer than two
+        // parts (/, /Users) would put an account's name in the last two parts.
+        if base.count >= 2, parts.count > base.count, !dotted(parts), !dotted(base), parts.starts(with: base) {
+            let inside = parts.dropFirst(base.count)
+            shown = inside.count <= 2 ? inside.joined(separator: "/") : "…/" + inside.suffix(2).joined(separator: "/")
+        }
+        return capped(shown, file)
+    }
+
+    /// Hidden characters dropped and at most `max` characters, with "…" at the end of one cut short; nil if empty.
+    public static func capped(_ text: String, _ max: Int) -> String? {
+        guard let clean = Sanitize.clean(text, max: max + 1) else { return nil }
+        guard clean.unicodeScalars.count > max else { return clean }
+        return String(String.UnicodeScalarView(clean.unicodeScalars.prefix(max - 1))) + "…"
+    }
+
+    /// The lines an edit adds and removes: `new` against `old`, leaving out the whole lines both begin and end with.
+    /// One pass over the bytes from each end, no diff and no list of lines, so a huge edit stays fast. Capped.
+    public static func lineChange(old: String, new: String) -> (added: Int, removed: Int) {
+        // Copied out as UTF-8: for strings from JSONSerialization this is several times faster than `withUTF8`.
+        let (old, new) = (Array(old.utf8), Array(new.utf8))
+        return old.withUnsafeBufferPointer { a in new.withUnsafeBufferPointer { b in lineChange(a, b) } }
+    }
+
+    private static func lineChange(_ a: UnsafeBufferPointer<UInt8>, _ b: UnsafeBufferPointer<UInt8>) -> (Int, Int) {
+        // Whole lines in common at the start: up to the last newline of the common prefix.
+        var i = 0
+        var head = 0
+        while i < a.count, i < b.count, a[i] == b[i] {
+            if a[i] == 0x0A { head = i + 1 }
+            i += 1
+        }
+        if i == a.count, i == b.count { return (0, 0) }
+        // Whole lines in common at the end: a common suffix that starts a line in both, past the head.
+        var j = 0
+        var tail = 0
+        while j < a.count - head, j < b.count - head, a[a.count - 1 - j] == b[b.count - 1 - j] {
+            j += 1
+            let (x, y) = (a.count - j, b.count - j)
+            if x == head || a[x - 1] == 0x0A, y == head || b[y - 1] == 0x0A { tail = j }
+        }
+        return (lines(b, head..<(b.count - tail)), lines(a, head..<(a.count - tail)))
+    }
+
+    /// Lines in some text: its newlines, and one more for a last line without one. Capped.
+    public static func lines(_ text: String) -> Int {
+        Array(text.utf8).withUnsafeBufferPointer { lines($0, 0..<$0.count) }
+    }
+
+    private static func lines(_ bytes: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Int {
+        guard let base = bytes.baseAddress, !range.isEmpty else { return 0 }
+        var count = 0
+        var at = base + range.lowerBound
+        let end = base + range.upperBound
+        while at < end, let found = memchr(at, 0x0A, end - at) {
+            count += 1
+            at = UnsafePointer(found.assumingMemoryBound(to: UInt8.self)) + 1
+        }
+        return min(count + (bytes[range.upperBound - 1] == 0x0A ? 0 : 1), maxLines)
     }
 }
 

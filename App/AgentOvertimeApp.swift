@@ -57,5 +57,14 @@ struct AppCommands: Commands {
             Divider()
             Button("Connect…") { openWindow(id: "welcome") }
         }
+        // The View menu, as in other Mac apps. ⌘= works for Zoom In too (KeyboardNavigation).
+        CommandGroup(before: .toolbar) {
+            Button("Actual Size") { model.zoom = Zoom.normal }.keyboardShortcut("0")
+            Button("Zoom In") { model.zoomIn() }.keyboardShortcut("+").disabled(
+                Zoom.step(from: model.zoom, by: 1) == nil)
+            Button("Zoom Out") { model.zoomOut() }.keyboardShortcut("-").disabled(
+                Zoom.step(from: model.zoom, by: -1) == nil)
+            Divider()
+        }
     }
 }

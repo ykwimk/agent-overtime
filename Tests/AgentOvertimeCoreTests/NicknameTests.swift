@@ -24,7 +24,7 @@ final class NicknameTests: XCTestCase {
         office.apply(event(.sessionStart, "c", cwd: "/w/my-project"), now: t0)
         XCTAssertEqual(labels(office).last, "shop 🛒 3", "a newcomer from the folder shows it too")
         office.apply(event(.sessionEnd, "a", cwd: "/w/my-project"), now: t0)
-        XCTAssertEqual(office.pods[0].seats[0], .off(name: "shop 🛒", folder: "/w/my-project"))
+        XCTAssertEqual(labels(office), ["shop 🛒 2", "shop 🛒 3"], "the others keep their numbers")
         XCTAssertTrue(office.rename(folder: "/w/my-project", to: ""))
         XCTAssertEqual(labels(office), ["my-project 2", "my-project 3"], "empty: back to the automatic name")
     }

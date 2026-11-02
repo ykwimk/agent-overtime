@@ -46,6 +46,12 @@ struct SettingsView: View {
                 }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
+                Toggle("Find Sessions Without the Plugin", isOn: $model.findsSessions)
+                Text(
+                    "Shows the Claude Code sessions started on this Mac even before the plugin sends news. Claude run by a script may show too."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
             } header: {
                 Text("Connection")
             }
@@ -77,13 +83,24 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Show Details", isOn: $model.showsDetails)
+                Text(
+                    "Shows the files being read and edited, tasks and the model in the side panel. They stay on this Mac and are never saved. Anyone who sees your screen, for example while you share it, can read them."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
+            } header: {
+                Text("Side Panel")
+            }
+
+            Section {
                 LabeledContent {
-                    Text(verbatim: "\(model.office.desks.count)")
+                    Text(verbatim: "\(model.office.folders.count)")
                 } label: {
                     Text("Recent folders")
                 }
                 Button("Clear Recent Folders") { model.forgetIdleFolders() }
-                    .disabled(!model.office.desks.contains(where: \.isOff))
+                    .disabled(model.office.idleFolders.isEmpty)
                 Text(
                     "Folders sessions ran in, to pick from when you set up Start Work. Kept only on this Mac; folders with a session running stay."
                 )

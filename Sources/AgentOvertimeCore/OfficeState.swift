@@ -2,6 +2,9 @@ import Foundation
 
 public enum WorkState: String, Codable, CaseIterable {
     case working, waiting, resting
+    /// Running, but not heard from yet: found on this Mac before any news. It may be waiting for an answer, so it is
+    /// never shown as resting.
+    case quiet
 }
 
 public struct Teammate: Equatable, Identifiable {
@@ -13,7 +16,8 @@ public struct Teammate: Equatable, Identifiable {
     public internal(set) var number = 1
     public var state: WorkState
     public var since: Date
-    /// When it started while the app was listening; nil for one already at work, who sits down without walking in.
+    /// When it started while the app was listening, or got a seat after waiting for one; nil for one already at
+    /// work, who sits down without walking in.
     public var arrived: Date? = nil
     /// The nickname given to its name on this Mac, if any, and its number among those shown under the same
     /// name: shown in place of `name` and `number`, which stay for its look.
@@ -58,6 +62,11 @@ public struct Session: Equatable, Identifiable {
     /// In a meeting. Its own prompt, tool or stop ends it, and so does its last teammate leaving; waiting for the
     /// user's answer does not.
     public internal(set) var meets = false
+    /// When its process started, once found running on this Mac. With `pid` it tells that process from a later
+    /// one given the same number.
+    public internal(set) var started: Date? = nil
+    /// False while it is only found running on this Mac, with no news from it yet.
+    public internal(set) var heard = true
 
     /// `since` only moves when the state changes, so "waiting · 3 min" counts from the first prompt.
     mutating func set(_ newState: WorkState, now: Date) {
@@ -101,17 +110,109 @@ public struct Session: Equatable, Identifiable {
     public var teammateWaiting: Bool { state != .waiting && shown.state == .waiting }
 }
 
-/// A folder sessions ran in. Running sessions are kept here; the folders themselves are remembered (up to
-/// `OfficeState.maxDesks`) for Start Work's recent folders. Where people sit is `OfficeState.islands`.
+/// What one person's side panel shows beyond their state, from their news while the app listens. Memory only, and
+/// gone with them. Files, edits, tasks and the model come only with Show Details on.
+public struct PersonDetail: Equatable {
+    /// Something they did: the kind of tool, and its file.
+    public struct Step: Equatable {
+        public let kind: HookEvent.ToolKind
+        public internal(set) var file: String?
+        public internal(set) var at: Date
+    }
+
+    public struct Edit: Equatable {
+        public let file: String
+        public internal(set) var added: Int
+        public internal(set) var removed: Int
+    }
+
+    static let maxSteps = 4
+    static let maxEdits = 20
+    static let maxCalled = 128
+
+    /// The latest steps, newest last (the last may be what they do now); one for a run of the same kind on the same
+    /// file.
+    public internal(set) var steps: [Step] = []
+    /// Files edited since the session's last prompt, and how many edits went past them.
+    public internal(set) var edits: [Edit] = []
+    public internal(set) var moreEdits = 0
+    public internal(set) var tasks = TaskList()
+    public internal(set) var model: String?
+    /// A session's teammates called since its last prompt, by id, and whether each is done.
+    var called: [String: Bool] = [:]
+    public var teamCalled: Int { called.count }
+    public var teamDone: Int { called.values.filter { $0 }.count }
+
+    mutating func forgetDetails() {
+        (edits, moreEdits, tasks, model) = ([], 0, TaskList(), nil)
+        for i in steps.indices { steps[i].file = nil }
+    }
+}
+
+/// A person's task list as their task tools leave it: TodoWrite gives the whole list, TaskCreate one more task (its
+/// id comes only with a later TaskUpdate), TaskUpdate one task by id.
+public struct TaskList: Equatable {
+    struct Tracked: Equatable {
+        let id: String
+        var status: HookEvent.TaskStatus
+        var title: String?
+    }
+
+    static let maxTasks = 50
+
+    public internal(set) var total = 0
+    public internal(set) var done = 0
+    /// The task in progress, when its title is known.
+    public internal(set) var title: String?
+    private var tracked: [Tracked] = []
+    /// Created, and not yet seen by id.
+    private var created = 0
+
+    mutating func apply(_ event: HookEvent) {
+        switch event.taskAction {
+        case .todo?:
+            guard let total = event.todoTotal, let done = event.todoDone else { return }
+            (tracked, created) = ([], 0)
+            (self.total, self.done, title) = (total, done, event.taskTitle)
+            return
+        case .create?:
+            created = min(created + 1, Self.maxTasks - tracked.count)
+        case .update?:
+            guard let id = event.taskID else { return }
+            var task = Tracked(id: id, status: .pending, title: nil)
+            if let i = tracked.firstIndex(where: { $0.id == id }) {
+                task = tracked.remove(at: i)
+            } else if created > 0 {
+                // Most likely one of those created (TaskCreate's id isn't known).
+                created -= 1
+            }
+            task.status = event.taskStatus ?? task.status
+            task.title = event.taskTitle ?? task.title
+            if task.status != .deleted { tracked.append(task) }
+            // The oldest go first past the limit.
+            let over = min(tracked.count, max(0, tracked.count + created - Self.maxTasks))
+            tracked.removeFirst(over)
+        case nil:
+            return
+        }
+        total = tracked.count + created
+        done = tracked.filter { $0.status == .completed }.count
+        title = tracked.last { $0.status == .inProgress }?.title
+    }
+}
+
+/// A folder sessions run in, while one does. Start Work's recent folders are `OfficeState.folders`, kept apart;
+/// where people sit is `OfficeState.islands`.
 public struct Desk: Equatable, Identifiable {
     public let folder: String
     public var sessions: [Session] = []
     public var id: String { folder }
+    /// The folder's last name; "~" for the home folder rather than the account's name.
     public var name: String {
+        if folder == Paths.home { return "~" }
         let last = (folder as NSString).lastPathComponent
         return last.isEmpty ? folder : last
     }
-    public var isOff: Bool { sessions.isEmpty }
     public var teammates: [Teammate] { sessions.flatMap(\.teammates) }
 }
 
@@ -119,44 +220,24 @@ public struct Desk: Equatable, Identifiable {
 public enum Occupant: Equatable {
     case session(String)
     case teammate(String)
-    /// A session that went home from this seat. Its name stays, faded, while others still work at the island.
-    case off(folder: String, name: String)
-
-    var isAtWork: Bool {
-        if case .off = self { return false }
-        return true
-    }
 }
 
-/// Four desks facing each other: two seats with their backs to the room (0, 2) and two across (1, 3). An island
-/// is there only while someone at it works, and keeps its place in the room until then.
+/// Four desks facing each other: two seats with their backs to the room (0, 2) and two across (1, 3). One
+/// session's island: the session at seat 0, its teammates (and theirs) at 1, 2 and 3 as they come. It keeps its
+/// place in the room while the session runs.
 public struct Island: Equatable, Identifiable {
     public static let size = 4
     /// Its place in the room, 0 nearest the door.
     public let slot: Int
     public internal(set) var seats: [Occupant?] = Array(repeating: nil, count: Island.size)
     public var id: Int { slot }
-
-    /// The seat a newcomer from `folder` takes: one its own folder went home from, then an empty one, then one
-    /// anyone went home from; lower seats first. nil when everyone here is at work.
-    func seat(for folder: String) -> Int? {
-        let ranked = seats.indices.compactMap { i -> (rank: Int, seat: Int)? in
-            switch seats[i] {
-            case .off(let from, _)?: return (from == folder ? 0 : 2, i)
-            case nil: return (1, i)
-            case .session?, .teammate?: return nil
-            }
-        }
-        return ranked.min { ($0.rank, $0.seat) < ($1.rank, $1.seat) }?.seat
-    }
 }
 
 /// One seat as the office draws it.
 public enum Seat: Equatable {
-    /// A session at work; `unseated` of its teammates found no seat (only past `OfficeState.maxIslands`).
+    /// A session at work; `unseated` of its teammates wait for a free seat at its island, shown as "+n".
     case session(Session, unseated: Int)
     case teammate(Teammate, of: Session)
-    case off(name: String, folder: String)
 }
 
 /// Names given on this Mac: a session's by its folder path, a teammate's by its name (agent_type; "" for the
@@ -216,12 +297,15 @@ public struct Nicknames: Equatable, Codable {
 }
 
 public struct OfficeState: Equatable {
+    /// Recent folders kept for Start Work.
     public static let maxDesks = 24
     /// Guards against a runaway process flooding the socket, far above real use, so every real session and
     /// teammate is counted in the summary and the menu bar.
     public static let maxSessions = 64
     public static let maxTeammates = 64
-    /// 128 seats. Anyone past them is still counted, and a session's tag shows its unseated teammates as "+n".
+    /// One island a session. Sessions past them are still counted in the summary and the menu bar.
+    // shortcut: a session past them never gets an island, even after another leaves; seat it then if 32 sessions at
+    // once turn out to be real.
     public static let maxIslands = 32
     /// How long a session stays quiet with two or more teammates out before they meet, so a short pause between
     /// two tools doesn't send everyone to the meeting room and back.
@@ -238,28 +322,53 @@ public struct OfficeState: Equatable {
         public let serial: Int
     }
 
+    /// A Claude Code process found running on this Mac, news or not: its number, when it started, the folder it
+    /// runs in, and whether it is busy (its CPU time grew since the last look).
+    public struct Found: Equatable {
+        public let pid: Int32
+        public let started: Date
+        public let folder: String
+        public let busy: Bool
+
+        public init(pid: Int32, started: Date, folder: String, busy: Bool) {
+            self.pid = pid
+            self.started = started
+            self.folder = folder
+            self.busy = busy
+        }
+    }
+
     /// Who sits in the one meeting room.
     public struct Meeting: Equatable {
         public let session: Session
-        /// Its teammates at the table, first come first.
+        /// Its teammates at the table, first come first: those with a seat at its island.
         public let members: [Teammate]
-        /// Teammates who stay at their desks: the table is full.
+        /// Teammates in the meeting but not at the table: past its seats, or still waiting for a seat at the island.
         public let more: Int
     }
 
-    public private(set) var desks: [Desk]
+    /// Folders with a session running, in the order they came.
+    public private(set) var desks: [Desk] = []
+    /// Start Work's recent folders, oldest first: those remembered from earlier runs, then each new folder a session
+    /// sends news from. Who sits where never changes them.
+    public private(set) var folders: [String]
     /// Islands in use, nearest the door first. Kept in memory only: after a restart nobody's seat is remembered.
     public private(set) var islands: [Island] = []
     /// When each session ("s:" and its id) and teammate ("a:" and its id) last sent news while the app listened,
-    /// by the app's clock, and the kind of tool each is running. Memory only, and gone with them.
+    /// by the app's clock, and the kind of tool each is running and since when. Memory only, and gone with them.
     private var news: [String: Date] = [:]
-    private var kinds: [String: HookEvent.ToolKind] = [:]
+    private var kinds: [String: (kind: HookEvent.ToolKind, since: Date)] = [:]
+    /// What each one's side panel shows beyond that, by the same keys.
+    private var details: [String: PersonDetail] = [:]
     /// For each session, who called a teammate and is still waiting for it to come, first first: a teammate's id,
     /// or nil for the session itself. A SubagentStart says nothing of who called, so the next one to come goes with
     /// the first call still open; with none open, the session called it.
     private var calls: [String: [String?]] = [:]
     /// Open calls kept per session: a call that never brought anyone (refused, say) can't pile up.
     static let maxCalls = 16
+    /// The session id news comes under, for a session first found on this Mac (its own id is kept, so it stays the
+    /// same person in the room). One for each such session at most.
+    private var links: [String: String] = [:]
 
     public private(set) var nicknames: Nicknames
     /// The latest message between two people at their desks, for the walk over to talk.
@@ -268,7 +377,7 @@ public struct OfficeState: Equatable {
     /// `folders` are remembered from earlier runs, for Start Work, and so are `nicknames`. Nobody sits anywhere
     /// yet.
     public init(folders: [String] = [], nicknames: Nicknames = Nicknames()) {
-        desks = folders.prefix(Self.maxDesks).map { Desk(folder: $0) }
+        self.folders = Array(folders.prefix(Self.maxDesks))
         self.nicknames = nicknames
     }
 
@@ -276,6 +385,7 @@ public struct OfficeState: Equatable {
     /// panel, which keeps its own clock, so one more tool doesn't draw the whole room again.
     public static func == (a: OfficeState, b: OfficeState) -> Bool {
         a.desks == b.desks && a.islands == b.islands && a.nicknames == b.nicknames && a.talk == b.talk
+            && a.folders == b.folders
     }
 
     /// The folder a session runs in.
@@ -315,21 +425,62 @@ public struct OfficeState: Equatable {
         relabelTeammates { _ in true }
     }
 
-    public var folders: [String] { desks.map(\.folder) }
-
     /// When the app last heard from a session or a teammate; nil before any news since the app started.
     public func lastNews(session id: String) -> Date? { news["s:" + id] }
     public func lastNews(teammate id: String) -> Date? { news["a:" + id] }
 
     /// The kind of tool a session or teammate last started, until its turn ends or it is asked something new.
-    public func toolKind(session id: String) -> HookEvent.ToolKind? { kinds["s:" + id] }
-    public func toolKind(teammate id: String) -> HookEvent.ToolKind? { kinds["a:" + id] }
+    public func toolKind(session id: String) -> HookEvent.ToolKind? { kinds["s:" + id]?.kind }
+    public func toolKind(teammate id: String) -> HookEvent.ToolKind? { kinds["a:" + id]?.kind }
+
+    /// When that kind of tool began, by the app's clock: tools of the same kind one after another count as one.
+    public func toolSince(session id: String) -> Date? { kinds["s:" + id]?.since }
+    public func toolSince(teammate id: String) -> Date? { kinds["a:" + id]?.since }
+
+    /// What a session's or teammate's side panel shows beyond its state; nil before any news from it.
+    public func detail(session id: String) -> PersonDetail? { details["s:" + id] }
+    public func detail(teammate id: String) -> PersonDetail? { details["a:" + id] }
+
+    /// Show Details turned off: every file, edit, task and model goes at once.
+    public mutating func forgetDetails() {
+        for key in details.keys { details[key]?.forgetDetails() }
+    }
+
+    /// Keeps what an event adds to someone's side panel: a step, an edit, a task, the model. A session's prompt
+    /// starts its edits and teammate count again.
+    private mutating func record(_ event: HookEvent, at key: String, now: Date) {
+        var detail = details[key] ?? PersonDetail()
+        if let kind = event.toolKind {
+            if let last = detail.steps.last, last.kind == kind, last.file == event.file {
+                detail.steps[detail.steps.count - 1].at = now
+            } else {
+                detail.steps.append(PersonDetail.Step(kind: kind, file: event.file, at: now))
+                if detail.steps.count > PersonDetail.maxSteps { detail.steps.removeFirst() }
+            }
+        }
+        if event.kind == .userPromptSubmit, key.hasPrefix("s:") {
+            (detail.edits, detail.moreEdits, detail.called) = ([], 0, [:])
+        }
+        if let file = event.file, let added = event.linesAdded, let removed = event.linesRemoved {
+            if let i = detail.edits.firstIndex(where: { $0.file == file }) {
+                detail.edits[i].added = min(detail.edits[i].added + added, Detail.maxLines)
+                detail.edits[i].removed = min(detail.edits[i].removed + removed, Detail.maxLines)
+            } else if detail.edits.count < PersonDetail.maxEdits {
+                detail.edits.append(PersonDetail.Edit(file: file, added: added, removed: removed))
+            } else {
+                detail.moreEdits += 1
+            }
+        }
+        detail.tasks.apply(event)
+        if let model = event.model { detail.model = model }
+        details[key] = detail
+    }
 
     /// Keeps the latest kind of tool under `key`, and forgets it when a new prompt or the end of a turn comes. A
     /// call for a teammate (a teammate tool other than SendMessage) waits for the next newcomer.
-    private mutating func note(_ event: HookEvent, at key: String) {
+    private mutating func note(_ event: HookEvent, at key: String, now: Date) {
         if let kind = event.toolKind {
-            kinds[key] = kind
+            if kinds[key]?.kind != kind { kinds[key] = (kind, now) }
         } else if [.userPromptSubmit, .stop, .sessionStart, .subagentStop].contains(event.kind) {
             kinds[key] = nil
         }
@@ -362,27 +513,31 @@ public struct OfficeState: Equatable {
             guard event.notification == "idle_prompt" else { return .waiting }
             // idle_prompt also comes while a question or permission prompt is still open: that stays a wait.
             return current == .waiting ? nil : .resting
-        case .sessionEnd, .subagentStart, .subagentStop: return nil
+        case .sessionEnd, .subagentStart, .subagentStop, .postModelSwitch: return nil
         }
     }
 
-    /// Applies one event. Returns true when the list of desks changed, so the caller can save it.
+    /// Applies one event. Returns true when the recent folders changed, so the caller can save them.
     @discardableResult
     public mutating func apply(_ event: HookEvent, now: Date) -> Bool {
+        var event = event
+        if let id = links[event.session] { event.session = id }
         if event.kind == .sessionEnd {
             removeSessions { $0.id == event.session }
             return false
         }
-        var desksChanged = false
         let seated = locate(event.session) != nil
-        guard let (d, s) = locate(event.session) ?? seat(event, now: now, desksChanged: &desksChanged) else {
+        guard let (d, s) = locate(event.session) ?? takeOver(&event, now: now) ?? seat(event, now: now) else {
             return false
         }
-        if let pid = event.pid { desks[d].sessions[s].pid = pid }
+        let desksChanged = remember(desks[d].folder)
+        // Once matched with a process found on this Mac, its number stays that process's.
+        if let pid = event.pid, desks[d].sessions[s].started == nil { desks[d].sessions[s].pid = pid }
         if seated, event.sendsMessage, let to = event.recipient { overhear(event, to: to, in: desks[d].sessions[s]) }
         guard let agentID = event.agentID else {
             news["s:" + event.session] = now
-            note(event, at: "s:" + event.session)
+            note(event, at: "s:" + event.session, now: now)
+            record(event, at: "s:" + event.session, now: now)
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
@@ -397,14 +552,24 @@ public struct OfficeState: Equatable {
         var mates = desks[d].sessions[s].teammates
         let index = mates.firstIndex { $0.id == agentID }
         news["a:" + agentID] = now
-        note(event, at: "a:" + agentID)
+        note(event, at: "a:" + agentID, now: now)
+        record(event, at: "a:" + agentID, now: now)
         switch (event.kind, index) {
         case (.subagentStop, let i?):
+            if details["s:" + event.session]?.called[agentID] != nil {
+                details["s:" + event.session]?.called[agentID] = true
+            }
             let leaving = mates.remove(at: i)
             for k in mates.indices where mates[k].calledBy == agentID { mates[k].calledBy = leaving.calledBy }
             news["a:" + agentID] = nil
             vacate(.teammate(agentID))
-            closeEmptyIslands()
+            // The one that waited longest for a seat takes it, and walks in from the door now.
+            let seated = seatedTeammates
+            if let k = mates.firstIndex(where: { !seated.contains($0.id) }),
+                sit(.teammate(mates[k].id), at: event.session)
+            {
+                mates[k].arrived = now
+            }
         case (.subagentStop, nil):
             news["a:" + agentID] = nil
         case (_, let i?):
@@ -425,13 +590,21 @@ public struct OfficeState: Equatable {
                     mate.calledBy = caller.flatMap { id in mates.contains { $0.id == id } ? id : nil }
                 }
                 mates.append(mate)
-                sit(.teammate(agentID), folder: desks[d].folder, near: event.session, caller: mate.calledBy)
+                sit(.teammate(agentID), at: event.session)
+                // Capped: starts and stops over and over between two prompts can't pile up ids.
+                if event.kind == .subagentStart,
+                    details["s:" + event.session]?.called.count ?? 0 < PersonDetail.maxCalled
+                {
+                    details["s:" + event.session, default: PersonDetail()].called[agentID] = false
+                }
             }
         }
-        // Only seated teammates keep news and a tool kind: a stranger's message, or one past the limit, leaves none.
+        // Only seated teammates keep news, a tool kind and details: a stranger's message, or one past the limit, or
+        // one that left, leaves none.
         if !mates.contains(where: { $0.id == agentID }) {
             news["a:" + agentID] = nil
             kinds["a:" + agentID] = nil
+            details["a:" + agentID] = nil
         }
         desks[d].sessions[s].teammates = mates
         desks[d].sessions[s].recount(event.kind, now: now)
@@ -443,7 +616,7 @@ public struct OfficeState: Equatable {
     static func isWork(_ event: HookEvent) -> Bool {
         switch event.kind {
         case .userPromptSubmit, .stop: return true
-        case .preToolUse: return !event.asksUser && event.toolKind != .team
+        case .preToolUse: return !event.asksUser && event.toolKind != .team && !event.sendsMessage
         default: return false
         }
     }
@@ -497,11 +670,11 @@ public struct OfficeState: Equatable {
         let first = desks.flatMap(\.sessions).filter(\.meets).min {
             ($0.quietSince ?? .distantPast, $0.id) < ($1.quietSince ?? .distantPast, $1.id)
         }
+        let seated = seatedTeammates
         return first.map { session in
             let direct = session.direct
-            return Meeting(
-                session: session, members: Array(direct.prefix(Self.meetingSeats - 1)),
-                more: max(0, direct.count - (Self.meetingSeats - 1)))
+            let members = Array(direct.filter { seated.contains($0.id) }.prefix(Self.meetingSeats - 1))
+            return Meeting(session: session, members: members, more: direct.count - members.count)
         }
     }
 
@@ -510,9 +683,76 @@ public struct OfficeState: Equatable {
         removeSessions { session in session.pid.map(isGone) ?? false }
     }
 
+    /// The latest look at the Claude Code processes running on this Mac. One person for one process: a process
+    /// nobody sits for yet takes a new island, quiet (or working while busy) until its first news, which goes on in
+    /// the same seat. A session found before whose process is gone (or whose number a new process took) goes home
+    /// with its teammates. On the first look after the app opened everyone found was there already and sits down
+    /// without walking in; later ones walk in. The recent folders are left alone: nothing here is saved.
+    public mutating func detect(_ found: [Found], now: Date, opening: Bool) {
+        removeSessions { session in
+            guard let started = session.started else { return false }
+            return !found.contains { $0.pid == session.pid && $0.started == started }
+        }
+        for process in found {
+            if let (d, s) = locate(pid: process.pid) {
+                desks[d].sessions[s].started = process.started
+                if !desks[d].sessions[s].heard { desks[d].sessions[s].set(process.busy ? .working : .quiet, now: now) }
+                continue
+            }
+            guard let folder = Sanitize.clean(process.folder, max: Limits.cwd), folder.hasPrefix("/"),
+                let (d, s) = seat(
+                    "found-\(process.pid)-\(process.started.timeIntervalSince1970)", in: folder, pid: process.pid,
+                    state: process.busy ? .working : .quiet, arrived: opening ? nil : now, now: now)
+            else { continue }
+            desks[d].sessions[s].started = process.started
+            desks[d].sessions[s].heard = false
+        }
+    }
+
+    /// Finding sessions turned off: those only found go home; those with news stay.
+    public mutating func forgetFound() {
+        removeSessions { !$0.heard }
+    }
+
+    /// The first news of a session the office seats as found on this Mac (the same process number): it goes on in
+    /// that seat as the same person, without walking in, and its news comes under that person's id from now on.
+    /// A session that already had news in that process is over: one process, one seat.
+    private mutating func takeOver(_ event: inout HookEvent, now: Date) -> (Int, Int)? {
+        guard event.kind != .subagentStop, !event.sendsMessage, let pid = event.pid,
+            let (d, s) = locate(pid: pid)
+        else { return nil }
+        let id = desks[d].sessions[s].id
+        guard !desks[d].sessions[s].heard else {
+            removeSessions { $0.id == id }
+            return nil
+        }
+        links[event.session] = id
+        event.session = id
+        desks[d].sessions[s].heard = true
+        // Busy enough to send news; the news itself may say more.
+        desks[d].sessions[s].set(.working, now: now)
+        return (d, s)
+    }
+
+    /// Recent folders nobody works in now: what Clear Recent Folders takes away.
+    public var idleFolders: [String] { folders.filter { folder in !desks.contains { $0.folder == folder } } }
+
     /// Forgets the recent folders nobody works in. Folders with a session running stay.
     public mutating func forgetIdleFolders() {
-        desks.removeAll(where: \.isOff)
+        let idle = idleFolders
+        folders.removeAll(where: idle.contains)
+    }
+
+    /// Keeps a folder a session sent news from among the recent folders, newest last. Past `maxDesks` the oldest
+    /// one nobody works in goes; with none such, the new one isn't kept. True when the list changed.
+    private mutating func remember(_ folder: String) -> Bool {
+        guard !folders.contains(folder) else { return false }
+        if folders.count >= Self.maxDesks {
+            guard let oldest = idleFolders.first else { return false }
+            folders.removeAll { $0 == oldest }
+        }
+        folders.append(folder)
+        return true
     }
 
     public func count(_ state: WorkState) -> Int {
@@ -523,7 +763,7 @@ public struct OfficeState: Equatable {
 
     /// True when someone works in `folder` or below it (a start script may open sessions in subfolders).
     public func hasLiveSession(in folder: String) -> Bool {
-        desks.contains { !$0.isOff && Self.isInside($0.folder, folder) }
+        desks.contains { Self.isInside($0.folder, folder) }
     }
 
     public static func isInside(_ path: String, _ folder: String) -> Bool {
@@ -540,35 +780,39 @@ public struct OfficeState: Equatable {
         return nil
     }
 
-    /// Seats a session the office has not seen yet (a new one, or one started before the app).
-    private mutating func seat(_ event: HookEvent, now: Date, desksChanged: inout Bool) -> (Int, Int)? {
-        // A message seats nobody: it is only matched against those already here.
-        if event.kind == .subagentStop || event.sendsMessage || liveSessionCount >= Self.maxSessions { return nil }
-        var d = desks.firstIndex { $0.folder == event.cwd }
-        if d == nil {
-            // A new folder takes over the off-duty desk nearest the door, so it is in view without scrolling.
-            // Other remembered desks keep their places. Only with no off-duty desk does it go at the end.
-            if let off = desks.firstIndex(where: \.isOff) {
-                desks[off] = Desk(folder: event.cwd)
-                d = off
-            } else if desks.count < Self.maxDesks {
-                desks.append(Desk(folder: event.cwd))
-                d = desks.count - 1
-            }
-            desksChanged = d != nil
+    private func locate(pid: Int32) -> (Int, Int)? {
+        for (d, desk) in desks.enumerated() {
+            if let s = desk.sessions.firstIndex(where: { $0.pid == pid }) { return (d, s) }
         }
-        guard let d else { return nil }
+        return nil
+    }
+
+    /// Seats a session the office has not seen yet (a new one, or one started before the app). The recent folders
+    /// are left alone: `remember` keeps them.
+    private mutating func seat(_ event: HookEvent, now: Date) -> (Int, Int)? {
+        // A message seats nobody: it is only matched against those already here.
+        if event.kind == .subagentStop || event.sendsMessage { return nil }
+        return seat(
+            event.session, in: event.cwd, pid: event.pid, state: .resting,
+            arrived: event.kind == .sessionStart ? now : nil, now: now)
+    }
+
+    private mutating func seat(
+        _ id: String, in folder: String, pid: Int32?, state: WorkState, arrived: Date?, now: Date
+    ) -> (Int, Int)? {
+        guard liveSessionCount < Self.maxSessions else { return nil }
+        if !desks.contains(where: { $0.folder == folder }) { desks.append(Desk(folder: folder)) }
+        let d = desks.firstIndex { $0.folder == folder }!
         let name = desks[d].name
         let number = Self.firstFree(desks.filter { $0.name == name }.flatMap(\.sessions).map(\.number))
         var session = Session(
-            id: event.session, name: number == 1 ? name : "\(name) \(number)", number: number, pid: event.pid,
-            state: .resting, since: now, arrived: event.kind == .sessionStart ? now : nil)
-        session.labelBase = nicknames.folders[event.cwd] ?? name
+            id: id, name: number == 1 ? name : "\(name) \(number)", number: number, pid: pid, state: state,
+            since: now, arrived: arrived)
+        session.labelBase = nicknames.folders[folder] ?? name
         session.labelNumber = Self.number(
-            keeping: nicknames.folders[event.cwd] == nil ? number : nil,
-            taken: sessionNumbers(showing: session.labelBase))
+            keeping: nicknames.folders[folder] == nil ? number : nil, taken: sessionNumbers(showing: session.labelBase))
         desks[d].sessions.append(session)
-        sit(.session(event.session), folder: event.cwd)
+        openIsland(for: id)
         return (d, desks[d].sessions.count - 1)
     }
 
@@ -638,8 +882,7 @@ public struct OfficeState: Equatable {
             sessions[session.id] = session
             for mate in session.teammates { mates[mate.id] = (mate, session) }
         }
-        var seated: Set<String> = []
-        for case .teammate(let id)? in islands.flatMap(\.seats) { seated.insert(id) }
+        let seated = seatedTeammates
         return islands.map { island in
             let seats = island.seats.map { occupant -> Seat? in
                 switch occupant {
@@ -649,8 +892,6 @@ public struct OfficeState: Equatable {
                     }
                 case .teammate(let id)?:
                     return mates[id].map { .teammate($0.0, of: $0.1) }
-                case .off(let folder, let name)?:
-                    return .off(name: name, folder: folder)
                 case nil:
                     return nil
                 }
@@ -659,40 +900,38 @@ public struct OfficeState: Equatable {
         }
     }
 
-    /// Seats someone who just arrived. A session takes the island nearest the door that has room. A teammate
-    /// sits at its caller's island (the teammate that called it, else its session), else at the island with room
-    /// nearest to it, else at a new island. A new island takes the free place nearest the door; no island ever
-    /// moves.
-    private mutating func sit(_ who: Occupant, folder: String, near session: String? = nil, caller: String? = nil) {
-        let placed = islands
-        let callers = [caller.map(Occupant.teammate), session.map(Occupant.session)].compactMap { $0 }
-        let home = callers.compactMap { occupant in placed.first { $0.seats.contains(occupant) }?.slot }.first ?? 0
-        let open = islands.indices.filter { islands[$0].seat(for: folder) != nil }.map { i in
-            (i: i, distance: abs(islands[i].slot - home), slot: islands[i].slot)
-        }
-        if let i = open.min(by: { ($0.distance, $0.slot) < ($1.distance, $1.slot) })?.i,
-            let seat = islands[i].seat(for: folder)
-        {
-            islands[i].seats[seat] = who
-        } else if islands.count < Self.maxIslands {
-            let used = Set(islands.map(\.slot))
-            var island = Island(slot: (0...).first { !used.contains($0) }!)
-            island.seats[0] = who
-            islands.append(island)
-            islands.sort { $0.slot < $1.slot }
-        }
+    /// Teammates with a seat; the others wait for one at their session's island.
+    private var seatedTeammates: Set<String> {
+        var seated: Set<String> = []
+        for case .teammate(let id)? in islands.flatMap(\.seats) { seated.insert(id) }
+        return seated
     }
 
-    /// Empties `who`'s seat, or leaves `mark` there.
-    private mutating func vacate(_ who: Occupant, leaving mark: Occupant? = nil) {
+    /// A new session's own island, at the free place nearest the door. No island ever moves.
+    private mutating func openIsland(for session: String) {
+        guard islands.count < Self.maxIslands else { return }
+        let used = Set(islands.map(\.slot))
+        var island = Island(slot: (0...).first { !used.contains($0) }!)
+        island.seats[0] = .session(session)
+        islands.append(island)
+        islands.sort { $0.slot < $1.slot }
+    }
+
+    /// Seats a teammate at the first free seat of its session's island, whoever called it. False when there is
+    /// none: it waits, counted on the session's tag.
+    @discardableResult
+    private mutating func sit(_ who: Occupant, at session: String) -> Bool {
+        guard let i = islands.firstIndex(where: { $0.seats[0] == .session(session) }),
+            let seat = islands[i].seats.firstIndex(of: nil)
+        else { return false }
+        islands[i].seats[seat] = who
+        return true
+    }
+
+    private mutating func vacate(_ who: Occupant) {
         for i in islands.indices {
-            if let seat = islands[i].seats.firstIndex(of: who) { islands[i].seats[seat] = mark }
+            if let seat = islands[i].seats.firstIndex(of: who) { islands[i].seats[seat] = nil }
         }
-    }
-
-    /// An island where nobody works any more goes, with the names of those who went home from it.
-    private mutating func closeEmptyIslands() {
-        islands.removeAll { island in !island.seats.contains { $0?.isAtWork ?? false } }
     }
 
     /// The smallest number from 1 that is not taken, so a newcomer never renumbers anyone already there.
@@ -702,23 +941,181 @@ public struct OfficeState: Equatable {
         return number
     }
 
-    /// A session that ends leaves its name on its seat; its teammates leave with it.
+    /// A session that ends leaves with its teammates, and its island goes; no other island moves.
     private mutating func removeSessions(where shouldRemove: (Session) -> Bool) {
-        for d in desks.indices {
-            let leaving = desks[d].sessions.filter(shouldRemove)
-            for session in leaving {
-                vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.label))
-                news["s:" + session.id] = nil
-                kinds["s:" + session.id] = nil
-                calls[session.id] = nil
-                for mate in session.teammates {
-                    vacate(.teammate(mate.id))
-                    news["a:" + mate.id] = nil
-                    kinds["a:" + mate.id] = nil
-                }
+        let leaving = desks.flatMap(\.sessions).filter(shouldRemove)
+        for session in leaving {
+            islands.removeAll { $0.seats[0] == .session(session.id) }
+            links = links.filter { $0.value != session.id }
+            news["s:" + session.id] = nil
+            kinds["s:" + session.id] = nil
+            details["s:" + session.id] = nil
+            calls[session.id] = nil
+            for mate in session.teammates {
+                news["a:" + mate.id] = nil
+                kinds["a:" + mate.id] = nil
+                details["a:" + mate.id] = nil
             }
+        }
+        for d in desks.indices {
             desks[d].sessions.removeAll { session in leaving.contains { $0.id == session.id } }
         }
-        closeEmptyIslands()
+        desks.removeAll { $0.sessions.isEmpty }
+    }
+}
+
+/// Finds the Claude Code sessions running under this user on this Mac, from what macOS tells any program about its
+/// own user's processes: never command lines, environment variables or other users' processes, and never a signal.
+/// Each look lists the processes and reads their names, start times and CPU time; a new process's folder (and, for a
+/// name that is a version number, its program's path) is read once and kept in memory. What it reads decides who is
+/// found; only the folder goes on, to the office.
+public struct SessionFinder {
+    /// What it may read of a process: one call each, nil when the process is gone, not this user's or answers short.
+    public struct ProcessTable {
+        public var list: () -> [Int32]
+        public var info: (Int32) -> (uid: uid_t, parent: Int32, name: String)?
+        /// Start time in microseconds since 1970.
+        public var started: (Int32) -> UInt64?
+        public var path: (Int32) -> String?
+        public var folder: (Int32) -> String?
+        /// User and system CPU time, in nanoseconds.
+        public var cpu: (Int32) -> UInt64?
+    }
+
+    /// Process ids listed at most per look (16 KiB); past them the rest are skipped.
+    public static let maxProcesses = 4096
+    /// Busy: more CPU time since the last look than this share of the time between the looks. An idle session wakes
+    /// now and then for well under 1 %; streaming a reply or running tools takes several percent and more.
+    public static let busyShare = 0.03
+
+    private struct Key: Hashable {
+        let pid: Int32
+        let started: UInt64
+    }
+
+    private struct Known {
+        let folder: String?
+        var cpu: UInt64?
+        var at: UInt64
+    }
+
+    private let table: ProcessTable
+    private let home: String
+    private let uid: uid_t
+    /// Every process seen at the last look whose name could be Claude Code's: nil for one that isn't after all.
+    private var known: [Key: Known?] = [:]
+
+    public init(table: ProcessTable = .live, home: String = Paths.home, uid: uid_t = getuid()) {
+        self.table = table
+        self.home = home
+        self.uid = uid
+    }
+
+    /// Claude Code by its program's name exactly, or by its path from the official install, fixed at both ends:
+    /// `<home>/.local/share/claude/versions/<n.n.n>`. Never a name or path that merely contains "claude".
+    public static func isClaude(name: String, path: String?, home: String) -> Bool {
+        if name == "claude" { return true }
+        let prefix = home + "/.local/share/claude/versions/"
+        guard let path, path.hasPrefix(prefix) else { return false }
+        return isVersion(String(path.dropFirst(prefix.count)))
+    }
+
+    /// Three numbers with dots between them, such as "2.1.316": the name a versioned program may run under.
+    public static func isVersion(_ text: String) -> Bool {
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 3 && parts.allSatisfy { !$0.isEmpty && $0.allSatisfy { ("0"..."9").contains($0) } }
+    }
+
+    /// The sessions running now, oldest first. A Claude Code started by another (a short run inside a session) is no
+    /// session of its own. `now` is a monotonic clock in nanoseconds.
+    public mutating func look(now: UInt64 = DispatchTime.now().uptimeNanoseconds) -> [OfficeState.Found] {
+        var claudes: [Int32: (key: Key, parent: Int32)] = [:]
+        var seen: [Key: Known?] = [:]
+        for pid in table.list().prefix(Self.maxProcesses) {
+            guard let info = table.info(pid), info.uid == uid, info.name == "claude" || Self.isVersion(info.name),
+                let started = table.started(pid)
+            else { continue }
+            let key = Key(pid: pid, started: started)
+            let known: Known? =
+                known[key]
+                ?? (Self.isClaude(name: info.name, path: info.name == "claude" ? nil : table.path(pid), home: home)
+                    ? Known(folder: table.folder(pid), cpu: nil, at: now) : nil)
+            seen[key] = .some(known)
+            if known != nil { claudes[pid] = (key, info.parent) }
+        }
+        known = seen
+        var found: [OfficeState.Found] = []
+        for (pid, claude) in claudes where claudes[claude.parent] == nil {
+            guard var entry = known[claude.key] ?? nil, let folder = entry.folder else { continue }
+            // Busy by the CPU time spent since the last look; not on the first, with nothing to compare.
+            let cpu = table.cpu(pid)
+            var busy = false
+            if let cpu, let before = entry.cpu, cpu >= before {
+                busy = Self.isBusy(spent: cpu - before, over: now &- entry.at)
+            }
+            (entry.cpu, entry.at) = (cpu, now)
+            known[claude.key] = .some(entry)
+            found.append(
+                OfficeState.Found(
+                    pid: pid, started: Date(timeIntervalSince1970: Double(claude.key.started) / 1_000_000),
+                    folder: folder, busy: busy))
+        }
+        return found.sorted { ($0.started, $0.pid) < ($1.started, $1.pid) }
+    }
+
+    /// CPU time spent over some wall time, both in nanoseconds: busy past `busyShare` of it.
+    public static func isBusy(spent: UInt64, over elapsed: UInt64) -> Bool {
+        elapsed > 0 && Double(spent) > Double(elapsed) * busyShare
+    }
+}
+
+extension SessionFinder.ProcessTable {
+    /// The calls macOS lets any program make about its own user's processes, with no permission asked: the list
+    /// for this user only (each process checked again), the name and parent, the start time, the program's path,
+    /// the working folder, CPU time.
+    public static var live: Self {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let (numer, denom) = (UInt64(max(timebase.numer, 1)), UInt64(max(timebase.denom, 1)))
+        func text<T>(_ field: T) -> String {
+            withUnsafeBytes(of: field) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        }
+        func read<Info>(_ pid: Int32, _ flavor: Int32, _ info: inout Info) -> Bool {
+            let size = Int32(MemoryLayout<Info>.size)
+            return withUnsafeMutableBytes(of: &info) { proc_pidinfo(pid, flavor, 0, $0.baseAddress, size) } == size
+        }
+        return Self(
+            list: {
+                var pids = [Int32](repeating: 0, count: SessionFinder.maxProcesses)
+                let bytes = proc_listpids(
+                    UInt32(PROC_UID_ONLY), UInt32(getuid()), &pids, Int32(pids.count * MemoryLayout<Int32>.size))
+                guard bytes > 0 else { return [] }
+                return pids.prefix(Int(bytes) / MemoryLayout<Int32>.size).filter { $0 > 0 }
+            },
+            info: { pid in
+                var info = proc_bsdshortinfo()
+                guard read(pid, PROC_PIDT_SHORTBSDINFO, &info) else { return nil }
+                return (info.pbsi_uid, Int32(bitPattern: info.pbsi_ppid), text(info.pbsi_comm))
+            },
+            started: { pid in
+                var info = proc_bsdinfo()
+                guard read(pid, PROC_PIDTBSDINFO, &info), info.pbi_uid == getuid() else { return nil }
+                return info.pbi_start_tvsec &* 1_000_000 &+ info.pbi_start_tvusec
+            },
+            path: { pid in
+                var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))  // PROC_PIDPATHINFO_MAXSIZE
+                guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+                return String(cString: path)
+            },
+            folder: { pid in
+                var info = proc_vnodepathinfo()
+                guard read(pid, PROC_PIDVNODEPATHINFO, &info) else { return nil }
+                return text(info.pvi_cdir.vip_path)
+            },
+            cpu: { pid in
+                var info = proc_taskinfo()
+                guard read(pid, PROC_PIDTASKINFO, &info) else { return nil }
+                return (info.pti_total_user &+ info.pti_total_system) &* numer / denom
+            })
     }
 }

@@ -14,8 +14,6 @@ struct PanelSelection: Equatable {
     enum Kind: Equatable {
         case session(String)
         case teammate(String)
-        /// A seat someone went home from.
-        case off
     }
 
     var kind: Kind
@@ -32,9 +30,6 @@ struct PanelSelection: Equatable {
         case .teammate(let mate, _):
             kind = .teammate(mate.id)
             name = mate.label
-        case .off(let name, _):
-            kind = .off
-            self.name = name
         }
         self.seat = place
     }
@@ -73,7 +68,7 @@ final class SidePanel: ObservableObject {
     func open(_ chosen: PanelSelection) {
         selection = chosen
         draft = nil
-        if KeyboardNavigation.shared.active { focusRequest = chosen.kind == .off ? .close : .edit }
+        if KeyboardNavigation.shared.active { focusRequest = .edit }
     }
 
     /// Closes the panel; focus goes back to the seat it came from.
@@ -109,8 +104,8 @@ final class SidePanel: ObservableObject {
     /// What the panel shows for whoever it is open on.
     enum Facts {
         /// A session; `named` when its folder has a nickname (the automatic name shows small under it).
-        case session(Session, named: Bool, news: Date?)
-        case teammate(Teammate, of: Session, news: Date?)
+        case session(Session, named: Bool)
+        case teammate(Teammate, of: Session)
         /// They have gone: the name they had, faded.
         case wentHome(String)
     }
@@ -119,43 +114,74 @@ final class SidePanel: ObservableObject {
         switch selection.kind {
         case .session(let id):
             guard let session = office.session(id) else { return .wentHome(selection.name) }
-            return .session(
-                session, named: nickname(of: selection.kind, in: office) != nil, news: office.lastNews(session: id))
+            return .session(session, named: nickname(of: selection.kind, in: office) != nil)
         case .teammate(let id):
             guard let (mate, session) = office.teammate(id) else { return .wentHome(selection.name) }
-            return .teammate(mate, of: session, news: office.lastNews(teammate: id))
-        case .off:
-            return .wentHome(selection.name)
+            return .teammate(mate, of: session)
         }
     }
 
-    /// What VoiceOver says as the panel opens: the name and the state ("my-project, Waiting, 3 min, In a
-    /// meeting"). Nothing for someone who went home: the panel says so.
+    /// What VoiceOver says as the panel opens, the panel's own lines: "my-project, Waiting, 3 min, In a meeting,
+    /// Editing files, Just started". Nothing for someone who went home: the panel says so.
     static func spoken(_ kind: PanelSelection.Kind, in office: OfficeState, now: Date) -> String? {
         func state(_ state: WorkState, since: Date, meets: Bool) -> [String] {
             var words: [String] = []
             if !meets || state == .waiting {
                 words.append(state.spoken)
-                let minutes = Int(now.timeIntervalSince(since) / 60)
-                if minutes >= 1 { words.append(String(localized: "\(minutes) min")) }
+                if state != .quiet { words.append(TimeSpan(from: since, to: now).lastingSpoken) }
             }
             if meets { words.append(String(localized: "In a meeting")) }
             return words
         }
-        let now = doing(kind, in: office).map { [$0.spoken] } ?? []
+        var doingWords = doing(kind, in: office).map { [$0.spoken] } ?? []
+        if !doingWords.isEmpty, let since = doingSince(kind, in: office) {
+            doingWords.append(TimeSpan(from: since, to: now).lastingSpoken)
+        }
+        if let file = file(kind, in: office) { doingWords.append(file) }
+        if let detail = detail(kind, in: office) {
+            if detail.tasks.total > 0 {
+                doingWords.append(String(localized: "Tasks \(detail.tasks.done)/\(detail.tasks.total)"))
+                if let title = detail.tasks.title { doingWords.append(title) }
+            } else if detail.teamCalled > 0 {
+                doingWords.append(String(localized: "\(detail.teamDone) of \(detail.teamCalled) teammates done"))
+            }
+        }
         switch kind {
         case .session(let id):
             guard let session = office.session(id) else { return nil }
-            return ([session.label] + state(session.state, since: session.since, meets: session.meets) + now)
+            return ([session.label] + state(session.state, since: session.since, meets: session.meets) + doingWords)
                 .joined(separator: ", ")
         case .teammate(let id):
             guard let (mate, session) = office.teammate(id) else { return nil }
             return
                 ([mate.label, String(localized: "teammate of \(session.label)")]
-                + state(mate.state, since: mate.since, meets: session.meets(with: mate)) + now).joined(separator: ", ")
-        case .off:
-            return nil
+                + state(mate.state, since: mate.since, meets: session.meets(with: mate)) + doingWords)
+                .joined(separator: ", ")
         }
+    }
+
+    /// Since when they do what `doing` says.
+    static func doingSince(_ kind: PanelSelection.Kind, in office: OfficeState) -> Date? {
+        switch kind {
+        case .session(let id): return office.toolSince(session: id)
+        case .teammate(let id): return office.toolSince(teammate: id)
+        }
+    }
+
+    /// Their side panel's details. Only the side panel reads them (a test checks), never a tag, menu or tooltip.
+    static func detail(_ kind: PanelSelection.Kind, in office: OfficeState) -> PersonDetail? {
+        switch kind {
+        case .session(let id): return office.detail(session: id)
+        case .teammate(let id): return office.detail(teammate: id)
+        }
+    }
+
+    /// The file of what they do now, when Show Details sent one.
+    static func file(_ kind: PanelSelection.Kind, in office: OfficeState) -> String? {
+        guard let doing = doing(kind, in: office), let step = detail(kind, in: office)?.steps.last,
+            step.kind == doing
+        else { return nil }
+        return step.file
     }
 
     /// A session's teammates in the panel's order: each teammate's own teammates under it, a step further in.
@@ -181,8 +207,6 @@ final class SidePanel: ObservableObject {
             return office.session(id)?.state == .working ? office.toolKind(session: id) : nil
         case .teammate(let id):
             return office.teammate(id)?.teammate.state == .working ? office.toolKind(teammate: id) : nil
-        case .off:
-            return nil
         }
     }
 
@@ -191,7 +215,6 @@ final class SidePanel: ObservableObject {
         switch kind {
         case .session(let id): return office.folder(ofSession: id).flatMap { office.nicknames.folders[$0] }
         case .teammate(let id): return office.teammate(id).flatMap { office.nicknames.agents[$0.teammate.name ?? ""] }
-        case .off: return nil
         }
     }
 
@@ -223,8 +246,9 @@ struct OfficeView: View {
     @FocusState private var focus: OfficeFocus?
     /// Screenshots pin the clock and the animation frame.
     var fixedNow: Date?
-    /// Screenshots can hand in a stage with someone already walking.
+    /// Screenshots can hand in a stage with someone already walking, tests a zoom to drive.
     var stage: Stage?
+    var zoom: OfficeZoom?
     /// Only the CPU test sets these.
     var ticksWhileHidden = false
     var reducesMotion = false
@@ -234,11 +258,12 @@ struct OfficeView: View {
 
     /// Screenshots and tests can hand in a panel already open.
     init(
-        fixedNow: Date? = nil, stage: Stage? = nil, panel: SidePanel? = nil, ticksWhileHidden: Bool = false,
-        reducesMotion: Bool = false
+        fixedNow: Date? = nil, stage: Stage? = nil, zoom: OfficeZoom? = nil, panel: SidePanel? = nil,
+        ticksWhileHidden: Bool = false, reducesMotion: Bool = false
     ) {
         self.fixedNow = fixedNow
         self.stage = stage
+        self.zoom = zoom
         self.ticksWhileHidden = ticksWhileHidden
         self.reducesMotion = reducesMotion
         _panel = StateObject(wrappedValue: panel ?? SidePanel())
@@ -252,8 +277,9 @@ struct OfficeView: View {
                 let beside = SidePanelView.fitsBeside(width: geometry.size.width)
                 HStack(spacing: 0) {
                     OfficeRoom(
-                        panel: panel, focus: $focus, fixedNow: fixedNow, stage: stage,
-                        ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion
+                        panel: panel, focus: $focus, fixedNow: fixedNow, stage: stage, zoom: zoom,
+                        ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion,
+                        covered: !beside && panel.selection != nil ? SidePanelView.width : 0
                     )
                     .overlay {
                         // Centred on the floor left of the meeting room and lounge, when the window has them.
@@ -299,6 +325,7 @@ struct OfficeView: View {
                 guard let model, let panel, model.sheet == nil else { return false }
                 return panel.escape()
             }
+            KeyboardNavigation.shared.zoomIn = { [weak model] in model?.zoomIn() }
         }
         .onChange(of: focus) { panel.focus = $0 }
         .onChange(of: panel.selection?.kind) { kind in
@@ -321,14 +348,16 @@ struct OfficeView: View {
     }
 
     @ViewBuilder private var emptyMessage: some View {
-        if !model.everConnected {
+        if model.office.liveSessionCount > 0 {
+            EmptyView()
+        } else if !model.everConnected {
             EmptyOffice(
                 title: "Connection needed",
                 detail: "Install the plugin so Claude Code tells this app when it works."
             ) {
                 Button("Connect…") { openWindow(id: "welcome") }
             }
-        } else if model.office.liveSessionCount == 0 {
+        } else {
             EmptyOffice(
                 title: "Nobody's at work yet",
                 detail:
@@ -337,6 +366,36 @@ struct OfficeView: View {
                 EmptyView()
             }
         }
+    }
+}
+
+/// − and + for the office's zoom, a sharp step at a time, beside Start Work; the end step's button dims. VoiceOver
+/// hears "Zoom Out, 100%".
+struct ZoomButtons: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button {
+                model.zoomOut()
+            } label: {
+                Image(systemName: "minus").frame(width: 12)
+            }
+            .disabled(Zoom.step(from: model.zoom, by: -1) == nil)
+            .help(Text("Zoom Out (⌘−)"))
+            .accessibilityLabel(Text("Zoom Out"))
+            .accessibilityValue(Text(verbatim: "\(Zoom.percent(model.zoom))%"))
+            Button {
+                model.zoomIn()
+            } label: {
+                Image(systemName: "plus").frame(width: 12)
+            }
+            .disabled(Zoom.step(from: model.zoom, by: 1) == nil)
+            .help(Text("Zoom In (⌘+)"))
+            .accessibilityLabel(Text("Zoom In"))
+            .accessibilityValue(Text(verbatim: "\(Zoom.percent(model.zoom))%"))
+        }
+        .controlSize(.large)
     }
 }
 
@@ -352,6 +411,7 @@ struct OfficeBar: View {
                 status.font(.callout)
             }
             Spacer(minLength: 8)
+            ZoomButtons()
             Button {
                 model.startWork()
             } label: {
@@ -368,11 +428,13 @@ struct OfficeBar: View {
         let office = model.office
         guard office.liveSessionCount > 0 else { return Text("No sessions running").foregroundColor(.secondary) }
         let waiting = office.count(.waiting)
+        let quiet = office.count(.quiet)
         return Text("Working \(office.count(.working))")
             + Text(verbatim: " · ")
             + Text("Waiting \(waiting)").foregroundColor(waiting > 0 ? Style.waiting : .primary)
             + Text(verbatim: " · ")
             + Text("Resting \(office.count(.resting))")
+            + (quiet > 0 ? Text(verbatim: " · ") + Text("Quiet \(quiet)") : Text(verbatim: ""))
     }
 
     /// One message under the summary. It wraps and puts its links on the next line, so nothing is cut at 420 pt.
@@ -397,7 +459,14 @@ struct OfficeBar: View {
                     Button("Check connection") { openWindow(id: "welcome") }.buttonStyle(.link)
                 }
             case .idle, .starting:
-                EmptyView()
+                // One line, so the bar keeps its height and the room doesn't scroll for it.
+                if model.asksToConnect {
+                    HStack(spacing: 8) {
+                        Text("Connect to see waits and teammates too").foregroundStyle(.secondary)
+                        Button("Connect…") { openWindow(id: "welcome") }.buttonStyle(.link)
+                    }
+                    .lineLimit(1)
+                }
             }
         }
     }
@@ -433,18 +502,63 @@ struct EmptyOffice<Actions: View>: View {
     }
 }
 
-/// "12 s ago" by the second for its first minute, then by the half minute: every update of the panel costs about
-/// as much as the room's own ticking.
-struct NewsSchedule: TimelineSchedule {
-    /// Until when it counts seconds.
-    let seconds: Date
+/// Time on the side panel, never in seconds (they ticked and distracted): under a minute is "just", then minutes,
+/// then hours. The panel redraws every 30 s.
+enum TimeSpan: Equatable {
+    case just
+    case minutes(Int)
+    case hours(Int)
 
-    func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
-        var next = start
-        return AnyIterator {
-            defer { next += next < seconds ? 1 : 30 }
-            return next
+    init(from start: Date, to now: Date) {
+        let minutes = max(0, Int(now.timeIntervalSince(start) / 60))
+        self = minutes < 1 ? .just : minutes < 60 ? .minutes(minutes) : .hours(minutes / 60)
+    }
+
+    /// How long it has gone on: "Just started", "2 min", "1 h".
+    var lasting: Text {
+        switch self {
+        case .just: return Text("Just started")
+        case .minutes(let minutes): return Text("\(minutes) min")
+        case .hours(let hours): return Text("\(hours) h")
         }
+    }
+
+    var lastingSpoken: String {
+        switch self {
+        case .just: return String(localized: "Just started")
+        case .minutes(let minutes): return String(localized: "\(minutes) min")
+        case .hours(let hours): return String(localized: "\(hours) h")
+        }
+    }
+
+    /// When it happened: "Just now", "3 min ago", "1 h ago".
+    var ago: Text {
+        switch self {
+        case .just: return Text("Just now")
+        case .minutes(let minutes): return Text("\(minutes) min ago")
+        case .hours(let hours): return Text("\(hours) h ago")
+        }
+    }
+}
+
+/// The state at the top of the side panel: a soft rounded badge with the room bubble's mark and the word, so it
+/// never goes by colour alone.
+struct StateBadge: View {
+    let state: WorkState
+    let word: Text
+
+    var body: some View {
+        let style = Style.badge(state)
+        HStack(spacing: 5) {
+            if let mark = state.mark { Text(verbatim: mark).accessibilityHidden(true) }
+            word
+        }
+        .font(.title3.weight(.semibold))
+        .foregroundStyle(Color(nsColor: style.text))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Color(nsColor: style.fill)))
+        .overlay(Capsule().strokeBorder(Color(nsColor: style.border)))
     }
 }
 
@@ -472,8 +586,8 @@ struct SidePanelView: View {
         if let selection = panel.selection { content(selection) }
     }
 
-    /// What changes with the clock alone, drawn again on its own every `seconds` ("12 s ago" by the second, minutes
-    /// every 30 s): the rest of the panel and the room around it stay as they are.
+    /// What changes with the clock alone, drawn again on its own every `seconds` (minutes, every 30 s): the rest of
+    /// the panel and the room around it stay as they are.
     @ViewBuilder private func ticking<Content: View>(
         every seconds: TimeInterval, @ViewBuilder _ content: @escaping (Date) -> Content
     ) -> some View {
@@ -488,20 +602,17 @@ struct SidePanelView: View {
         let office = model.office
         return VStack(alignment: .leading, spacing: 14) {
             switch SidePanel.facts(selection, in: office) {
-            case .session(let session, let named, let news):
+            case .session(let session, let named):
                 header(Text(verbatim: session.label), auto: named ? Text(verbatim: session.name) : nil)
                 details(
                     role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
-                    teammateWaiting: session.teammateWaiting, doing: SidePanel.doing(selection.kind, in: office),
-                    news: news)
+                    teammateWaiting: session.teammateWaiting, kind: selection.kind, in: office)
                 teammates(session, in: office)
-            case .teammate(let mate, let session, let news):
+            case .teammate(let mate, let session):
                 header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
                 details(
                     role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
-                    meets: session.meets(with: mate), teammateWaiting: false,
-                    doing: SidePanel.doing(selection.kind, in: office),
-                    news: news)
+                    meets: session.meets(with: mate), teammateWaiting: false, kind: selection.kind, in: office)
             case .wentHome(let name):
                 wentHome(name)
             }
@@ -579,32 +690,113 @@ struct SidePanelView: View {
         }
     }
 
-    /// "Session" or "Teammate of my-project", the state and for how long (a wait first, then the meeting), and
-    /// when the app last heard from them.
+    /// The state first, on a badge, and for how long; then "Session" or "Teammate of my-project", and what they do
+    /// now and for how long ("Editing files · 2 min"), only while there is something to say.
     @ViewBuilder private func details(
-        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool,
-        doing: HookEvent.ToolKind?, news: Date?
+        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool, kind: PanelSelection.Kind,
+        in office: OfficeState
     ) -> some View {
+        // In a meeting the meeting takes the badge, as on the name tag; a wait still comes first.
+        let meeting = meets && state != .waiting
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            StateBadge(state: meeting ? .quiet : state, word: meeting ? Text("In a meeting") : state.word)
+            if !meeting, state != .quiet {
+                ticking(every: 30) { now in TimeSpan(from: since, to: now).lasting.foregroundStyle(.secondary) }
+            }
+        }
         role.foregroundStyle(.secondary)
+        // Found before any news from it, quiet or busy: nothing more to show yet.
+        if case .session(let id) = kind, office.session(id)?.heard == false {
+            Text("This session started before the app. Its exact state shows from its next news.")
+                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        let detail = SidePanel.detail(kind, in: office)
+        let doing = SidePanel.doing(kind, in: office)
         VStack(alignment: .leading, spacing: 4) {
-            if !meets || state == .waiting {
-                ticking(every: 30) { now in
-                    let minutes = Int(now.timeIntervalSince(since) / 60)
-                    (state.word + (minutes >= 1 ? Text(verbatim: " · ") + Text("\(minutes) min") : Text(verbatim: "")))
-                        .foregroundStyle(state.color)
+            if let doing {
+                if let started = SidePanel.doingSince(kind, in: office) {
+                    ticking(every: 30) { now in
+                        doing.phrase + Text(verbatim: " · ") + TimeSpan(from: started, to: now).lasting
+                    }
+                } else {
+                    doing.phrase
+                }
+                if let file = SidePanel.file(kind, in: office) {
+                    Text(verbatim: file).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
             }
-            if let doing { doing.phrase }
             if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
-            if meets { Text("In a meeting") }
+            if meets, !meeting { Text("In a meeting") }
         }
-        HStack {
-            Text("Last news").foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            if let fixedNow {
-                Self.ago(news, now: fixedNow)
-            } else {
-                TimelineView(NewsSchedule(seconds: (news ?? .distantPast) + 60)) { Self.ago(news, now: $0.date) }
+        if let detail { more(detail, doing: doing) }
+    }
+
+    /// Below what they do now, only what there is: progress, edits, the latest steps, the model. Received words
+    /// show as they are (`Text(verbatim:)`), never inside a sentence.
+    @ViewBuilder private func more(_ detail: PersonDetail, doing: HookEvent.ToolKind?) -> some View {
+        if detail.tasks.total > 0 {
+            progress(
+                done: detail.tasks.done, of: detail.tasks.total,
+                Text("Tasks \(detail.tasks.done)/\(detail.tasks.total)")
+                    + (detail.tasks.title.map { Text(verbatim: " · " + $0) } ?? Text(verbatim: "")))
+        } else if detail.teamCalled > 0 {
+            progress(
+                done: detail.teamDone, of: detail.teamCalled,
+                Text("\(detail.teamDone) of \(detail.teamCalled) teammates done"))
+        }
+        if !detail.edits.isEmpty {
+            let edits = detail.edits.sorted { $0.added + $0.removed > $1.added + $1.removed }
+            let others = edits.count - 3 + detail.moreEdits
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Edited").foregroundStyle(.secondary)
+                ForEach(edits.prefix(3), id: \.file) { edit in
+                    Text(verbatim: "\(edit.file) +\(edit.added)" + (edit.removed > 0 ? " −\(edit.removed)" : ""))
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                if others > 0 { Text("and \(others) more").foregroundStyle(.secondary) }
+            }
+        }
+        // The latest steps, newest first, leaving out what they do now (its kind on its file) wherever it was.
+        let current = doing == nil ? nil : detail.steps.last
+        let steps = Array(
+            detail.steps.filter { $0.kind != current?.kind || $0.file != current?.file }.suffix(3).reversed())
+        if !steps.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Recently").foregroundStyle(.secondary)
+                ForEach(steps.indices, id: \.self) { index in
+                    let step = steps[index]
+                    HStack(spacing: 6) {
+                        step.kind.word
+                        if let file = step.file {
+                            Text(verbatim: file).lineLimit(1).truncationMode(.middle)
+                        }
+                        Spacer(minLength: 4)
+                        ticking(every: 30) { now in
+                            TimeSpan(from: step.at, to: now).ago.foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        if let model = detail.model {
+            Text(verbatim: Detail.modelName(model))
+                .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+        }
+    }
+
+    /// "Tasks 2/3 · Fix the header" with a cell for each (only the numbers past eight).
+    private func progress(done: Int, of total: Int, _ text: Text) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            text.lineLimit(1).truncationMode(.tail)
+            if total <= 8 {
+                HStack(spacing: 3) {
+                    ForEach(0..<total, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(index < done ? Color.accentColor : Color.secondary.opacity(0.25))
+                            .frame(width: 14, height: 6)
+                    }
+                }
+                .accessibilityHidden(true)
             }
         }
     }
@@ -613,7 +805,12 @@ struct SidePanelView: View {
     private func teammates(_ session: Session, in office: OfficeState) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Teammates").font(.headline)
-            if session.teammates.isEmpty { Text("No teammates").foregroundStyle(.secondary) }
+            // Found on this Mac before any news: its teammates aren't known until then.
+            if !session.heard {
+                Text("Shown with its next news").foregroundStyle(.secondary)
+            } else if session.teammates.isEmpty {
+                Text("No teammates").foregroundStyle(.secondary)
+            }
             ForEach(SidePanel.tree(session), id: \.mate.id) { mate, depth in
                 Button {
                     panel.open(PanelSelection(teammate: mate, in: office))
@@ -638,14 +835,5 @@ struct SidePanelView: View {
                 .focused(focus, equals: .mate(mate.id))
             }
         }
-    }
-
-    /// By the app's own clock: "12 s ago", "3 min ago", "2 h ago"; "—" before any news since the app started.
-    static func ago(_ date: Date?, now: Date) -> Text {
-        guard let date else { return Text(verbatim: "—") }
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        if seconds < 60 { return Text("\(seconds) s ago") }
-        if seconds < 3600 { return Text("\(seconds / 60) min ago") }
-        return Text("\(seconds / 3600) h ago")
     }
 }

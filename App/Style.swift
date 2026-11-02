@@ -21,14 +21,46 @@ enum Style {
     static let tagText = dynamic(light: (0.11, 0.11, 0.12, 1), dark: (1, 1, 1, 1))
     static let tagSecondary = dynamic(light: (0.33, 0.33, 0.35, 1), dark: (0.72, 0.72, 0.74, 1))
 
+    /// The side panel's state badge: a soft fill with strong text of the same hue, the waiting yellow of the room's
+    /// "!" bubble. Quiet has no fill, only a grey border. 4.5:1 or more, light and dark (a test measures it).
+    static func badge(_ state: WorkState) -> (fill: NSColor, text: NSColor, border: NSColor) {
+        switch state {
+        case .working:
+            return (
+                ns(light: (0.906, 0.941, 0.996, 1), dark: (0.129, 0.200, 0.310, 1)),
+                ns(light: (0.102, 0.310, 0.561, 1), dark: (0.659, 0.788, 1, 1)), .clear
+            )
+        case .waiting:
+            return (
+                ns(light: (1, 0.953, 0.776, 1), dark: (0.271, 0.220, 0.059, 1)),
+                ns(light: (0.420, 0.290, 0, 1), dark: (1, 0.824, 0.247, 1)), .clear
+            )
+        case .resting:
+            return (
+                ns(light: (0.937, 0.937, 0.945, 1), dark: (0.200, 0.200, 0.220, 1)),
+                ns(light: (0.290, 0.290, 0.310, 1), dark: (0.850, 0.850, 0.870, 1)), .clear
+            )
+        case .quiet:
+            return (
+                .clear, ns(light: (0.330, 0.330, 0.350, 1), dark: (0.780, 0.780, 0.800, 1)),
+                ns(light: (0.780, 0.780, 0.800, 1), dark: (0.400, 0.400, 0.430, 1))
+            )
+        }
+    }
+
     private static func dynamic(
         light: (CGFloat, CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat, CGFloat)
     ) -> Color {
-        Color(
-            nsColor: NSColor(name: nil) { appearance in
-                let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
-                return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: c.3)
-            })
+        Color(nsColor: ns(light: light, dark: dark))
+    }
+
+    private static func ns(
+        light: (CGFloat, CGFloat, CGFloat, CGFloat), dark: (CGFloat, CGFloat, CGFloat, CGFloat)
+    ) -> NSColor {
+        NSColor(name: nil) { appearance in
+            let c = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+            return NSColor(srgbRed: c.0, green: c.1, blue: c.2, alpha: c.3)
+        }
     }
 }
 
@@ -40,6 +72,7 @@ extension WorkState {
         case .working: return String(localized: "Working")
         case .waiting: return String(localized: "Waiting")
         case .resting: return String(localized: "Resting")
+        case .quiet: return String(localized: "Quiet")
         }
     }
 
@@ -48,17 +81,30 @@ extension WorkState {
         case .working: return Text("Working")
         case .waiting: return Text("Waiting")
         case .resting: return Text("Resting")
+        case .quiet: return Text("Quiet")
         }
     }
 
-    /// The label under a character: "Working", "Waiting · 3 min", "Resting".
-    func label(since: Date, now: Date) -> Text {
+    /// The room bubble's mark, beside the word on the panel's badge; none for Quiet.
+    var mark: String? {
         switch self {
-        case .working: return Text("Working")
-        case .resting: return Text("Resting")
+        case .working: return "…"
+        case .waiting: return "!"
+        case .resting: return "z"
+        case .quiet: return nil
+        }
+    }
+
+    /// The label under a character: "Working", "Waiting · 3 min", "Resting", "Quiet"; compact (small name tags)
+    /// "Waiting 3 min".
+    func label(since: Date, now: Date, compact: Bool = false) -> Text {
+        switch self {
         case .waiting:
             let minutes = Int(now.timeIntervalSince(since) / 60)
-            return minutes < 1 ? Text("Waiting") : Text("Waiting · \(minutes) min")
+            if minutes < 1 { return Text("Waiting") }
+            return compact ? Text("Waiting \(minutes) min") : Text("Waiting · \(minutes) min")
+        case .working, .resting, .quiet:
+            return word
         }
     }
 
@@ -66,7 +112,7 @@ extension WorkState {
         switch self {
         case .working: return .primary
         case .waiting: return Style.waiting
-        case .resting: return .secondary
+        case .resting, .quiet: return .secondary
         }
     }
 
@@ -75,34 +121,58 @@ extension WorkState {
         switch self {
         case .working: return Style.tagText
         case .waiting: return Style.waiting
-        case .resting: return Style.tagSecondary
+        case .resting, .quiet: return Style.tagSecondary
         }
     }
 }
 
 extension HookEvent.ToolKind {
-    /// What someone working is doing now, in one of six fixed phrases: only these words ever show, never a tool's
+    /// What someone working is doing now, in one of these fixed phrases: only these words ever show, never a tool's
     /// name or anything received.
-    var phrase: Text {
+    var phrase: Text { Text(LocalizedStringKey(phraseKey)) }
+
+    /// The same phrase for VoiceOver to say.
+    var spoken: String { String(localized: String.LocalizationValue(phraseKey)) }
+
+    /// One word for a step in the side panel's recent list ("Edit app.ts"); never what was searched or run.
+    var word: Text { Text(LocalizedStringKey(wordKey)) }
+
+    var wordKey: String {
         switch self {
-        case .read: return Text("Reading files")
-        case .edit: return Text("Editing files")
-        case .command: return Text("Running a command")
-        case .web: return Text("Searching the web")
-        case .team: return Text("Calling teammates")
-        case .other: return Text("Using another tool")
+        case .read: return "Read"
+        case .find, .grep: return "Find"
+        case .lsp: return "Code"
+        case .edit: return "Edit"
+        case .write: return "Write"
+        case .command, .monitor: return "Run"
+        case .web: return "Web search"
+        case .fetch: return "Web page"
+        case .team: return "Call"
+        case .talk: return "Message"
+        case .tasks: return "Tasks"
+        case .skill: return "Skill"
+        case .other: return "Other"
         }
     }
 
-    /// The same phrase for VoiceOver to say.
-    var spoken: String {
+    /// Each key is in the string catalog (a test checks).
+    var phraseKey: String {
         switch self {
-        case .read: return String(localized: "Reading files")
-        case .edit: return String(localized: "Editing files")
-        case .command: return String(localized: "Running a command")
-        case .web: return String(localized: "Searching the web")
-        case .team: return String(localized: "Calling teammates")
-        case .other: return String(localized: "Using another tool")
+        case .read: return "Reading files"
+        case .find: return "Finding files"
+        case .grep: return "Searching code"
+        case .lsp: return "Looking at code structure"
+        case .edit: return "Editing files"
+        case .write: return "Writing files"
+        case .command: return "Running a command"
+        case .monitor: return "Watching a command"
+        case .web: return "Searching the web"
+        case .fetch: return "Reading a web page"
+        case .team: return "Calling teammates"
+        case .talk: return "Messaging a teammate"
+        case .tasks: return "Organizing tasks"
+        case .skill: return "Using a skill"
+        case .other: return "Using another tool"
         }
     }
 }

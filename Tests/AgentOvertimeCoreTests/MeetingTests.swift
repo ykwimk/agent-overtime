@@ -160,11 +160,15 @@ final class MeetingTests: XCTestCase {
         XCTAssertEqual(office.meeting?.session.id, "s1", "the room is free again")
     }
 
-    /// Six seats: the session and five teammates. Anyone more stays at their desk, counted as "+n".
-    func testPastSixSeatsTheRestStayOut() {
-        var office = office(teammates: 7)
-        office.advance(to: t0 + delay)
-        XCTAssertEqual(office.meeting?.members.map(\.id), (0..<5).map { "s1-\($0)" })
-        XCTAssertEqual(office.meeting?.more, 2)
+    /// At the table: the session and the teammates seated at its island. Those still waiting for a seat meet too,
+    /// counted as "+n".
+    func testTeammatesWaitingForASeatAreCountedAsMore() {
+        for (teammates, more) in [(3, 0), (5, 2), (7, 4)] {
+            var office = office(teammates: teammates)
+            office.advance(to: t0 + delay)
+            XCTAssertEqual(office.meeting?.members.map(\.id), (0..<3).map { "s1-\($0)" }, "\(teammates)")
+            XCTAssertEqual(office.meeting?.more, more, "\(teammates)")
+            XCTAssertEqual(office.session("s1")?.direct.count, teammates, "all in the meeting")
+        }
     }
 }

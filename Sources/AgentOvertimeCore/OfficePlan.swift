@@ -27,14 +27,57 @@ public struct Pod: Equatable, Identifiable {
     public var id: Int { slot }
 }
 
-/// Where things sit in the office, in art pixels. The art is drawn at a fixed 2 points per pixel, so a wider
-/// window fits more islands in a row and nothing is ever scaled by a fraction.
+/// How big the office is shown, like a map: a magnification of the room as laid out for the window (1 is normal).
+/// The layout never changes with it. A pinch or ⌘-scroll goes anywhere in `range`, and letting go settles on the
+/// nearest of the `steps`. On a Retina display the room's art pixels are 4 × m screen pixels, whole at every step;
+/// the people's are 6 × m, whole at 0.5, 1 and 1.5 and a pixel uneven at 0.75 and 1.25 (4.5 and 7.5).
+public enum Zoom {
+    public static let normal = 1.0
+    public static let steps = [0.5, 0.75, 1, 1.25, 1.5]
+    public static let range = 0.5...1.5
+
+    public static func clamped(_ magnification: Double) -> Double {
+        magnification.isFinite ? min(max(magnification, range.lowerBound), range.upperBound) : normal
+    }
+
+    /// The step a gesture settles on.
+    public static func nearest(_ magnification: Double) -> Double {
+        steps.min { abs($0 - magnification) < abs($1 - magnification) }!
+    }
+
+    /// The next step up (1) or down (-1) from here, or nil past the end.
+    public static func step(from magnification: Double, by direction: Int) -> Double? {
+        direction > 0
+            ? steps.first { $0 > magnification + 0.001 } : steps.last { $0 < magnification - 0.001 }
+    }
+
+    /// The saved setting, a step in percent (50, 75, 100, 125, 150). The earlier 1, 2 and 3 meant small, normal and
+    /// large; anything else, or nothing, is normal.
+    public static func stored(_ value: Any?) -> Double {
+        guard let number = value as? Int else { return normal }
+        if (1...3).contains(number) { return [0.5, 1, 1.5][number - 1] }
+        return steps.first { percent($0) == number } ?? normal
+    }
+
+    public static func percent(_ magnification: Double) -> Int { Int((magnification * 100).rounded()) }
+
+    /// Where a view is scrolled after a zoom from `old` to `new` that keeps `point` (in the view, from its top left)
+    /// over the same spot of the room: like a map, the place under the pointer stays under it.
+    public static func origin(_ origin: CGPoint, keeping point: CGPoint, from old: Double, to new: Double) -> CGPoint {
+        let ratio = new / old
+        return CGPoint(x: (origin.x + point.x) * ratio - point.x, y: (origin.y + point.y) * ratio - point.y)
+    }
+}
+
+/// Where things sit in the office, in art pixels, for the window's width at normal size. The room picture is
+/// drawn at 2 bitmap pixels per art pixel and shown at the zoom (`Zoom`); a wider window fits more islands in a row.
 ///
 /// An island from its top down: the name tags of the two seats across the desks (people facing the room), their
 /// heads behind the far desks, the near desks, the chairs of the two seats with their backs to the room, and
 /// their name tags. Rows of islands sit one after another; every other row is moved right, so islands don't
 /// line up in columns.
 public struct RoomLayout: Equatable {
+    /// Points per art pixel at normal size, and the room picture's own bitmap pixels per art pixel at every zoom.
     public static let pointsPerPixel = 2
     /// The back wall, door at its left end.
     public static let wall = 96
@@ -58,10 +101,10 @@ public struct RoomLayout: Equatable {
     /// From an island's top: the back edge of the far desks, and the top of the near desks' picture.
     public static let farDesk = 50
     public static let nearDesk = 58
-    /// The default window shows four islands (16 people) and the right-hand column without scrolling: the lane,
-    /// two islands, the row offset, the gaps and the column make 600 art pixels (8 to spare), and the wall, two
-    /// rows and the top bar about 758 pt. 1216 × 760 stays inside a 1280 × 800 screen. The smallest window holds
-    /// one island and its name tags.
+    /// The default window shows four islands (four sessions, 16 people) and the right-hand column without
+    /// scrolling; a fifth session starts a row below and the room scrolls. The lane, two islands, the row offset,
+    /// the gaps and the column make 600 art pixels (8 to spare), and the wall, two rows and the top bar about
+    /// 758 pt. 1216 × 760 stays inside a 1280 × 800 screen. The smallest window holds one island and its name tags.
     public static let defaultWindow = (width: 1216, height: 760)
     public static let minWindow = (width: 560, height: 470)
 
@@ -94,6 +137,14 @@ public struct RoomLayout: Equatable {
     public var contentHeight: Int {
         let islands = Self.firstRow + (rows - 1) * Self.rowPitch + Self.islandDepth
         return pillar == nil ? islands : max(islands, MeetingRoom.columnDepth)
+    }
+
+    /// The islands out of sight in a view of the room from `top` down, `height` art pixels tall: those whose middle
+    /// is above it and those whose middle is below it, nearest first.
+    public func outOfSight(_ slots: [Int], top: Int, height: Int) -> (above: [Int], below: [Int]) {
+        let middle = { (slot: Int) in origin(of: slot).y + Self.islandDepth / 2 }
+        let sorted = slots.sorted()
+        return (sorted.filter { middle($0) < top }.reversed(), sorted.filter { middle($0) > top + height })
     }
 
     /// The glass meeting room at the top of the right-hand column, or nil when the window has no column.

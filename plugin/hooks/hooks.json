@@ -25,6 +25,9 @@
     "SubagentStop": [
       { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
     ],
+    "PostModelSwitch": [
+      { "hooks": [ { "type": "command", "async": true, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
+    ],
     "SessionEnd": [
       { "hooks": [ { "type": "command", "timeout": 1, "command": "test -x '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook' && exec '/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook'; test -x \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\" && exec \"$HOME/Applications/AgentOvertime.app/Contents/MacOS/agent-overtime-hook\"; exit 0" } ] }
     ]

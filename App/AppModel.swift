@@ -79,6 +79,14 @@ final class AppModel: ObservableObject {
     @Published var welcomeDismissed: Bool {
         didSet { defaults.set(welcomeDismissed, forKey: Keys.welcomeDismissed) }
     }
+    /// Show Details. The helper reads this same value and sends no details while it is off; the app drops any that
+    /// come anyway.
+    @Published var showsDetails: Bool {
+        didSet {
+            defaults.set(showsDetails, forKey: ShowDetails.key)
+            if !showsDetails { office.forgetDetails() }
+        }
+    }
 
     let location: AppLocation
     let socketPath: String
@@ -87,11 +95,36 @@ final class AppModel: ObservableObject {
     private var server: EventServer?
     private var ticker: Timer?
     private var meetingTimer: Timer?
+    private var hasLooked = false
+    private var finder = SessionFinder()
+    /// Find sessions without the plugin (Settings > Connection). Off, it stops looking and those only found leave;
+    /// on again, those found sit down as already there.
+    @Published var findsSessions: Bool {
+        didSet {
+            defaults.set(findsSessions, forKey: Keys.findsSessions)
+            if findsSessions {
+                hasLooked = false
+                lookForSessions()
+            } else {
+                office.forgetFound()
+            }
+        }
+    }
+
+    /// The office's zoom step (View > Zoom In, Zoom Out, Actual Size; a pinch settles on one), kept for next time.
+    @Published var zoom: Double {
+        didSet { defaults.set(Zoom.percent(zoom), forKey: Keys.zoom) }
+    }
+
+    func zoomIn() { zoom = Zoom.step(from: zoom, by: 1) ?? zoom }
+    func zoomOut() { zoom = Zoom.step(from: zoom, by: -1) ?? zoom }
 
     private enum Keys {
         static let approved = "approvedStartFingerprint"
         static let everConnected = "everConnected"
         static let welcomeDismissed = "welcomeDismissed"
+        static let findsSessions = "findsSessions"
+        static let zoom = "zoom"
     }
 
     static let hooksURL = URL(
@@ -108,6 +141,11 @@ final class AppModel: ObservableObject {
         location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
         everConnected = defaults.bool(forKey: Keys.everConnected)
         welcomeDismissed = defaults.bool(forKey: Keys.welcomeDismissed)
+        // On by default, written out so the helper, which takes only an explicit true, sees it.
+        if defaults.object(forKey: ShowDetails.key) == nil { defaults.set(true, forKey: ShowDetails.key) }
+        showsDetails = defaults.bool(forKey: ShowDetails.key)
+        findsSessions = defaults.object(forKey: Keys.findsSessions) as? Bool ?? true
+        zoom = Zoom.stored(defaults.object(forKey: Keys.zoom))
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =
@@ -122,6 +160,8 @@ final class AppModel: ObservableObject {
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             let folder = (Paths.userTempFolder as NSString).appendingPathComponent("ao-test-\(getpid())")
             let defaults = UserDefaults(suiteName: "AgentOvertimeTests-\(getpid())")!
+            // Tests send their own made-up sessions; this Mac's real ones stay out.
+            defaults.set(false, forKey: Keys.findsSessions)
             model = AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
         } else {
             model = AppModel(supportFolder: Paths.supportFolder(), socketPath: Paths.socket(), defaults: .standard)
@@ -145,12 +185,24 @@ final class AppModel: ObservableObject {
         ticker = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
+        // Right away, so sessions already running show within the first seconds; then on the 5 s tick only.
+        lookForSessions()
+    }
+
+    /// One look at this Mac's Claude Code processes, on the 5 s tick (never more often, window shown or not).
+    func lookForSessions() {
+        guard findsSessions, ticker != nil else { return }
+        receive(found: finder.look())
     }
 
     var shouldShowWelcome: Bool { !everConnected && !welcomeDismissed }
 
+    /// People found on this Mac, but never any news: the plugin isn't connected yet, so the office bar says what
+    /// connecting adds.
+    var asksToConnect: Bool { !everConnected && office.liveSessionCount > 0 }
+
     func receive(_ event: HookEvent, at now: Date = Date()) {
-        if office.apply(event, now: now) { save() }
+        if office.apply(showsDetails ? event : event.withoutDetails, now: now) { save() }
         bookMeeting()
         receivedThisRun = true
         if !everConnected {
@@ -164,6 +216,18 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// A look at the Claude Code processes running on this Mac. The first one after the app opened finds people
+    /// already at work, who sit down without walking in. Nothing found this way is saved.
+    func receive(found: [OfficeState.Found], at now: Date = Date()) {
+        var looked = office
+        looked.detect(found, now: now, opening: !hasLooked)
+        hasLooked = true
+        if looked != office {
+            office = looked
+            bookMeeting()
+        }
+    }
+
     private func tick() {
         // Assign only on a change: every assignment redraws everything that watches the office.
         var checked = office
@@ -172,6 +236,7 @@ final class AppModel: ObservableObject {
             office = checked
             bookMeeting()
         }
+        lookForSessions()
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }
@@ -217,8 +282,6 @@ final class AppModel: ObservableObject {
             office = renamed
             save()
             return office.teammate(id)?.teammate.label
-        case .off:
-            return nil
         }
     }
 

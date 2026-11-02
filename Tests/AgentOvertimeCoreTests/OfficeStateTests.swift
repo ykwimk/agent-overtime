@@ -162,19 +162,18 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks[0].sessions[0].shown.since, t0 + 90, "the earliest wait")
     }
 
-    func testEndedSessionLeavesAnOffDutyDesk() {
+    func testEndedSessionLeavesItsFolderAmongTheRecentOnes() {
         var office = OfficeState()
         office.apply(event(.sessionStart), now: t0)
         office.apply(event(.subagentStart, agent: "a1"), now: t0)
         office.apply(event(.sessionEnd), now: t0)
-        XCTAssertEqual(office.desks.count, 1)
-        XCTAssertTrue(office.desks[0].isOff)
-        XCTAssertTrue(office.desks[0].teammates.isEmpty)
+        XCTAssertEqual(office.desks, [], "nobody at work")
+        XCTAssertEqual(office.folders, [shop])
 
-        // /clear sends SessionEnd then SessionStart with a new id: same desk again.
-        office.apply(event(.sessionStart, "s2"), now: t0)
-        XCTAssertEqual(office.desks.count, 1)
-        XCTAssertFalse(office.desks[0].isOff)
+        // /clear sends SessionEnd then SessionStart with a new id: the same folder again.
+        XCTAssertFalse(office.apply(event(.sessionStart, "s2"), now: t0), "already remembered")
+        XCTAssertEqual(office.desks.map(\.name), ["shop"])
+        XCTAssertEqual(office.folders, [shop])
     }
 
     func testStrayStopForUnknownSubagentSeatsNobody() {
@@ -211,7 +210,7 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks[0].sessions[0].since, t0 + 50)
 
         office.apply(event(.sessionEnd), now: t0 + 60)
-        XCTAssertTrue(office.desks[0].isOff, "off duty")
+        XCTAssertEqual(office.liveSessionCount, 0, "gone home")
     }
 
     func testDeadProcessEndsTheSession() {
@@ -220,44 +219,47 @@ final class OfficeStateTests: XCTestCase {
         office.apply(event(.sessionStart, "s2", cwd: "/x/other", pid: 20), now: t0)
         office.apply(event(.sessionStart, "s3", cwd: "/x/third"), now: t0)
         office.endSessions { $0 == 10 }
-        XCTAssertEqual(office.desks.map(\.isOff), [true, false, false], "no pid means no guess")
+        XCTAssertEqual(office.desks.map(\.name), ["other", "third"], "no pid means no guess")
     }
 
     /// Recent folders (for Start Work) can be cleared; a folder with a session running stays.
     func testRecentFoldersCanBeCleared() {
         var office = OfficeState(folders: ["/a/one", "/a/two"])
-        XCTAssertEqual(office.desks.map(\.isOff), [true, true])
+        XCTAssertEqual(office.idleFolders, ["/a/one", "/a/two"])
         office.apply(event(.sessionStart, cwd: "/a/two"), now: t0)
+        XCTAssertEqual(office.idleFolders, ["/a/one"])
         office.forgetIdleFolders()
         XCTAssertEqual(office.folders, ["/a/two"])
+        XCTAssertEqual(office.idleFolders, [])
         XCTAssertEqual(office.islands.count, 1, "seats are untouched")
     }
 
-    /// A new folder sits where it is seen first, not below every remembered desk.
-    func testNewFolderTakesTheOffDutyDeskNearestTheDoor() {
+    /// A new folder goes at the end of the recent folders; the others keep theirs. Seating anyone changes none.
+    func testNewFolderIsRememberedAtTheEnd() {
         var office = OfficeState(folders: ["/a/one", "/a/two", "/a/three"])
-        office.apply(event(.sessionStart, "s1", cwd: "/a/two"), now: t0)
-        XCTAssertFalse(office.apply(event(.sessionStart, "s2", cwd: "/a/two"), now: t0), "a remembered folder")
-
+        XCTAssertFalse(office.apply(event(.sessionStart, "s1", cwd: "/a/two"), now: t0), "a remembered folder")
         XCTAssertTrue(office.apply(event(.sessionStart, "n1", cwd: "/new/one"), now: t0))
-        XCTAssertEqual(office.folders, ["/new/one", "/a/two", "/a/three"])
+        XCTAssertEqual(office.folders, ["/a/one", "/a/two", "/a/three", "/new/one"])
+        office.apply(event(.sessionEnd, "s1", cwd: "/a/two"), now: t0)
         office.apply(event(.sessionStart, "n2", cwd: "/new/two"), now: t0)
-        XCTAssertEqual(office.folders, ["/new/one", "/a/two", "/new/two"], "/a/two keeps its place")
-        office.apply(event(.sessionStart, "n3", cwd: "/new/three"), now: t0)
-        XCTAssertEqual(office.folders, ["/new/one", "/a/two", "/new/two", "/new/three"], "no off-duty desk left")
+        XCTAssertEqual(office.folders, ["/a/one", "/a/two", "/a/three", "/new/one", "/new/two"])
     }
 
     func testCaps() {
         var office = OfficeState(folders: (0..<OfficeState.maxDesks).map { "/old/\($0)" })
         office.apply(event(.sessionStart, cwd: "/new/one"), now: t0)
-        XCTAssertEqual(office.desks.count, OfficeState.maxDesks)
-        XCTAssertEqual(office.folders.first, "/new/one", "takes the off-duty desk nearest the door")
-        XCTAssertEqual(office.folders.last, "/old/23")
+        XCTAssertEqual(office.folders.count, OfficeState.maxDesks)
+        XCTAssertEqual(office.folders.first, "/old/1", "the oldest goes")
+        XCTAssertEqual(office.folders.last, "/new/one")
 
         var full = OfficeState()
         for i in 0..<OfficeState.maxDesks { full.apply(event(.sessionStart, "s\(i)", cwd: "/busy/\(i)"), now: t0) }
-        full.apply(event(.sessionStart, "late", cwd: "/busy/late"), now: t0)
-        XCTAssertFalse(full.folders.contains("/busy/late"), "never evicts a desk with someone at it")
+        XCTAssertFalse(full.apply(event(.sessionStart, "late", cwd: "/busy/late"), now: t0))
+        XCTAssertFalse(full.folders.contains("/busy/late"), "never forgets a folder with someone at work")
+        XCTAssertNotNil(full.session("late"), "seated all the same")
+        full.apply(event(.sessionEnd, "s0", cwd: "/busy/0"), now: t0)
+        XCTAssertTrue(full.apply(event(.stop, "late", cwd: "/busy/late"), now: t0), "its next news, once one is free")
+        XCTAssertEqual(full.folders.first, "/busy/1")
 
         var crowded = OfficeState()
         for i in 0..<100 { crowded.apply(event(.sessionStart, "s\(i)"), now: t0) }
@@ -278,13 +280,19 @@ final class OfficeStateTests: XCTestCase {
         office.apply(event(.permissionRequest, "s1", agent: "a9"), now: t0)
         XCTAssertEqual(office.count(.waiting), 2, "so does the 9th teammate's")
         XCTAssertEqual(office.desks[0].sessions.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
-        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 14, "everyone has a seat")
+        XCTAssertEqual(office.islands.count, 5, "a session each")
+        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 8, "s1's fourth to ninth wait")
     }
 
     func testCounts() {
         var office = OfficeState()
         for e in FakeScenario.events { office.apply(e, now: t0) }
-        XCTAssertEqual(office.desks.map(\.name), ["my-project", "web-app", "blog", "prototype"])
+        XCTAssertEqual(
+            office.folders.map { ($0 as NSString).lastPathComponent },
+            [
+                "my-project", "web-app", "blog", "prototype",
+            ])
+        XCTAssertEqual(office.desks.map(\.name), ["my-project", "web-app", "blog"], "prototype came and went")
         XCTAssertEqual(office.count(.working), 1)
         XCTAssertEqual(office.count(.waiting), 2, "my-project works, but its Plan teammate waits")
         XCTAssertEqual(office.count(.resting), 1)
@@ -292,7 +300,6 @@ final class OfficeStateTests: XCTestCase {
         XCTAssertEqual(office.desks[0].sessions[0].state, .working)
         XCTAssertEqual(office.desks[0].teammates.map(\.state), [.working, .waiting, .resting])
         XCTAssertEqual(office.desks[2].teammates.map(\.name), [nil])
-        XCTAssertTrue(office.desks[3].isOff)
         XCTAssertTrue(office.hasLiveSession(in: FakeScenario.root + "/blog"))
         XCTAssertFalse(office.hasLiveSession(in: FakeScenario.root + "/prototype"))
         XCTAssertTrue(office.hasLiveSession(in: FakeScenario.root), "a start script may open sessions in subfolders")
@@ -307,7 +314,9 @@ final class OfficeStateTests: XCTestCase {
         let before = office
         office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .edit), now: t0 + 1)
         office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .command), now: t0 + 2)
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .command), now: t0 + 2.5)
         XCTAssertEqual(office.toolKind(session: "s1"), .command)
+        XCTAssertEqual(office.toolSince(session: "s1"), t0 + 2, "commands one after another count from the first")
         XCTAssertEqual(office, before, "the same picture")
         office.apply(
             HookEvent(kind: .preToolUse, session: "s1", cwd: shop, agentID: "a1", toolKind: .read), now: t0 + 3)

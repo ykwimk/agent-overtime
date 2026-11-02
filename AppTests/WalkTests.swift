@@ -168,15 +168,50 @@ final class WalkTests: XCTestCase {
         XCTAssertEqual(after.out, [])
     }
 
+    /// A fourth teammate waits outside; once a seat frees it walks in from the door, while the one that left walks
+    /// out.
+    func testAWaitingTeammateWalksInWhenASeatFrees() {
+        send(.userPromptSubmit, at: 0)
+        for k in 0..<4 { send(.subagentStart, agent: "a\(k)", type: "Explore", at: 1) }
+        XCTAssertTrue(stage.moment(at: t0 + 30).walkers.isEmpty, "nobody walks for the one waiting")
+        send(.subagentStop, agent: "a0", type: "Explore", at: 60)
+        let moment = stage.moment(at: t0 + 60.5)
+        XCTAssertTrue(moment.away.contains("m:a3"), "on its way in")
+        XCTAssertTrue(moment.out.contains("m:a0"), "on its way out")
+        XCTAssertEqual(stage.moment(at: t0 + 90).walkers.count, 0, "seated")
+    }
+
+    /// Found at the app's first look: already seated. Found later: walks in. Its first news goes on in the same
+    /// seat, without walking.
+    func testFoundSessionsWalkInOnlyWhenNew() {
+        let first = OfficeState.Found(pid: 1, started: t0 - 600, folder: folder, busy: false)
+        office.detect([first], now: t0, opening: true)
+        _ = stage.sync(office, width: width, now: t0, animate: true)
+        XCTAssertTrue(stage.moment(at: t0 + 0.1).walkers.isEmpty, "there already")
+
+        let second = OfficeState.Found(pid: 2, started: t0 + 9, folder: "/w/web-app", busy: true)
+        office.detect([first, second], now: t0 + 10, opening: false)
+        _ = stage.sync(office, width: width, now: t0 + 10, animate: true)
+        let newcomer = office.desks.flatMap(\.sessions).first { $0.pid == 2 }!.id
+        XCTAssertTrue(stage.moment(at: t0 + 10.5).away.contains("p:" + newcomer), "a new process walks in")
+
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder, pid: 1), now: t0 + 30)
+        _ = stage.sync(office, width: width, now: t0 + 30, animate: true)
+        XCTAssertTrue(stage.moment(at: t0 + 30.5).walkers.isEmpty, "the same person: nobody walks")
+        XCTAssertEqual(office.islands.count, 2)
+    }
+
     /// No more than six walk at once: the seventh is just there.
     func testAtMostSixWalkAtOnce() {
         send(.userPromptSubmit, at: 0)
-        for k in 0..<6 { send(.subagentStart, agent: "a\(k)", type: "Explore", at: 1) }
+        for k in 0..<3 { send(.subagentStart, agent: "a\(k)", type: "Explore", at: 1) }
         meet(at: 11)
         send(.sessionStart, "s2", at: 11)
+        send(.subagentStart, "s2", agent: "b0", type: "Plan", at: 11)
+        send(.subagentStart, "s2", agent: "b1", type: "Plan", at: 11)
         let counts = stride(from: 11.0, to: 30, by: 0.1).map { stage.moment(at: t0 + $0).walkers.count }
-        XCTAssertEqual(counts.max(), Stage.maxWalkers, "the session and five teammates")
-        XCTAssertFalse(stage.moment(at: t0 + 11.5).away.contains("p:s2"), "the newcomer is at its desk at once")
+        XCTAssertEqual(counts.max(), Stage.maxWalkers, "s1 and its three to the meeting, s2 and b0 in")
+        XCTAssertFalse(stage.moment(at: t0 + 11.5).away.contains("m:b1"), "the seventh is at its desk at once")
     }
 
     /// Reduce Motion: nobody walks. ① shows the speaking mark at the session's own seat for 2 s, and a meeting

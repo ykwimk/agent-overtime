@@ -67,6 +67,74 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(narrow.columns, 2)
     }
 
+    /// Zoom is a magnification only: settling on the nearest step (50, 75, 100, 125, 150 %), a step at a time from
+    /// the menu, kept within the range, the point under the pointer kept in place. The layout is the window's at
+    /// normal size whatever the zoom.
+    func testZoomLikeAMap() {
+        XCTAssertEqual(Zoom.steps, [0.5, 0.75, 1, 1.25, 1.5])
+        for step in Zoom.steps {
+            XCTAssertEqual((4 * step).truncatingRemainder(dividingBy: 1), 0, "room pixels whole at \(step)")
+        }
+        XCTAssertEqual(
+            [0.5, 0.6, 0.65, 0.8, 0.9, 1.1, 1.2, 1.4, 1.5].map(Zoom.nearest),
+            [0.5, 0.5, 0.75, 0.75, 1, 1, 1.25, 1.5, 1.5])
+        XCTAssertEqual(Zoom.step(from: 1, by: 1), 1.25)
+        XCTAssertEqual(Zoom.step(from: 1.25, by: 1), 1.5)
+        XCTAssertNil(Zoom.step(from: 1.5, by: 1), "the end")
+        XCTAssertEqual(Zoom.step(from: 1, by: -1), 0.75)
+        XCTAssertNil(Zoom.step(from: 0.5, by: -1), "the end")
+        XCTAssertEqual(Zoom.step(from: 0.8, by: 1), 1, "from between steps, the next one")
+        XCTAssertEqual([0.1, 0.7, 9, .infinity, .nan].map(Zoom.clamped), [0.5, 0.7, 1.5, 1, 1])
+
+        // A pinch from 1 to 1.5 at (100, 50) in the view, scrolled to (40, 0): that spot of the room stays there.
+        let origin = Zoom.origin(CGPoint(x: 40, y: 0), keeping: CGPoint(x: 100, y: 50), from: 1, to: 1.5)
+        XCTAssertEqual(origin, CGPoint(x: 110, y: 25))
+        XCTAssertEqual((origin.x + 100) / 1.5, 40 + 100)
+        XCTAssertEqual((origin.y + 50) / 1.5, 0 + 50)
+
+        let normal = RoomLayout(points: Double(RoomLayout.defaultWindow.width), slots: 9)
+        XCTAssertEqual(normal.columns, 2, "two islands a row in the default window, at any zoom")
+        XCTAssertEqual(normal.width, RoomLayout.defaultWindow.width / RoomLayout.pointsPerPixel)
+    }
+
+    /// The saved zoom is a step in percent; the earlier 1, 2 and 3 read as the same small, normal and large; anything
+    /// else (out of range, not a step, not a number, nothing) is normal, so no setting can draw the room bigger.
+    func testStoredZoom() {
+        XCTAssertEqual([50, 75, 100, 125, 150].map { Zoom.stored($0) }, [0.5, 0.75, 1, 1.25, 1.5])
+        XCTAssertEqual([1, 2, 3].map { Zoom.stored($0) }, [0.5, 1, 1.5])
+        XCTAssertEqual([0, 4, 60, 400, -100, 1_000_000].map { Zoom.stored($0) }, Array(repeating: 1, count: 6))
+        XCTAssertEqual(Zoom.stored("150"), 1)
+        XCTAssertEqual(Zoom.stored(nil), 1)
+        XCTAssertEqual(Zoom.stored(1.5), 1)
+        XCTAssertEqual(Zoom.steps.map(Zoom.percent), [50, 75, 100, 125, 150])
+    }
+
+    /// "1 more team below": the islands whose middle is out of the view, nearest first; pressing it scrolls to the
+    /// first. Three sessions in a window a little narrower than the default (one island a row), five and nine in
+    /// the default window, at two heights and scrolled down a row.
+    func testIslandsOutOfSight() {
+        let narrow = RoomLayout(points: 1176, slots: 3)
+        XCTAssertEqual(narrow.columns, 1)
+        XCTAssertEqual(narrow.outOfSight([0, 1, 2], top: 0, height: 702 / 2).below, [2])
+        XCTAssertEqual(narrow.outOfSight([0, 1, 2], top: 0, height: 942 / 2).below, [])
+        // Shown at half size, the same three islands all fit: the view holds twice the art.
+        XCTAssertEqual(narrow.outOfSight([0, 1, 2], top: 0, height: Int(702 / (2 * 0.5))).below, [])
+
+        let five = RoomLayout(points: 1216, slots: 5)
+        XCTAssertEqual(five.outOfSight(Array(0..<5), top: 0, height: 351).below, [4])
+        XCTAssertEqual(five.outOfSight(Array(0..<5), top: 0, height: 942 / 2).below, [])
+
+        let nine = RoomLayout(points: 1216, slots: 9)
+        XCTAssertEqual(nine.outOfSight(Array(0..<9), top: 0, height: 351).below, [4, 5, 6, 7, 8])
+        let scrolled = nine.outOfSight(Array(0..<9), top: RoomLayout.rowPitch, height: 351)
+        XCTAssertEqual(scrolled.above, [1, 0], "nearest first")
+        XCTAssertEqual(scrolled.below, [6, 7, 8])
+        XCTAssertEqual(nine.outOfSight([0, 3, 8], top: 0, height: 351).below, [8], "only islands in use")
+        // The same nine at each step in the default window (702 points under the top bar).
+        let below = Zoom.steps.map { nine.outOfSight(Array(0..<9), top: 0, height: Int(702 / (2 * $0))).below.count }
+        XCTAssertEqual(below, [1, 3, 5, 5, 7], "at 125 % the second row's middle is just in sight")
+    }
+
     /// The meeting room (and the lounge under it) lives in the right-hand column only, so the smallest window has
     /// none. Its six seats are inside its glass, its door clears the table, and the room is never cut off: the
     /// office is at least as tall as the column.
@@ -249,7 +317,7 @@ final class OfficePlanTests: XCTestCase {
                 switch seat {
                 case .session(let s, _)?: return s.id
                 case .teammate(let m, _)?: return m.id
-                case .off?, nil: return nil
+                case nil: return nil
                 }
             }
         }
