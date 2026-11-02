@@ -81,8 +81,6 @@ final class PanelTests: XCTestCase {
         model.receive(HookEvent(kind: .sessionEnd, session: "s1", cwd: project), at: t0 + 10)
         guard case .wentHome(let name) = SidePanel.facts(leaving, in: model.office) else { return XCTFail("gone") }
         XCTAssertEqual(name, "my-project")
-        guard case .wentHome = SidePanel.facts(PanelSelection(.off(name: "x", folder: "/x"), at: nil), in: model.office)
-        else { return XCTFail("an off-duty seat") }
     }
 
     /// Space on a teammate row opens that teammate; Esc while typing a nickname stops typing, then Esc closes the

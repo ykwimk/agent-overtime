@@ -14,8 +14,6 @@ struct PanelSelection: Equatable {
     enum Kind: Equatable {
         case session(String)
         case teammate(String)
-        /// A seat someone went home from.
-        case off
     }
 
     var kind: Kind
@@ -32,9 +30,6 @@ struct PanelSelection: Equatable {
         case .teammate(let mate, _):
             kind = .teammate(mate.id)
             name = mate.label
-        case .off(let name, _):
-            kind = .off
-            self.name = name
         }
         self.seat = place
     }
@@ -73,7 +68,7 @@ final class SidePanel: ObservableObject {
     func open(_ chosen: PanelSelection) {
         selection = chosen
         draft = nil
-        if KeyboardNavigation.shared.active { focusRequest = chosen.kind == .off ? .close : .edit }
+        if KeyboardNavigation.shared.active { focusRequest = .edit }
     }
 
     /// Closes the panel; focus goes back to the seat it came from.
@@ -124,8 +119,6 @@ final class SidePanel: ObservableObject {
         case .teammate(let id):
             guard let (mate, session) = office.teammate(id) else { return .wentHome(selection.name) }
             return .teammate(mate, of: session, news: office.lastNews(teammate: id))
-        case .off:
-            return .wentHome(selection.name)
         }
     }
 
@@ -153,8 +146,6 @@ final class SidePanel: ObservableObject {
             return
                 ([mate.label, String(localized: "teammate of \(session.label)")]
                 + state(mate.state, since: mate.since, meets: session.meets(with: mate)) + now).joined(separator: ", ")
-        case .off:
-            return nil
         }
     }
 
@@ -181,8 +172,6 @@ final class SidePanel: ObservableObject {
             return office.session(id)?.state == .working ? office.toolKind(session: id) : nil
         case .teammate(let id):
             return office.teammate(id)?.teammate.state == .working ? office.toolKind(teammate: id) : nil
-        case .off:
-            return nil
         }
     }
 
@@ -191,7 +180,6 @@ final class SidePanel: ObservableObject {
         switch kind {
         case .session(let id): return office.folder(ofSession: id).flatMap { office.nicknames.folders[$0] }
         case .teammate(let id): return office.teammate(id).flatMap { office.nicknames.agents[$0.teammate.name ?? ""] }
-        case .off: return nil
         }
     }
 

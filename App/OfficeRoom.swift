@@ -86,6 +86,8 @@ final class Stage: ObservableObject {
     private var office: OfficeState?
     private var layout = RoomLayout(width: 0, slots: 0)
     private var pods: [Pod] = []
+    /// Islands whose session has ended, kept empty until the last of its people is out of the door, by slot.
+    private var emptying: [Int: Date] = [:]
     private var present: [String: Person] = [:]
     private var trips: [String: Trip] = [:]
     /// Speaking marks shown at a seat instead of a walk (Reduce Motion): from, until, where, the session, the
@@ -133,6 +135,19 @@ final class Stage: ObservableObject {
             checkVisits(people, now)
             for (id, person) in present where people[id] == nil { leave(id, person, people, before, now) }
         }
+        // A session that ends walks out with its teammates; its island goes once the last of them is out. A new
+        // island at that place takes over at once. Only the rows change, so the walks planned above still hold.
+        let seated = Set(pods.map(\.slot))
+        for (id, person) in present where people[id] == nil && !seated.contains(person.slot) {
+            guard let end = trips[id]?.end else { continue }
+            emptying[person.slot] = max(emptying[person.slot] ?? end, end)
+        }
+        emptying = emptying.filter { $0.value > now && !seated.contains($0.key) }
+        if !emptying.isEmpty {
+            pods += emptying.keys.map { Pod(slot: $0, seats: Array(repeating: nil, count: Island.size)) }
+            pods.sort { $0.slot < $1.slot }
+            layout = RoomLayout(width: width, slots: (pods.last?.slot ?? -1) + 1)
+        }
         // To the meeting room and back. Only when the office changes: a new width (the meeting room comes and
         // goes with it) leaves everyone's walks as they are.
         for (id, person) in people where before.width == layout.width {
@@ -176,8 +191,6 @@ final class Stage: ObservableObject {
                     {
                         people[id]?.place = .room(teammateSeats[turn])
                     }
-                case .off:
-                    break
                 }
             }
         }
@@ -552,7 +565,8 @@ final class Stage: ObservableObject {
         // Rounded so the room and the boxes, drawn at different moments, share one light.
         let darkness = (Daylight.darkness(at: now) * 100).rounded() / 100
         var scene = OfficeScene(
-            layout: layout, height: height, pods: pods, darkness: darkness, frame: frame, now: now,
+            layout: layout, height: height, pods: pods.filter { emptying[$0.slot].map { now < $0 } ?? true },
+            darkness: darkness, frame: frame, now: now,
             walkers: moment.standing, away: moment.away, doorOpen: moment.doorOpen && !reduceMotion,
             headphones: allHeadphones)
         scene.out = moment.out
@@ -587,7 +601,7 @@ final class Stage: ObservableObject {
         let roomKey =
             "\(scene.frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
             + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(scene.talks.map { "\($0.x),\($0.y)" }) \(height) "
-            + "\(layout.width) \(generation) "
+            + "\(layout.width) \(generation) \(scene.pods.count) "
             + "\(allHeadphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
             + "\(scene.meetingLit)"
         if room?.key != roomKey {
@@ -780,13 +794,6 @@ struct SeatTag: View {
                 }
                 if meets { Text("In a meeting").font(.subheadline).foregroundStyle(Style.tagText) }
             }
-        case .off(let name, _):
-            // Faded: the name of someone who went home, while others still work at this island.
-            Tag {
-                Text(verbatim: name).font(.subheadline.weight(.semibold)).truncationMode(.middle)
-                    .foregroundStyle(Style.tagSecondary)
-                Text("Off duty").font(.subheadline).foregroundStyle(Style.tagSecondary)
-            }
         }
     }
 
@@ -818,8 +825,6 @@ struct SeatTag: View {
             if mate.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
             if meets { text = text + comma + Text("In a meeting") }
             return text
-        case .off(let name, _):
-            return Text(verbatim: name) + comma + Text("Off duty")
         }
     }
 }

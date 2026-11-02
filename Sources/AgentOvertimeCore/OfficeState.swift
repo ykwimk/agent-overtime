@@ -119,13 +119,6 @@ public struct Desk: Equatable, Identifiable {
 public enum Occupant: Equatable {
     case session(String)
     case teammate(String)
-    /// A session that went home from this seat. Its name stays, faded, while others still work at the island.
-    case off(folder: String, name: String)
-
-    var isAtWork: Bool {
-        if case .off = self { return false }
-        return true
-    }
 }
 
 /// Four desks facing each other: two seats with their backs to the room (0, 2) and two across (1, 3). One
@@ -144,7 +137,6 @@ public enum Seat: Equatable {
     /// A session at work; `unseated` of its teammates wait for a free seat at its island, shown as "+n".
     case session(Session, unseated: Int)
     case teammate(Teammate, of: Session)
-    case off(name: String, folder: String)
 }
 
 /// Names given on this Mac: a session's by its folder path, a teammate's by its name (agent_type; "" for the
@@ -651,8 +643,6 @@ public struct OfficeState: Equatable {
                     }
                 case .teammate(let id)?:
                     return mates[id].map { .teammate($0.0, of: $0.1) }
-                case .off(let folder, let name)?:
-                    return .off(name: name, folder: folder)
                 case nil:
                     return nil
                 }
@@ -689,16 +679,10 @@ public struct OfficeState: Equatable {
         return true
     }
 
-    /// Empties `who`'s seat, or leaves `mark` there.
-    private mutating func vacate(_ who: Occupant, leaving mark: Occupant? = nil) {
+    private mutating func vacate(_ who: Occupant) {
         for i in islands.indices {
-            if let seat = islands[i].seats.firstIndex(of: who) { islands[i].seats[seat] = mark }
+            if let seat = islands[i].seats.firstIndex(of: who) { islands[i].seats[seat] = nil }
         }
-    }
-
-    /// An island where nobody works any more goes, with the names of those who went home from it.
-    private mutating func closeEmptyIslands() {
-        islands.removeAll { island in !island.seats.contains { $0?.isAtWork ?? false } }
     }
 
     /// The smallest number from 1 that is not taken, so a newcomer never renumbers anyone already there.
@@ -708,24 +692,22 @@ public struct OfficeState: Equatable {
         return number
     }
 
-    /// A session that ends leaves its name on its seat; its teammates leave with it.
+    /// A session that ends leaves with its teammates, and its island goes; no other island moves.
     private mutating func removeSessions(where shouldRemove: (Session) -> Bool) {
-        for d in desks.indices {
-            let leaving = desks[d].sessions.filter(shouldRemove)
-            for session in leaving {
-                vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.label))
-                news["s:" + session.id] = nil
-                kinds["s:" + session.id] = nil
-                calls[session.id] = nil
-                for mate in session.teammates {
-                    vacate(.teammate(mate.id))
-                    news["a:" + mate.id] = nil
-                    kinds["a:" + mate.id] = nil
-                }
+        let leaving = desks.flatMap(\.sessions).filter(shouldRemove)
+        for session in leaving {
+            islands.removeAll { $0.seats[0] == .session(session.id) }
+            news["s:" + session.id] = nil
+            kinds["s:" + session.id] = nil
+            calls[session.id] = nil
+            for mate in session.teammates {
+                news["a:" + mate.id] = nil
+                kinds["a:" + mate.id] = nil
             }
+        }
+        for d in desks.indices {
             desks[d].sessions.removeAll { session in leaving.contains { $0.id == session.id } }
         }
         desks.removeAll { $0.sessions.isEmpty }
-        closeEmptyIslands()
     }
 }

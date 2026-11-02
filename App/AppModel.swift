@@ -217,8 +217,6 @@ final class AppModel: ObservableObject {
             office = renamed
             save()
             return office.teammate(id)?.teammate.label
-        case .off:
-            return nil
         }
     }
 

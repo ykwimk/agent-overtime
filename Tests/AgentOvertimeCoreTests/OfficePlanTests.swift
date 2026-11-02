@@ -249,7 +249,7 @@ final class OfficePlanTests: XCTestCase {
                 switch seat {
                 case .session(let s, _)?: return s.id
                 case .teammate(let m, _)?: return m.id
-                case .off?, nil: return nil
+                case nil: return nil
                 }
             }
         }

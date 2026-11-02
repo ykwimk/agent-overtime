@@ -125,8 +125,8 @@ final class CaptureTests: XCTestCase {
             "office-passing", size: OfficeView.defaultSize,
             OfficeView(fixedNow: today(14), stage: passingStage).environmentObject(passing))
 
-        // Going home: my-project's session walks out; its teammates go with it and the island empties, while
-        // the next island keeps its place.
+        // Going home: my-project's session walks out with its three teammates; their island stays, empty, until
+        // the last of them is out of the door, and the other islands keep their places.
         let (leaving, leavingStage) = scenario(at: today(14), still: true)
         let width = Int(OfficeView.defaultSize.width) / RoomLayout.pointsPerPixel
         _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 3, animate: true)
@@ -134,8 +134,16 @@ final class CaptureTests: XCTestCase {
             HookEvent(kind: .sessionEnd, session: "demo-b1", cwd: FakeScenario.root + "/my-project"),
             at: today(14) - 1.2)
         _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.2, animate: true)
+        XCTAssertEqual(leaving.office.islands.map(\.slot), [1, 2, 3])
+        let walking = leavingStage.moment(at: today(14))
+        XCTAssertEqual(walking.walkers.count + walking.standing.count, 4, "the session and its three teammates")
+        func drawn(at time: Date) -> [Int] {
+            leavingStage.scene(at: time, frame: 0, height: 400, reduceMotion: false).scene.pods.map(\.slot)
+        }
+        XCTAssertEqual(drawn(at: today(14)), [0, 1, 2, 3], "its island waits for them")
+        XCTAssertEqual(drawn(at: today(14) + 30), [1, 2, 3], "then goes")
         try capture(
-            "office-leaving", size: OfficeView.defaultSize,
+            "office-session-end", size: OfficeView.defaultSize,
             OfficeView(fixedNow: today(14), stage: leavingStage).environmentObject(leaving))
 
         // Reduce Motion takes the same path as animate: false: people appear at their seats at once.
@@ -676,9 +684,8 @@ final class CaptureTests: XCTestCase {
         }
     }
 
-    /// A desk prop goes by the folder's name for a session (its second session and the seat it went home from
-    /// get the same one) and by the name for a teammate. Different names get different props, and every prop's
-    /// picture is in the bundle.
+    /// A desk prop goes by the folder's name for a session (its second and third sessions get the same one) and
+    /// by the name for a teammate. Different names get different props, and every prop's picture is in the bundle.
     func testDeskPropsGoByFolderAndName() throws {
         var office = OfficeState()
         let folder = FakeScenario.root + "/my-project"
@@ -695,7 +702,7 @@ final class CaptureTests: XCTestCase {
         let props = { (wanted: (Seat) -> Bool) in Set(seats.filter(wanted).map(OfficeScene.prop)) }
         let sessions = props {
             switch $0 {
-            case .session, .off: return true
+            case .session: return true
             case .teammate: return false
             }
         }

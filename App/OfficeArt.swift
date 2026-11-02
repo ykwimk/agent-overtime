@@ -284,8 +284,7 @@ struct OfficeScene {
     var walkers: [Walker] = []
     /// People still walking in: their desks look empty until they arrive.
     var away: Set<String> = []
-    /// People away from their desks for a while: the chair stays in and the laptop on, unlike a desk someone
-    /// went home from.
+    /// People away from their desks for a while: the chair stays in and the laptop on, unlike an empty desk.
     var out: Set<String> = []
     var doorOpen = false
     /// The meeting room's glass door, open while someone walks through.
@@ -303,12 +302,11 @@ struct OfficeScene {
     var lights: Lights?
     var calendar = Calendar.current
 
-    /// Who walks to and from a seat. Nobody walks for a seat someone went home from.
+    /// Who walks to and from a seat.
     static func id(_ seat: Seat) -> String? {
         switch seat {
         case .session(let session, _): return "p:" + session.id
         case .teammate(let mate, _): return "m:" + mate.id
-        case .off: return nil
         }
     }
 
@@ -317,7 +315,6 @@ struct OfficeScene {
         switch seat {
         case .session(let session, _): return Look.pick(session.name)
         case .teammate(let mate, _): return Look.pick("\(mate.name ?? "helper") \(mate.number)")
-        case .off: return nil
         }
     }
 
@@ -325,11 +322,10 @@ struct OfficeScene {
         switch seat {
         case .session(let session, _): return session.state
         case .teammate(let mate, _): return mate.state
-        case .off: return nil
         }
     }
 
-    /// A session's prop goes by its folder's name (without the number), and stays on its desk after it went home.
+    /// A session's prop goes by its folder's name (without the number), a teammate's by its name.
     static func prop(_ seat: Seat) -> Prop {
         switch seat {
         case .session(let session, _):
@@ -337,9 +333,6 @@ struct OfficeScene {
             return Prop.pick(String(session.name.dropLast(suffix)))
         case .teammate(let mate, _):
             return Prop.pick(mate.name ?? "helper")
-        case .off(_, let folder):
-            let last = (folder as NSString).lastPathComponent
-            return Prop.pick(last.isEmpty ? folder : last)
         }
     }
 }
@@ -882,20 +875,11 @@ struct OfficeRenderer {
                 return (look, state, scene.headphones.contains(id))
             }
             let out = pod.seats.map { seat in seat.flatMap(OfficeScene.id).map(scene.out.contains) ?? false }
-            let wentHome = pod.seats.map { seat -> Bool in
-                if case .off? = seat { return true }
-                return false
-            }
 
             for seat in [1, 3] {
                 let cx = x0 + RoomLayout.personX(seat)
                 let top = far - 28
-                // A chair someone went home from is pushed back from the desk.
-                if wentHome[seat] {
-                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 13, top + 3)
-                } else {
-                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, top + 11)
-                }
+                sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, top + 11)
                 if let person = here[seat] {
                     let nod = person.state == .resting && scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
                     self.person(person.look, column: 0, rows: 28, CGFloat(cx - 24), CGFloat(top) + nod)
@@ -913,8 +897,6 @@ struct OfficeRenderer {
                     sprite(Sheet.laptop, here[seat]?.state == .resting ? 0 : 32, 96, 32, 32, cx - 15, far - 6)
                     if here[seat]?.state != .resting { screens.append((cx, far + 4)) }
                     pools.append((cx - 3, far - 4))
-                } else if wentHome[seat] {
-                    sprite(Sheet.laptop, 0, 96, 32, 32, cx - 15, far - 4)
                 }
                 if let occupant = pod.seats[seat] {
                     let x = x0 + RoomLayout.deskX(seat)
@@ -929,10 +911,8 @@ struct OfficeRenderer {
             }
             for seat in [0, 2] {
                 let dx = x0 + RoomLayout.deskX(seat)
-                // Laptop: closed where someone went home, dark while resting, on (and typing) while working.
-                if wentHome[seat] {
-                    sprite(Sheet.laptop, 0, 96, 32, 32, dx + 2, near - 6)
-                } else if here[seat] != nil || out[seat] {
+                // Laptop: dark while resting, on (and typing) while working.
+                if here[seat] != nil || out[seat] {
                     let state = here[seat]?.state
                     sprite(Sheet.laptop, state == .resting ? 0 : 32, 0, 32, 32, dx + 2, near - 8)
                     if state != .resting { screens.append((dx + 18, near + 2)) }
@@ -951,8 +931,6 @@ struct OfficeRenderer {
                     sit(
                         person.look, cx: cx, top: near, nod: person.state == .resting && scene.frame % 4 >= 2,
                         headphones: person.headphones)
-                } else if wentHome[seat] {
-                    sprite(Sheet.chair, 0, 40, 32, 48, cx - 13, near + 33)
                 } else {
                     sprite(Sheet.chair, 0, 40, 32, 48, cx - 16, near + 26)
                 }
