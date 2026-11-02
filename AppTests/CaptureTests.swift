@@ -144,9 +144,13 @@ final class CaptureTests: XCTestCase {
             "office-reduce-motion", size: OfficeView.defaultSize,
             OfficeView(fixedNow: today(22), stage: stillStage).environmentObject(still))
 
+        // Nobody at work: no islands, only the meeting room and the lounge.
         let empty = makeModel(connected: true)
-        try capture(
-            "office-empty", size: OfficeView.defaultSize, OfficeView(fixedNow: today(22)).environmentObject(empty))
+        for (time, hour) in [("day", 14), ("night", 22)] {
+            try capture(
+                "office-empty-\(time)", size: OfficeView.defaultSize,
+                OfficeView(fixedNow: today(hour)).environmentObject(empty))
+        }
 
         let one = team(sessions: 1, teammates: 0, at: today(14))
         try capture("office-one", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(one))
@@ -444,6 +448,21 @@ final class CaptureTests: XCTestCase {
         ] {
             XCTAssertNotNil(store.cell(sheet, x, y, 32, 32), "\(sheet) \(x),\(y)")
         }
+    }
+
+    /// The meeting room's glass door has a second picture, standing open, for the walks to a meeting.
+    func testMeetingRoomDoorHasAnOpenPicture() throws {
+        func pixels(_ scene: OfficeScene) throws -> Data {
+            let image = try XCTUnwrap(OfficeRenderer().render(scene))
+            return try XCTUnwrap(image.dataProvider?.data as Data?)
+        }
+        let shut = OfficeScene(
+            layout: RoomLayout(points: OfficeView.defaultSize.width, slots: 0), height: MeetingRoom.columnDepth,
+            pods: [], darkness: 0, frame: 0, now: today(14))
+        XCTAssertNotNil(shut.layout.meetingRoom)
+        var open = shut
+        open.meetingDoorOpen = true
+        XCTAssertNotEqual(try pixels(shut), try pixels(open))
     }
 
     /// The bitmap is twice as dense as the art, so the view shows one bitmap pixel per point: the room keeps
