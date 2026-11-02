@@ -271,6 +271,8 @@ struct OfficeScene {
     var meetingDoorOpen = false
     /// Who wears headphones (ids as `id(_:)` gives them). Only screenshots set it for now.
     var headphones: Set<String> = []
+    /// Where two people talk: the top-left corner of each speaking mark.
+    var talks: [(x: Int, y: Int)] = []
     var calendar = Calendar.current
 
     /// Who walks to and from a seat. Nobody walks for a seat someone went home from.
@@ -533,6 +535,7 @@ struct OfficeRenderer {
             for walker in walkers { self.walker(walker) }
             night(scene, glass: plan.glass)
             for (mark, x, y, tail) in marks { bubble(mark, x, y, tail) }
+            for talk in scene.talks { self.talk(talk.x, talk.y) }
         }
 
         private func walker(_ walker: Walker) {
@@ -1058,6 +1061,22 @@ struct OfficeRenderer {
                 fill(x + 6, y + 4, 1, 1, ink)
                 fill(x + 5, y + 5, 1, 1, ink)
                 fill(x + 4, y + 6, 5, 1, ink)
+            }
+        }
+
+        /// Two small empty speech bubbles, the second over the first's lower right (16 × 12, corner at `x`, `y`):
+        /// two people talking. No words in them, since the app never knows what was said; the state symbols are
+        /// one bubble with a symbol, so the two don't mix up.
+        private func talk(_ x: Int, _ y: Int) {
+            let ink: UInt32 = 0x2B2233
+            for (bx, by, tail) in [(x, y, x + 1), (x + 6, y + 3, x + 13)] {
+                fill(bx + 1, by, 8, 1, ink)
+                fill(bx + 1, by + 6, 8, 1, ink)
+                fill(bx, by + 1, 1, 5, ink)
+                fill(bx + 9, by + 1, 1, 5, ink)
+                fill(bx + 1, by + 1, 8, 5, 0xFFFFFF)
+                fill(tail, by + 7, 2, 1, ink)
+                fill(tail + (tail == bx + 1 ? 0 : 1), by + 8, 1, 1, ink)
             }
         }
 
