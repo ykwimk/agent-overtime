@@ -22,7 +22,14 @@ struct OfficeView: View {
             OfficeRoom(
                 fixedNow: fixedNow, stage: stage, ticksWhileHidden: ticksWhileHidden, reducesMotion: reducesMotion
             )
-            .overlay { emptyMessage }
+            .overlay {
+                // Centred on the floor left of the meeting room and lounge, when the window has them.
+                GeometryReader { geometry in
+                    let pillar = RoomLayout(points: geometry.size.width, slots: 0).pillar
+                    emptyMessage.padding(
+                        .trailing, pillar.map { geometry.size.width - CGFloat($0 * RoomLayout.pointsPerPixel) } ?? 0)
+                }
+            }
         }
         .frame(minWidth: Self.minSize.width, minHeight: Self.minSize.height)
         .sheet(item: $model.sheet) { sheet in
