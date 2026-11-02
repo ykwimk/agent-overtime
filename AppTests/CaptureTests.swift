@@ -240,6 +240,60 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: today(14)).environmentObject(team([5, 1], at: today(14))))
     }
 
+    /// Sessions found on this Mac before any news: four quiet ones as the app opens; quiet, busy, one whose news has
+    /// come and one known by news only; the connect line when no news ever came, also in the smallest window; the
+    /// side panel's four state badges, and a quiet session's panel.
+    func testCaptureDetected() throws {
+        let now = today(14)
+        func found(_ pid: Int32, _ folder: String, busy: Bool = false) -> OfficeState.Found {
+            OfficeState.Found(pid: pid, started: now - 3600, folder: FakeScenario.root + "/" + folder, busy: busy)
+        }
+        let four = makeModel(connected: true)
+        four.receive(
+            found: ["my-project", "web-app", "blog", "api"].enumerated().map {
+                found(Int32(100 + $0.offset), $0.element)
+            },
+            at: now - 120)
+        XCTAssertEqual(four.office.count(.quiet), 4)
+        try capture(
+            "office-detected-four", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(four))
+
+        let mixed = makeModel(connected: true)
+        mixed.receive(
+            found: [found(100, "my-project"), found(101, "web-app", busy: true), found(102, "blog")], at: now - 300)
+        let blog = FakeScenario.root + "/blog"
+        mixed.receive(HookEvent(kind: .userPromptSubmit, session: "b1", cwd: blog, pid: 102), at: now - 200)
+        mixed.receive(
+            HookEvent(kind: .subagentStart, session: "b1", cwd: blog, agentID: "b1-e", agentType: "Explore", pid: 102),
+            at: now - 190)
+        mixed.receive(HookEvent(kind: .permissionRequest, session: "b1", cwd: blog, pid: 102), at: now - 120)
+        mixed.receive(HookEvent(kind: .stop, session: "a1", cwd: FakeScenario.root + "/api", pid: 103), at: now - 100)
+        let sessions = mixed.office.desks.flatMap(\.sessions)
+        XCTAssertEqual(sessions.map(\.state), [.quiet, .working, .waiting, .resting])
+        XCTAssertEqual(mixed.office.islands.map(\.slot), [0, 1, 2, 3], "blog's news went on in its seat")
+        try capture(
+            "office-detected-mixed", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(mixed))
+
+        let fresh = makeModel(connected: false)
+        fresh.receive(found: [found(100, "my-project"), found(101, "web-app", busy: true)], at: now - 60)
+        XCTAssertTrue(fresh.asksToConnect)
+        try capture(
+            "office-not-connected-detected", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now).environmentObject(fresh))
+        try capture("office-min-detected", size: OfficeView.minSize, OfficeView(fixedNow: now).environmentObject(fresh))
+
+        // Working, waiting, resting, quiet, side by side.
+        let selections = try [1, 2, 3, 0].map { slot in
+            PanelSelection(try XCTUnwrap(mixed.office.pods[slot].seats[0]), at: .seat(slot: slot, index: 0))
+        }
+        try capture(
+            "panel-status", size: CGSize(width: 4 * (SidePanelView.width + 1), height: 330),
+            SidePanels(selections: selections, now: now).environmentObject(mixed))
+        try capture(
+            "panel-quiet", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(mixed, slot: 0, index: 0)).environmentObject(mixed))
+    }
+
     /// my-project hands work to `teammates` teammates and waits for them; web-app works on with a helper, blog
     /// rests. The meeting starts once `advanceMeetings` passes 10 s after the teammates came (`now` - 200).
     private func meetingOffice(at now: Date, teammates: Int = 3) -> AppModel {
@@ -1156,6 +1210,24 @@ final class CaptureTests: XCTestCase {
                 window.close()
             }
         }
+    }
+}
+
+/// Side panels next to each other, one for each selection, for a capture.
+private struct SidePanels: View {
+    let selections: [PanelSelection]
+    let now: Date
+    @FocusState private var focus: OfficeFocus?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(selections.indices, id: \.self) { index in
+                SidePanelView(panel: SidePanel(selections[index]), focus: $focus, fixedNow: now)
+                    .frame(width: SidePanelView.width, alignment: .top)
+                Divider()
+            }
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 

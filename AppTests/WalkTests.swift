@@ -181,6 +181,26 @@ final class WalkTests: XCTestCase {
         XCTAssertEqual(stage.moment(at: t0 + 90).walkers.count, 0, "seated")
     }
 
+    /// Found at the app's first look: already seated. Found later: walks in. Its first news goes on in the same
+    /// seat, without walking.
+    func testFoundSessionsWalkInOnlyWhenNew() {
+        let first = OfficeState.Found(pid: 1, started: t0 - 600, folder: folder, busy: false)
+        office.detect([first], now: t0, opening: true)
+        _ = stage.sync(office, width: width, now: t0, animate: true)
+        XCTAssertTrue(stage.moment(at: t0 + 0.1).walkers.isEmpty, "there already")
+
+        let second = OfficeState.Found(pid: 2, started: t0 + 9, folder: "/w/web-app", busy: true)
+        office.detect([first, second], now: t0 + 10, opening: false)
+        _ = stage.sync(office, width: width, now: t0 + 10, animate: true)
+        let newcomer = office.desks.flatMap(\.sessions).first { $0.pid == 2 }!.id
+        XCTAssertTrue(stage.moment(at: t0 + 10.5).away.contains("p:" + newcomer), "a new process walks in")
+
+        office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder, pid: 1), now: t0 + 30)
+        _ = stage.sync(office, width: width, now: t0 + 30, animate: true)
+        XCTAssertTrue(stage.moment(at: t0 + 30.5).walkers.isEmpty, "the same person: nobody walks")
+        XCTAssertEqual(office.islands.count, 2)
+    }
+
     /// No more than six walk at once: the seventh is just there.
     func testAtMostSixWalkAtOnce() {
         send(.userPromptSubmit, at: 0)

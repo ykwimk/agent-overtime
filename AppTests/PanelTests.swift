@@ -214,6 +214,17 @@ final class PanelTests: XCTestCase {
         XCTAssertTrue(saved.contains(project), saved)
     }
 
+    /// The office bar asks to connect while people are found but no news ever came; the first news ends it.
+    func testTheConnectLineShowsUntilTheFirstNews() {
+        let model = model(in: folder())
+        XCTAssertFalse(model.asksToConnect, "nobody here: the room's own message says it")
+        model.receive(found: [OfficeState.Found(pid: 4242, started: t0, folder: project, busy: true)], at: t0)
+        XCTAssertTrue(model.asksToConnect)
+        XCTAssertEqual(model.office.count(.working), 1, "busy: working")
+        model.receive(HookEvent(kind: .stop, session: "s1", cwd: project, pid: 4242), at: t0 + 5)
+        XCTAssertFalse(model.asksToConnect)
+    }
+
     /// No seconds on the panel: under a minute is "just", then minutes, then hours.
     func testTimeWordsHaveNoSeconds() {
         let cases: [(TimeInterval, TimeSpan)] = [
