@@ -21,14 +21,14 @@ final class CaptureTests: XCTestCase {
             usleep(20_000)
         }
         let deadline = Date() + 5
-        while model.office.desks.count < 4 || model.office.liveSessionCount < 4, Date() < deadline {
+        while model.office.folders.count < 4 || model.office.liveSessionCount < 4, Date() < deadline {
             RunLoop.main.run(until: Date() + 0.05)
         }
-        XCTAssertEqual(model.office.desks.map(\.name), ["my-project", "web-app", "blog", "prototype"])
+        XCTAssertEqual(model.office.desks.map(\.name), ["my-project", "web-app", "blog"])
         XCTAssertEqual(model.office.count(.working), 1)
         XCTAssertEqual(model.office.count(.waiting), 2)
         XCTAssertEqual(model.office.count(.resting), 1)
-        XCTAssertTrue(model.office.desks[3].isOff)
+        XCTAssertEqual(model.office.folders.last, FakeScenario.root + "/prototype", "came and went, remembered")
         XCTAssertEqual(model.office.desks[0].teammates.map(\.state), [.working, .waiting, .resting])
         XCTAssertTrue(model.everConnected)
 

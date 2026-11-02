@@ -101,8 +101,8 @@ public struct Session: Equatable, Identifiable {
     public var teammateWaiting: Bool { state != .waiting && shown.state == .waiting }
 }
 
-/// A folder sessions ran in. Running sessions are kept here; the folders themselves are remembered (up to
-/// `OfficeState.maxDesks`) for Start Work's recent folders. Where people sit is `OfficeState.islands`.
+/// A folder sessions run in, while one does. Start Work's recent folders are `OfficeState.folders`, kept apart;
+/// where people sit is `OfficeState.islands`.
 public struct Desk: Equatable, Identifiable {
     public let folder: String
     public var sessions: [Session] = []
@@ -111,7 +111,6 @@ public struct Desk: Equatable, Identifiable {
         let last = (folder as NSString).lastPathComponent
         return last.isEmpty ? folder : last
     }
-    public var isOff: Bool { sessions.isEmpty }
     public var teammates: [Teammate] { sessions.flatMap(\.teammates) }
 }
 
@@ -216,6 +215,7 @@ public struct Nicknames: Equatable, Codable {
 }
 
 public struct OfficeState: Equatable {
+    /// Recent folders kept for Start Work.
     public static let maxDesks = 24
     /// Guards against a runaway process flooding the socket, far above real use, so every real session and
     /// teammate is counted in the summary and the menu bar.
@@ -247,7 +247,11 @@ public struct OfficeState: Equatable {
         public let more: Int
     }
 
-    public private(set) var desks: [Desk]
+    /// Folders with a session running, in the order they came.
+    public private(set) var desks: [Desk] = []
+    /// Start Work's recent folders, oldest first: those remembered from earlier runs, then each new folder a session
+    /// sends news from. Who sits where never changes them.
+    public private(set) var folders: [String]
     /// Islands in use, nearest the door first. Kept in memory only: after a restart nobody's seat is remembered.
     public private(set) var islands: [Island] = []
     /// When each session ("s:" and its id) and teammate ("a:" and its id) last sent news while the app listened,
@@ -268,7 +272,7 @@ public struct OfficeState: Equatable {
     /// `folders` are remembered from earlier runs, for Start Work, and so are `nicknames`. Nobody sits anywhere
     /// yet.
     public init(folders: [String] = [], nicknames: Nicknames = Nicknames()) {
-        desks = folders.prefix(Self.maxDesks).map { Desk(folder: $0) }
+        self.folders = Array(folders.prefix(Self.maxDesks))
         self.nicknames = nicknames
     }
 
@@ -276,6 +280,7 @@ public struct OfficeState: Equatable {
     /// panel, which keeps its own clock, so one more tool doesn't draw the whole room again.
     public static func == (a: OfficeState, b: OfficeState) -> Bool {
         a.desks == b.desks && a.islands == b.islands && a.nicknames == b.nicknames && a.talk == b.talk
+            && a.folders == b.folders
     }
 
     /// The folder a session runs in.
@@ -314,8 +319,6 @@ public struct OfficeState: Equatable {
         relabelSessions { _ in true }
         relabelTeammates { _ in true }
     }
-
-    public var folders: [String] { desks.map(\.folder) }
 
     /// When the app last heard from a session or a teammate; nil before any news since the app started.
     public func lastNews(session id: String) -> Date? { news["s:" + id] }
@@ -366,18 +369,16 @@ public struct OfficeState: Equatable {
         }
     }
 
-    /// Applies one event. Returns true when the list of desks changed, so the caller can save it.
+    /// Applies one event. Returns true when the recent folders changed, so the caller can save them.
     @discardableResult
     public mutating func apply(_ event: HookEvent, now: Date) -> Bool {
         if event.kind == .sessionEnd {
             removeSessions { $0.id == event.session }
             return false
         }
-        var desksChanged = false
         let seated = locate(event.session) != nil
-        guard let (d, s) = locate(event.session) ?? seat(event, now: now, desksChanged: &desksChanged) else {
-            return false
-        }
+        guard let (d, s) = locate(event.session) ?? seat(event, now: now) else { return false }
+        let desksChanged = remember(desks[d].folder)
         if let pid = event.pid { desks[d].sessions[s].pid = pid }
         if seated, event.sendsMessage, let to = event.recipient { overhear(event, to: to, in: desks[d].sessions[s]) }
         guard let agentID = event.agentID else {
@@ -510,9 +511,25 @@ public struct OfficeState: Equatable {
         removeSessions { session in session.pid.map(isGone) ?? false }
     }
 
+    /// Recent folders nobody works in now: what Clear Recent Folders takes away.
+    public var idleFolders: [String] { folders.filter { folder in !desks.contains { $0.folder == folder } } }
+
     /// Forgets the recent folders nobody works in. Folders with a session running stay.
     public mutating func forgetIdleFolders() {
-        desks.removeAll(where: \.isOff)
+        let idle = idleFolders
+        folders.removeAll(where: idle.contains)
+    }
+
+    /// Keeps a folder a session sent news from among the recent folders, newest last. Past `maxDesks` the oldest
+    /// one nobody works in goes; with none such, the new one isn't kept. True when the list changed.
+    private mutating func remember(_ folder: String) -> Bool {
+        guard !folders.contains(folder) else { return false }
+        if folders.count >= Self.maxDesks {
+            guard let oldest = idleFolders.first else { return false }
+            folders.removeAll { $0 == oldest }
+        }
+        folders.append(folder)
+        return true
     }
 
     public func count(_ state: WorkState) -> Int {
@@ -523,7 +540,7 @@ public struct OfficeState: Equatable {
 
     /// True when someone works in `folder` or below it (a start script may open sessions in subfolders).
     public func hasLiveSession(in folder: String) -> Bool {
-        desks.contains { !$0.isOff && Self.isInside($0.folder, folder) }
+        desks.contains { Self.isInside($0.folder, folder) }
     }
 
     public static func isInside(_ path: String, _ folder: String) -> Bool {
@@ -540,24 +557,13 @@ public struct OfficeState: Equatable {
         return nil
     }
 
-    /// Seats a session the office has not seen yet (a new one, or one started before the app).
-    private mutating func seat(_ event: HookEvent, now: Date, desksChanged: inout Bool) -> (Int, Int)? {
+    /// Seats a session the office has not seen yet (a new one, or one started before the app). The recent folders
+    /// are left alone: `remember` keeps them.
+    private mutating func seat(_ event: HookEvent, now: Date) -> (Int, Int)? {
         // A message seats nobody: it is only matched against those already here.
         if event.kind == .subagentStop || event.sendsMessage || liveSessionCount >= Self.maxSessions { return nil }
-        var d = desks.firstIndex { $0.folder == event.cwd }
-        if d == nil {
-            // A new folder takes over the off-duty desk nearest the door, so it is in view without scrolling.
-            // Other remembered desks keep their places. Only with no off-duty desk does it go at the end.
-            if let off = desks.firstIndex(where: \.isOff) {
-                desks[off] = Desk(folder: event.cwd)
-                d = off
-            } else if desks.count < Self.maxDesks {
-                desks.append(Desk(folder: event.cwd))
-                d = desks.count - 1
-            }
-            desksChanged = d != nil
-        }
-        guard let d else { return nil }
+        if !desks.contains(where: { $0.folder == event.cwd }) { desks.append(Desk(folder: event.cwd)) }
+        let d = desks.firstIndex { $0.folder == event.cwd }!
         let name = desks[d].name
         let number = Self.firstFree(desks.filter { $0.name == name }.flatMap(\.sessions).map(\.number))
         var session = Session(
@@ -719,6 +725,7 @@ public struct OfficeState: Equatable {
             }
             desks[d].sessions.removeAll { session in leaving.contains { $0.id == session.id } }
         }
+        desks.removeAll { $0.sessions.isEmpty }
         closeEmptyIslands()
     }
 }

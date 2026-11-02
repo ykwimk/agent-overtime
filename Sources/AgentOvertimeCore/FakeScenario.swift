@@ -34,7 +34,7 @@ public enum FakeScenario {
             HookEvent(kind: .sessionStart, session: "demo-w1", cwd: blog),
             HookEvent(kind: .userPromptSubmit, session: "demo-w1", cwd: blog),
             HookEvent(kind: .subagentStart, session: "demo-w1", cwd: blog, agentID: "demo-h"),
-            // prototype: came and went, so its desk is off duty
+            // prototype: came and went, so only its folder is left, among the recent folders
             HookEvent(kind: .sessionStart, session: "demo-s1", cwd: prototype),
             HookEvent(kind: .sessionEnd, session: "demo-s1", cwd: prototype),
         ]

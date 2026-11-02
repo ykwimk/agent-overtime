@@ -78,12 +78,12 @@ struct SettingsView: View {
 
             Section {
                 LabeledContent {
-                    Text(verbatim: "\(model.office.desks.count)")
+                    Text(verbatim: "\(model.office.folders.count)")
                 } label: {
                     Text("Recent folders")
                 }
                 Button("Clear Recent Folders") { model.forgetIdleFolders() }
-                    .disabled(!model.office.desks.contains(where: \.isOff))
+                    .disabled(model.office.idleFolders.isEmpty)
                 Text(
                     "Folders sessions ran in, to pick from when you set up Start Work. Kept only on this Mac; folders with a session running stay."
                 )
