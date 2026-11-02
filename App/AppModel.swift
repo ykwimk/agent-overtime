@@ -87,6 +87,7 @@ final class AppModel: ObservableObject {
     private var server: EventServer?
     private var ticker: Timer?
     private var meetingTimer: Timer?
+    private var hasLooked = false
 
     private enum Keys {
         static let approved = "approvedStartFingerprint"
@@ -161,6 +162,18 @@ final class AppModel: ObservableObject {
             OfficeState.isInside(event.cwd, start.resolved(home: Paths.home).folder)
         {
             startPhase = .idle
+        }
+    }
+
+    /// A look at the Claude Code processes running on this Mac. The first one after the app opened finds people
+    /// already at work, who sit down without walking in. Nothing found this way is saved.
+    func receive(found: [OfficeState.Found], at now: Date = Date()) {
+        var looked = office
+        looked.detect(found, now: now, opening: !hasLooked)
+        hasLooked = true
+        if looked != office {
+            office = looked
+            bookMeeting()
         }
     }
 
