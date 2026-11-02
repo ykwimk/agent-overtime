@@ -722,22 +722,30 @@ struct OfficeRenderer {
             sprite(Sheet.desk, 120, 98, 5, 14, x, y + h, mirrored: true)
         }
 
-        /// Glass seen from the room: the side glass edge-on from the back wall to the front, the front glass face
-        /// on. Thin dark frames, a pale blue tint and a sheen, and the door near the left end.
+        /// Glass seen from the room: the side glass along its length from the back wall to the front, the front
+        /// glass face on. Thin dark frames, a pale blue tint and a sheen, and the door near the left end.
         private func glass(left: Int, right: Int, doorOpen: Bool) {
             let ink: UInt32 = 0x2B2A33
             let tint: UInt32 = 0xCFE8F3
             let foot = MeetingRoom.front
             let top = foot - MeetingRoom.glassHeight
             let sideTop = RoomLayout.wall - MeetingRoom.glassHeight
-            fill(left, sideTop, 4, foot - sideTop, tint, 0.5)
+            // Panes rather than a post: the same tint and slanted sheen as the front, framed on both sides, capped
+            // on top, with rails where it meets the floor at the back wall and halfway to the front.
+            let side = 10
+            fill(left, sideTop, side, foot - sideTop, tint, 0.45)
+            for streak in stride(from: sideTop + 16, to: foot - 8, by: 22) {
+                for k in 0..<5 { fill(left + 2 + k, streak - k * 2, 2, 2, 0xFFFFFF, 0.45) }
+            }
             fill(left, sideTop, 1, foot - sideTop, ink)
-            fill(left + 3, sideTop, 1, foot - sideTop, ink)
-            fill(left, sideTop - 1, 4, 2, ink)
+            fill(left + side - 1, sideTop, 1, foot - sideTop, ink)
+            fill(left, sideTop - 2, side, 2, ink)
+            fill(left + 1, sideTop, side - 2, 1, 0xF4FAFD, 0.8)
+            for rail in [RoomLayout.wall - 1, (RoomLayout.wall + foot) / 2] { fill(left + 1, rail, side - 2, 1, ink) }
 
             let doorX = left + MeetingRoom.doorX
             let doorRight = doorX + MeetingRoom.doorWidth
-            for (from, to) in [(left + 4, doorX), (doorRight, right)] {
+            for (from, to) in [(left + side, doorX), (doorRight, right)] {
                 fill(from, top, to - from, foot - top, tint, 0.28)
                 // A sheen: two pale streaks on each pane.
                 for pane in stride(from: from, to: to - 20, by: 44) {
