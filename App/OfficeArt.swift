@@ -638,7 +638,7 @@ struct OfficeRenderer {
 
         /// The rest of the meeting room, back to front, with the people at the table and anyone walking inside:
         /// those facing the room behind the table (the table hides them from the chest), the table, those with
-        /// their backs to the room behind their chairs, the glass with its door, and the pots along it.
+        /// their backs to the room in front of it and their chairs, the glass with its door, and the pots along it.
         private mutating func meetingRoomFront(_ room: MeetingRoom, _ scene: OfficeScene, walkers: [Walker]) {
             let t = MeetingRoom.table
             let nod = scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
@@ -658,25 +658,27 @@ struct OfficeRenderer {
             }
             for walker in walkers where walker.y < t.y + 10 { self.walker(walker) }
             table(room.left + t.x, t.y, t.width, t.depth)
+            // As at an island's near desks: the back of the head over the table's near edge, below the faces
+            // across, the shoulders under it, and the chair's back over the rest.
             for person in scene.room where person.seat >= 3 {
                 let x = CGFloat(room.seats[person.seat].x - 24)
-                let y = CGFloat(t.y - 6) + (person.state == .resting ? nod : 0)
+                let y = CGFloat(t.y + 10) + (person.state == .resting ? nod : 0)
                 self.person(person.look, column: 12, rows: 24, x, y)
                 if person.headphones { headphones(front: false, x, y) }
             }
-            for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 20) }
+            for seat in room.seats.suffix(3) { sprite(Sheet.chair, 0, 0, 32, 32, seat.x - 16, t.y + 36) }
             for walker in walkers where walker.y >= t.y + 10 { self.walker(walker) }
             // Bubbles as at the desks: beside the head facing the room, at the shoulder with the back to it (the
-            // outer side at the ends). Someone waiting stays seated with a hopping "!", and the glass door shows
-            // one too, for a room seen from across the office.
+            // outer side at the ends, under the name tag over the glass door). Someone waiting stays seated with a
+            // hopping "!", and the glass door shows one too, for a room seen from across the office.
             let hop = scene.frame % 2 == 1 ? 2 : 0
             for person in scene.room {
                 let x = room.seats[person.seat].x
                 let y = person.state == .waiting ? -hop : 0
                 switch person.seat {
                 case 0..<3: marks.append((Mark(person.state), x + 9, t.y - 25 + y, .down))
-                case 3: marks.append((Mark(person.state), x - 27, t.y + 17 + y, .right))
-                default: marks.append((Mark(person.state), x + 14, t.y + 17 + y, .left))
+                case 3: marks.append((Mark(person.state), x - 27, t.y + 33 + y, .right))
+                default: marks.append((Mark(person.state), x + 14, t.y + 33 + y, .left))
                 }
             }
             if scene.room.contains(where: { $0.state == .waiting }) {

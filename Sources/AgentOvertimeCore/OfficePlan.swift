@@ -213,11 +213,13 @@ public struct MeetingRoom {
     public static let doorX = 20
     public static let doorWidth = 24
     /// The table for six: its top surface's top-left corner (from the column and the top of the room) and size.
-    public static let table = (x: 56, y: RoomLayout.wall + 28, width: 96, depth: 24)
+    /// Laid out like an island: the faces behind it end at its top, the heads in front of it start below them, and
+    /// the chairs in front reach down to the foot of the glass.
+    public static let table = (x: 56, y: RoomLayout.wall + 22, width: 96, depth: 24)
     /// How far down the lounge under the meeting room reaches.
     public static let columnDepth = 340
-    /// The line inside the room behind the chairs facing the room, under the TV.
-    public static let behind = RoomLayout.wall + 6
+    /// The line inside the room behind the chairs facing the room, along the foot of the wall.
+    public static let behind = RoomLayout.wall + 2
 
     public init(left: Int) { self.left = left }
 
@@ -226,7 +228,7 @@ public struct MeetingRoom {
     public var seats: [(x: Int, y: Int)] {
         let t = Self.table
         let middles = (0..<3).map { left + t.x + 16 + $0 * 32 }
-        return middles.map { ($0, t.y - 2) } + middles.map { ($0, t.y + 54) }
+        return middles.map { ($0, t.y - 2) } + middles.map { ($0, t.y + 62) }
     }
 
     /// Just outside the glass door: where a walk to a meeting turns in.
