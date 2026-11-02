@@ -670,7 +670,8 @@ struct SidePanelView: View {
             }
         }
         role.foregroundStyle(.secondary)
-        if state == .quiet {
+        // Found before any news from it, quiet or busy: nothing more to show yet.
+        if case .session(let id) = kind, office.session(id)?.heard == false {
             Text("This session started before the app. Its exact state shows from its next news.")
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
