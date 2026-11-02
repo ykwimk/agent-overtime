@@ -46,6 +46,8 @@ final class Stage: ObservableObject {
         let arrived: Date?
         let session: String
         let isSession: Bool
+        /// Waiting for the user's answer.
+        let waits: Bool
         var place = Place.desk
     }
 
@@ -86,6 +88,10 @@ final class Stage: ObservableObject {
     static let talkTime: TimeInterval = 2
     /// A teammate done sooner than this after it came just leaves: short calls are common.
     static let quick: TimeInterval = 5
+    /// Teammates that come this close together are sent off together: no visits, they may meet.
+    static let together: TimeInterval = 2
+    /// At most this many walk at once.
+    static let maxWalkers = 6
 
     /// Called while drawing. Publishes nothing synchronously, so it is safe inside a view's body.
     func sync(_ office: OfficeState, width: Int, now: Date, animate: Bool) -> (pods: [Pod], layout: RoomLayout) {
@@ -99,17 +105,10 @@ final class Stage: ObservableObject {
 
         let people = Self.people(pods)
         if animate {
-            // A walk in starts when the person arrived, not when the window first draws it: a window drawn late
-            // still shows the walk, or the person seated once it would be over.
-            for (id, person) in people where present[id] == nil {
-                guard let arrived = person.arrived else { continue }
-                trips[id] = Trip(
-                    look: person.look, start: arrived,
-                    legs: [Leg(points: layout.route(slot: person.slot, seat: person.seat))],
-                    from: nil, to: .desk, arriving: true)
-            }
+            for (id, person) in people where present[id] == nil { arrive(id, person) }
+            checkVisits(people, now)
             for (id, person) in present where people[id] == nil { leave(id, person, people, before, now) }
-            for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people) }
+            for (id, person) in people where present[id] == nil && !person.isSession { visit(id, person, people, now) }
         }
         present = people
 
@@ -126,11 +125,11 @@ final class Stage: ObservableObject {
                 case .session(let session, _):
                     people[id] = Person(
                         look: look, slot: pod.slot, seat: index, arrived: session.arrived, session: session.id,
-                        isSession: true)
+                        isSession: true, waits: session.state == .waiting)
                 case .teammate(let mate, let session):
                     people[id] = Person(
                         look: look, slot: pod.slot, seat: index, arrived: mate.arrived, session: session.id,
-                        isSession: false)
+                        isSession: false, waits: mate.state == .waiting)
                 case .off:
                     break
                 }
@@ -139,22 +138,82 @@ final class Stage: ObservableObject {
         return people
     }
 
+    /// Plans a trip, unless six people already walk when it starts: anyone more is just there at once.
+    private func start(_ id: String, _ trip: Trip) {
+        let walking = trips.filter { $0.key != id && $0.value.start <= trip.start && trip.start < $0.value.end }
+        trips[id] = walking.count < Self.maxWalkers ? trip : nil
+    }
+
+    /// A walk in starts when the person arrived, not when the window first draws it: a window drawn late still
+    /// shows the walk, or the person seated once it would be over.
+    private func arrive(_ id: String, _ person: Person) {
+        guard let arrived = person.arrived else { return }
+        start(
+            id,
+            Trip(
+                look: person.look, start: arrived,
+                legs: [Leg(points: layout.route(slot: person.slot, seat: person.seat))],
+                from: nil, to: .desk, arriving: true))
+    }
+
     /// ① Once a newcomer sits down, their session walks over to their desk, talks for a moment and walks back.
-    private func visit(_ id: String, _ mate: Person, _ people: [String: Person]) {
+    /// Not while the session waits for an answer, and not when two or more came within `together`: they may meet
+    /// instead (③).
+    private func visit(_ id: String, _ mate: Person, _ people: [String: Person], _ now: Date) {
         let host = "p:" + mate.session
-        guard let session = people[host], session.place == .desk, trips[host] == nil, let arrived = mate.arrived
-        else { return }
+        guard let session = people[host], session.place == .desk, !session.waits, let arrived = mate.arrived else {
+            return
+        }
+        let others = people.filter { other in
+            other.key != id && !other.value.isSession && other.value.session == mate.session
+                && other.value.arrived.map { abs($0.timeIntervalSince(arrived)) < Self.together } ?? false
+        }
+        if !others.isEmpty {
+            if let partner = trips[host]?.partner, others[partner] != nil, trips[host]!.start > now {
+                trips[host] = nil
+            }
+            return
+        }
+        // shortcut: a newcomer who sits down while the session is already on its way gets no visit; queue visits if
+        // teammates that start one after another while others still work turn out to be common.
+        guard trips[host] == nil else { return }
         let home = layout.deskSpot(slot: session.slot, seat: session.seat)
         let there = layout.path(from: home, to: layout.besideSpot(slot: mate.slot, seat: mate.seat))
-        trips[host] = Trip(
-            look: session.look, start: trips[id]?.end ?? arrived,
-            legs: [Leg(points: there), talk(at: there.last!, with: mate), Leg(points: Array(there.reversed()))],
-            from: .desk, to: .desk, partner: id)
+        start(
+            host,
+            Trip(
+                look: session.look, start: max(trips[id]?.end ?? arrived, arrived + Self.together),
+                legs: [Leg(points: there), talk(at: there.last!, with: mate), Leg(points: Array(there.reversed()))],
+                from: .desk, to: .desk, partner: id))
+    }
+
+    /// A visit not under way yet is dropped once its host waits for an answer. One whose newcomer has left
+    /// before it began is dropped; under way, the host turns back at once.
+    private func checkVisits(_ people: [String: Person], _ now: Date) {
+        for (host, trip) in trips {
+            guard let partner = trip.partner else { continue }
+            if trip.start > now, people[host]?.waits ?? true || people[partner] == nil {
+                trips[host] = nil
+            } else if people[partner] == nil, let back = Self.turnedBack(trip, at: now) {
+                trips[host] = back
+            }
+        }
     }
 
     /// Out through the door. ② A teammate that worked a while first walks to its session's desk and reports.
+    /// Someone still walking in turns back; someone on their way elsewhere gets there first.
     private func leave(_ id: String, _ person: Person, _ people: [String: Person], _ room: RoomLayout, _ now: Date) {
         let desk = room.deskSpot(slot: person.slot, seat: person.seat)
+        if var trip = trips[id], trip.start <= now {
+            if trip.from == nil, let back = Self.turnedBack(trip, at: now) {
+                trips[id] = back
+            } else {
+                trip.legs.append(Leg(points: room.path(from: desk, to: room.doorSpot)))
+                trip.to = nil
+                trips[id] = trip
+            }
+            return
+        }
         var legs = [Leg(points: room.path(from: desk, to: room.doorSpot))]
         if !person.isSession, let host = people["p:" + person.session], host.place == .desk,
             now.timeIntervalSince(person.arrived ?? .distantPast) >= Self.quick
@@ -166,7 +225,36 @@ final class Stage: ObservableObject {
                 Leg(points: room.path(from: beside, to: room.doorSpot)),
             ]
         }
-        trips[id] = Trip(look: person.look, start: now, legs: legs, from: .desk, to: nil)
+        start(id, Trip(look: person.look, start: now, legs: legs, from: .desk, to: nil))
+    }
+
+    /// The trip turned around at `now`, back the way it came; nil once it is past its pause (on the way back
+    /// already).
+    private static func turnedBack(_ trip: Trip, at now: Date) -> Trip? {
+        var elapsed = max(0, now.timeIntervalSince(trip.start))
+        var passed: [Point] = []
+        for leg in trip.legs {
+            guard leg.points.count > 1 else {
+                if elapsed < leg.duration { break }
+                return nil
+            }
+            let walked = min(elapsed, leg.duration) * speed
+            var distance = 0.0
+            passed.append(leg.points[0])
+            for (from, to) in zip(leg.points, leg.points.dropFirst()) {
+                distance += hypot(Double(to.x - from.x), Double(to.y - from.y))
+                guard distance <= walked else { break }
+                passed.append(to)
+            }
+            if elapsed < leg.duration {
+                passed.append(along(leg.points, walked).point)
+                break
+            }
+            elapsed -= leg.duration
+        }
+        return Trip(
+            look: trip.look, start: now, legs: [Leg(points: passed.reversed())], from: trip.to, to: trip.from,
+            arriving: trip.arriving)
     }
 
     /// Standing at `at` and talking with the person at `other`'s seat: facing them, the speaking mark beside the
