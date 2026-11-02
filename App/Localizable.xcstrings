@@ -61,7 +61,6 @@
     "Clear All Nicknames" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "별명 모두 지우기" } } } },
     "Names you gave sessions and teammates with the pencil button next to the name in the side panel. Kept only on this Mac." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "옆 창에서 이름 옆 연필 버튼으로 세션과 팀원에게 붙인 이름. 이 맥에만 둬요." } } } },
     "Return saves, Esc cancels. Empty goes back to the automatic name." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Return 으로 저장, Esc 로 취소. 비우면 자동 이름으로 돌아가요." } } } },
-    "Last news" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "마지막 소식" } } } },
     "Just now" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "방금 전" } } } },
     "Just started" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "방금 시작" } } } },
     "%lld h" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%lld시간째" } } } },

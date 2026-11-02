@@ -104,8 +104,8 @@ final class SidePanel: ObservableObject {
     /// What the panel shows for whoever it is open on.
     enum Facts {
         /// A session; `named` when its folder has a nickname (the automatic name shows small under it).
-        case session(Session, named: Bool, news: Date?)
-        case teammate(Teammate, of: Session, news: Date?)
+        case session(Session, named: Bool)
+        case teammate(Teammate, of: Session)
         /// They have gone: the name they had, faded.
         case wentHome(String)
     }
@@ -114,16 +114,15 @@ final class SidePanel: ObservableObject {
         switch selection.kind {
         case .session(let id):
             guard let session = office.session(id) else { return .wentHome(selection.name) }
-            return .session(
-                session, named: nickname(of: selection.kind, in: office) != nil, news: office.lastNews(session: id))
+            return .session(session, named: nickname(of: selection.kind, in: office) != nil)
         case .teammate(let id):
             guard let (mate, session) = office.teammate(id) else { return .wentHome(selection.name) }
-            return .teammate(mate, of: session, news: office.lastNews(teammate: id))
+            return .teammate(mate, of: session)
         }
     }
 
-    /// What VoiceOver says as the panel opens: the name and the state ("my-project, Waiting, 3 min, In a
-    /// meeting"). Nothing for someone who went home: the panel says so.
+    /// What VoiceOver says as the panel opens, the panel's own lines: "my-project, Waiting, 3 min, In a meeting,
+    /// Editing files, Just started". Nothing for someone who went home: the panel says so.
     static func spoken(_ kind: PanelSelection.Kind, in office: OfficeState, now: Date) -> String? {
         func state(_ state: WorkState, since: Date, meets: Bool) -> [String] {
             var words: [String] = []
@@ -134,17 +133,29 @@ final class SidePanel: ObservableObject {
             if meets { words.append(String(localized: "In a meeting")) }
             return words
         }
-        let now = doing(kind, in: office).map { [$0.spoken] } ?? []
+        var doingWords = doing(kind, in: office).map { [$0.spoken] } ?? []
+        if !doingWords.isEmpty, let since = doingSince(kind, in: office) {
+            doingWords.append(TimeSpan(from: since, to: now).lastingSpoken)
+        }
         switch kind {
         case .session(let id):
             guard let session = office.session(id) else { return nil }
-            return ([session.label] + state(session.state, since: session.since, meets: session.meets) + now)
+            return ([session.label] + state(session.state, since: session.since, meets: session.meets) + doingWords)
                 .joined(separator: ", ")
         case .teammate(let id):
             guard let (mate, session) = office.teammate(id) else { return nil }
             return
                 ([mate.label, String(localized: "teammate of \(session.label)")]
-                + state(mate.state, since: mate.since, meets: session.meets(with: mate)) + now).joined(separator: ", ")
+                + state(mate.state, since: mate.since, meets: session.meets(with: mate)) + doingWords)
+                .joined(separator: ", ")
+        }
+    }
+
+    /// Since when they do what `doing` says.
+    static func doingSince(_ kind: PanelSelection.Kind, in office: OfficeState) -> Date? {
+        switch kind {
+        case .session(let id): return office.toolSince(session: id)
+        case .teammate(let id): return office.toolSince(teammate: id)
         }
     }
 
@@ -529,20 +540,17 @@ struct SidePanelView: View {
         let office = model.office
         return VStack(alignment: .leading, spacing: 14) {
             switch SidePanel.facts(selection, in: office) {
-            case .session(let session, let named, let news):
+            case .session(let session, let named):
                 header(Text(verbatim: session.label), auto: named ? Text(verbatim: session.name) : nil)
                 details(
                     role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
-                    teammateWaiting: session.teammateWaiting, doing: SidePanel.doing(selection.kind, in: office),
-                    news: news)
+                    teammateWaiting: session.teammateWaiting, kind: selection.kind, in: office)
                 teammates(session, in: office)
-            case .teammate(let mate, let session, let news):
+            case .teammate(let mate, let session):
                 header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
                 details(
                     role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
-                    meets: session.meets(with: mate), teammateWaiting: false,
-                    doing: SidePanel.doing(selection.kind, in: office),
-                    news: news)
+                    meets: session.meets(with: mate), teammateWaiting: false, kind: selection.kind, in: office)
             case .wentHome(let name):
                 wentHome(name)
             }
@@ -620,11 +628,11 @@ struct SidePanelView: View {
         }
     }
 
-    /// The state first, on a badge, and for how long; then "Session" or "Teammate of my-project", and when the app
-    /// last heard from them.
+    /// The state first, on a badge, and for how long; then "Session" or "Teammate of my-project", and what they do
+    /// now and for how long ("Editing files · 2 min"), only while there is something to say.
     @ViewBuilder private func details(
-        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool,
-        doing: HookEvent.ToolKind?, news: Date?
+        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool, kind: PanelSelection.Kind,
+        in office: OfficeState
     ) -> some View {
         // In a meeting the meeting takes the badge, as on the name tag; a wait still comes first.
         let meeting = meets && state != .waiting
@@ -636,14 +644,17 @@ struct SidePanelView: View {
         }
         role.foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 4) {
-            if let doing { doing.phrase }
+            if let doing = SidePanel.doing(kind, in: office) {
+                if let started = SidePanel.doingSince(kind, in: office) {
+                    ticking(every: 30) { now in
+                        doing.phrase + Text(verbatim: " · ") + TimeSpan(from: started, to: now).lasting
+                    }
+                } else {
+                    doing.phrase
+                }
+            }
             if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
             if meets, !meeting { Text("In a meeting") }
-        }
-        HStack {
-            Text("Last news").foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            ticking(every: 30) { now in news.map { TimeSpan(from: $0, to: now).ago } ?? Text(verbatim: "—") }
         }
     }
 

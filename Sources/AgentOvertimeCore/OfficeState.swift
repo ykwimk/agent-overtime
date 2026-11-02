@@ -264,9 +264,9 @@ public struct OfficeState: Equatable {
     /// Islands in use, nearest the door first. Kept in memory only: after a restart nobody's seat is remembered.
     public private(set) var islands: [Island] = []
     /// When each session ("s:" and its id) and teammate ("a:" and its id) last sent news while the app listened,
-    /// by the app's clock, and the kind of tool each is running. Memory only, and gone with them.
+    /// by the app's clock, and the kind of tool each is running and since when. Memory only, and gone with them.
     private var news: [String: Date] = [:]
-    private var kinds: [String: HookEvent.ToolKind] = [:]
+    private var kinds: [String: (kind: HookEvent.ToolKind, since: Date)] = [:]
     /// For each session, who called a teammate and is still waiting for it to come, first first: a teammate's id,
     /// or nil for the session itself. A SubagentStart says nothing of who called, so the next one to come goes with
     /// the first call still open; with none open, the session called it.
@@ -337,14 +337,18 @@ public struct OfficeState: Equatable {
     public func lastNews(teammate id: String) -> Date? { news["a:" + id] }
 
     /// The kind of tool a session or teammate last started, until its turn ends or it is asked something new.
-    public func toolKind(session id: String) -> HookEvent.ToolKind? { kinds["s:" + id] }
-    public func toolKind(teammate id: String) -> HookEvent.ToolKind? { kinds["a:" + id] }
+    public func toolKind(session id: String) -> HookEvent.ToolKind? { kinds["s:" + id]?.kind }
+    public func toolKind(teammate id: String) -> HookEvent.ToolKind? { kinds["a:" + id]?.kind }
+
+    /// When that kind of tool began, by the app's clock: tools of the same kind one after another count as one.
+    public func toolSince(session id: String) -> Date? { kinds["s:" + id]?.since }
+    public func toolSince(teammate id: String) -> Date? { kinds["a:" + id]?.since }
 
     /// Keeps the latest kind of tool under `key`, and forgets it when a new prompt or the end of a turn comes. A
     /// call for a teammate (a teammate tool other than SendMessage) waits for the next newcomer.
-    private mutating func note(_ event: HookEvent, at key: String) {
+    private mutating func note(_ event: HookEvent, at key: String, now: Date) {
         if let kind = event.toolKind {
-            kinds[key] = kind
+            if kinds[key]?.kind != kind { kinds[key] = (kind, now) }
         } else if [.userPromptSubmit, .stop, .sessionStart, .subagentStop].contains(event.kind) {
             kinds[key] = nil
         }
@@ -399,7 +403,7 @@ public struct OfficeState: Equatable {
         if seated, event.sendsMessage, let to = event.recipient { overhear(event, to: to, in: desks[d].sessions[s]) }
         guard let agentID = event.agentID else {
             news["s:" + event.session] = now
-            note(event, at: "s:" + event.session)
+            note(event, at: "s:" + event.session, now: now)
             if let newState = Self.state(for: event, from: desks[d].sessions[s].state) {
                 desks[d].sessions[s].set(newState, now: now)
             }
@@ -414,7 +418,7 @@ public struct OfficeState: Equatable {
         var mates = desks[d].sessions[s].teammates
         let index = mates.firstIndex { $0.id == agentID }
         news["a:" + agentID] = now
-        note(event, at: "a:" + agentID)
+        note(event, at: "a:" + agentID, now: now)
         switch (event.kind, index) {
         case (.subagentStop, let i?):
             let leaving = mates.remove(at: i)

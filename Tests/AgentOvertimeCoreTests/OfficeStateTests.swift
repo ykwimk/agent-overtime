@@ -314,7 +314,9 @@ final class OfficeStateTests: XCTestCase {
         let before = office
         office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .edit), now: t0 + 1)
         office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .command), now: t0 + 2)
+        office.apply(HookEvent(kind: .preToolUse, session: "s1", cwd: shop, toolKind: .command), now: t0 + 2.5)
         XCTAssertEqual(office.toolKind(session: "s1"), .command)
+        XCTAssertEqual(office.toolSince(session: "s1"), t0 + 2, "commands one after another count from the first")
         XCTAssertEqual(office, before, "the same picture")
         office.apply(
             HookEvent(kind: .preToolUse, session: "s1", cwd: shop, agentID: "a1", toolKind: .read), now: t0 + 3)

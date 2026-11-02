@@ -45,26 +45,21 @@ final class PanelTests: XCTestCase {
         throw XCTSkip("nobody with id \(id)")
     }
 
-    /// A session (its teammates listed), a teammate, a session with none, someone who went home; "—" before any
-    /// news; VoiceOver hears the name and the state.
+    /// A session (its teammates listed), a teammate, a session with none, someone who went home; VoiceOver hears
+    /// the name and the state.
     func testThePanelShowsWhoAndHowTheyAre() throws {
         let model = model(in: folder())
         office(model)
-        guard
-            case .session(let session, let named, let news) = SidePanel.facts(
-                try selection(model, "s1"), in: model.office)
+        guard case .session(let session, let named) = SidePanel.facts(try selection(model, "s1"), in: model.office)
         else { return XCTFail("a session") }
         XCTAssertEqual(session.teammates.map(\.name), ["Explore", "Plan", "code-reviewer"])
         XCTAssertFalse(named)
-        XCTAssertEqual(news, t0)
-        guard
-            case .teammate(let mate, let of, let mateNews) = SidePanel.facts(
-                try selection(model, "a1"), in: model.office)
-        else { return XCTFail("a teammate") }
+        guard case .teammate(let mate, let of) = SidePanel.facts(try selection(model, "a1"), in: model.office) else {
+            return XCTFail("a teammate")
+        }
         XCTAssertEqual(mate.name, "Explore")
         XCTAssertEqual(of.id, "s1")
-        XCTAssertEqual(mateNews, t0 + 5)
-        guard case .session(let alone, _, _) = SidePanel.facts(try selection(model, "w1"), in: model.office) else {
+        guard case .session(let alone, _) = SidePanel.facts(try selection(model, "w1"), in: model.office) else {
             return XCTFail("web-app")
         }
         XCTAssertEqual(alone.teammates, [], "No teammates")
@@ -179,7 +174,11 @@ final class PanelTests: XCTestCase {
         model.receive(HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit), at: t0 + 6)
         XCTAssertEqual(SidePanel.doing(.session("s1"), in: model.office), .edit)
         let spoken = try XCTUnwrap(SidePanel.spoken(.session("s1"), in: model.office, now: t0 + 7))
-        XCTAssertTrue(spoken.hasSuffix(HookEvent.ToolKind.edit.spoken), spoken)
+        XCTAssertTrue(spoken.hasSuffix(HookEvent.ToolKind.edit.spoken + ", " + TimeSpan.just.lastingSpoken), spoken)
+        model.receive(HookEvent(kind: .preToolUse, session: "s1", cwd: project, toolKind: .edit), at: t0 + 7)
+        XCTAssertEqual(model.office.toolSince(session: "s1"), t0 + 6, "still that work")
+        let later = try XCTUnwrap(SidePanel.spoken(.session("s1"), in: model.office, now: t0 + 6 + 180))
+        XCTAssertTrue(later.hasSuffix(TimeSpan.minutes(3).lastingSpoken), later)
         XCTAssertEqual(SidePanel.doing(.teammate("a1"), in: model.office), nil, "a1 sent no kind")
 
         model.receive(HookEvent(kind: .permissionRequest, session: "s1", cwd: project), at: t0 + 8)

@@ -922,7 +922,7 @@ final class CaptureTests: XCTestCase {
 
         let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
-        // The side panel open on cpu-0, its "12 s ago" ticking every second.
+        // The side panel open on cpu-0, its minutes redrawn every 30 s.
         let first = try XCTUnwrap(model.office.pods.first?.seats[0])
         panel.open(PanelSelection(first, at: .seat(slot: 0, index: 0)))
         RunLoop.main.run(until: Date() + 2)
