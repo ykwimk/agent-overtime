@@ -22,6 +22,8 @@ final class Stage: ObservableObject {
 
     /// The picture ticks fast until this moment (someone is walking), and slowly after.
     private(set) var busyUntil = Date.distantPast
+    /// Who wears headphones. Nothing decides it yet; screenshots set it to show the picture.
+    var headphones: Set<String> = []
 
     private var office: OfficeState?
     private var layout = RoomLayout(width: 0, slots: 0)
@@ -142,11 +144,11 @@ final class Stage: ObservableObject {
         let darkness = (Daylight.darkness(at: now) * 100).rounded() / 100
         var scene = OfficeScene(
             layout: layout, height: height, pods: pods, darkness: darkness, frame: frame, now: now,
-            away: moment.away, doorOpen: moment.doorOpen && !reduceMotion)
+            away: moment.away, doorOpen: moment.doorOpen && !reduceMotion, headphones: headphones)
         let minute = Int(now.timeIntervalSinceReferenceDate / 60)
         let roomKey =
             "\(frame) \(minute) \(darkness) \(scene.doorOpen) \(moment.away.sorted()) \(height) \(layout.width) "
-            + "\(generation)"
+            + "\(generation) \(headphones.sorted())"
         if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
         scene.walkers = moment.walkers
         let bounds = CGRect(x: 0, y: 0, width: layout.width, height: height)

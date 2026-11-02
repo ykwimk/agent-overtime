@@ -323,9 +323,10 @@ Drawn in code for this app (no image files)
 
 -- Office window (day and night views), office door (closed and open),
    whiteboard, wall clock, skirting line, the meeting room's glass walls
-   and glass door (shut and open) and the shadow under its table, speech
-   bubbles beside heads, text lines on the laptop screens, lamp light and
-   night shading
+   and glass door (shut and open) and the shadow under its table,
+   headphones (seen from the front and from the back, drawn over the
+   people's hair at their pixel size), speech bubbles beside heads, text
+   lines on the laptop screens, lamp light and night shading
 NEW: Original by Agent Overtime contributors, 2026, drawn in the style
      and colours of LPC Revised. Part of the app's code (App/OfficeArt.swift),
      MIT License like the rest of the code.

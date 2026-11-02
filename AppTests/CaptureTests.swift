@@ -103,9 +103,12 @@ final class CaptureTests: XCTestCase {
         for (time, hour) in [("day", 14), ("night", 22)] {
             let full = team(sessions: 4, teammates: 3, at: today(hour))
             XCTAssertEqual(full.office.islands.map(\.slot), [0, 1, 2, 3])
+            // One teammate tries the headphones on; nothing decides who wears them yet.
+            let trying = Stage()
+            trying.headphones = ["m:team-0-0"]
             try capture(
                 "office-16-\(time)", size: OfficeView.defaultSize,
-                OfficeView(fixedNow: today(hour)).environmentObject(full))
+                OfficeView(fixedNow: today(hour), stage: trying).environmentObject(full))
 
             let (model, stage) = scenario(at: today(hour))
             try capture(
@@ -157,6 +160,14 @@ final class CaptureTests: XCTestCase {
         try capture(
             "office-many-all", size: CGSize(width: OfficeView.defaultSize.width, height: 1060),
             OfficeView(fixedNow: today(14)).environmentObject(crowd))
+
+        // Both headphone pictures: on someone facing the room and on someone with their back to it.
+        let pair = team(sessions: 1, teammates: 3, at: today(14))
+        let pairStage = Stage()
+        pairStage.headphones = ["p:team-0", "m:team-0-0"]
+        try capture(
+            "office-headphones", size: OfficeView.minSize,
+            OfficeView(fixedNow: today(14), stage: pairStage).environmentObject(pair))
 
         // Same names: a folder's second session, and two Plans at once.
         let twins = makeModel(connected: true)

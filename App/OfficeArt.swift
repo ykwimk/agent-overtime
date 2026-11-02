@@ -177,6 +177,58 @@ enum Mark {
     }
 }
 
+/// Headphones for a teammate working on its own, drawn in code at the people's pixel size to sit over any
+/// MetroCity hair: a band over the top of the head and a cup over each ear. Two pictures, seen from the front
+/// (teal cushions) and from the back (the cups' shells). Who wears them is decided elsewhere.
+enum Headphones {
+    /// The pictures' left edge in a person's 32-pixel cell; the front starts at row 1, the back at row 2.
+    static let left = 4
+    static let front = [
+        ".......oooooooooo.......",
+        ".....oohhhhhhhhhhoo.....",
+        "....obb..........bbo....",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "...obo............obo...",
+        "..ooo..............ooo..",
+        ".odcdo............odcdo.",
+        ".odcdo............odcdo.",
+        ".odcdo............odcdo.",
+        ".odcdo............odcdo.",
+        "..ooo..............ooo..",
+    ]
+    static let back = front.map { $0.replacingOccurrences(of: "c", with: "h") }
+    static let colors: [Character: UInt32] = [
+        "o": 0x2B2233, "b": 0x555A6B, "h": 0x8C93A6, "d": 0x3A3D4A, "c": 0x3E9FB0,
+    ]
+
+    /// One of the pictures, each pixel `scale` bitmap pixels square.
+    static func picture(_ rows: [String], scale: Int) -> CGImage? {
+        let width = (rows.first?.count ?? 0) * scale
+        let height = rows.count * scale
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: ArtStore.screenSpace, bitmapInfo: ArtStore.screenFormat)
+        else { return nil }
+        for (y, row) in rows.enumerated() {
+            for (x, key) in row.enumerated() {
+                guard let hex = colors[key] else { continue }
+                context.setFillColor(
+                    CGColor(
+                        srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+                        blue: CGFloat(hex & 0xFF) / 255, alpha: 1))
+                context.fill(CGRect(x: x * scale, y: height - (y + 1) * scale, width: scale, height: scale))
+            }
+        }
+        return context.makeImage()
+    }
+}
+
 /// Someone on the way in or out, already placed for this moment. No bubble while walking: the state is on the
 /// name tag of the desk they walk to, and a bubble passing a seated "!" would blur whose it is.
 struct Walker {
@@ -217,6 +269,8 @@ struct OfficeScene {
     var doorOpen = false
     /// The meeting room's glass door; nobody walks to a meeting yet, so it stays shut.
     var meetingDoorOpen = false
+    /// Who wears headphones (ids as `id(_:)` gives them). Only screenshots set it for now.
+    var headphones: Set<String> = []
     var calendar = Calendar.current
 
     /// Who walks to and from a seat. Nobody walks for a seat someone went home from.
@@ -667,11 +721,11 @@ struct OfficeRenderer {
             let far = y0 + RoomLayout.farDesk
             let near = y0 + RoomLayout.nearDesk
             // Who is at each seat right now: people still walking in are not there yet.
-            let here = pod.seats.map { seat -> (look: Look, state: WorkState)? in
+            let here = pod.seats.map { seat -> (look: Look, state: WorkState, headphones: Bool)? in
                 guard let seat, let id = OfficeScene.id(seat), !scene.away.contains(id),
                     let look = OfficeScene.look(seat), let state = OfficeScene.state(seat)
                 else { return nil }
-                return (look, state)
+                return (look, state, scene.headphones.contains(id))
             }
             let wentHome = pod.seats.map { seat -> Bool in
                 if case .off? = seat { return true }
@@ -690,6 +744,7 @@ struct OfficeRenderer {
                 if let person = here[seat] {
                     let nod = person.state == .resting && scene.frame % 4 >= 2 ? OfficeRenderer.personPixel : 0
                     self.person(person.look, column: 0, rows: 28, CGFloat(cx - 24), CGFloat(top) + nod)
+                    if person.headphones { headphones(front: true, CGFloat(cx - 24), CGFloat(top) + nod) }
                 }
             }
             for seat in [1, 3] {
@@ -735,7 +790,9 @@ struct OfficeRenderer {
             for seat in [0, 2] {
                 let cx = x0 + RoomLayout.personX(seat)
                 if let person = here[seat] {
-                    sit(person.look, cx: cx, top: near, nod: person.state == .resting && scene.frame % 4 >= 2)
+                    sit(
+                        person.look, cx: cx, top: near, nod: person.state == .resting && scene.frame % 4 >= 2,
+                        headphones: person.headphones)
                 } else if wentHome[seat] {
                     sprite(Sheet.chair, 0, 40, 32, 48, cx - 13, near + 33)
                 } else {
@@ -818,10 +875,24 @@ struct OfficeRenderer {
 
         /// The pack has no sitting pose: the back of a standing person, cut under the shoulders (sheet row 24),
         /// behind the chair's backrest. Shoulders (row 20) sit 4 art pixels below the top of the backrest.
-        private func sit(_ look: Look, cx: Int, top: Int, nod: Bool) {
-            person(
-                look, column: 12, rows: 24, CGFloat(cx) - 24, CGFloat(top) + 2 + (nod ? OfficeRenderer.personPixel : 0))
+        private func sit(_ look: Look, cx: Int, top: Int, nod: Bool, headphones: Bool) {
+            let y = CGFloat(top) + 2 + (nod ? OfficeRenderer.personPixel : 0)
+            person(look, column: 12, rows: 24, CGFloat(cx) - 24, y)
+            if headphones { self.headphones(front: false, CGFloat(cx) - 24, y) }
             sprite(Sheet.chair, 0, 0, 32, 32, cx - 16, top + 28)
+        }
+
+        /// Headphones over the hair of a person drawn at `x`, `y` (the corner of their cell), at the people's own
+        /// pixel size: seen from the front or from the back.
+        private func headphones(front: Bool, _ x: CGFloat, _ y: CGFloat) {
+            let rows = front ? Headphones.front : Headphones.back
+            let picture = art.picture("headphones \(front)") {
+                Headphones.picture(rows, scale: Self.personScale)
+            }
+            let pixel = OfficeRenderer.personPixel
+            image(
+                picture, x + CGFloat(Headphones.left) * pixel, y + CGFloat(front ? 1 : 2) * pixel,
+                pixel: Self.bitmapPixel)
         }
 
         /// The top `rows` of one cell of every layer of a person, at `x`, `y` in art pixels.
