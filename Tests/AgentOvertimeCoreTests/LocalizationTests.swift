@@ -97,8 +97,11 @@ final class ProcessReadingTests: XCTestCase {
 
     /// Run inside a Claude Code session (as while building this app), the finder finds that session's Claude Code
     /// among this process's ancestors, in the folder it runs in. Prints only counts and yes or no: nothing of any
-    /// other process. Skipped anywhere else (CI).
+    /// other process. Only with AGENT_OVERTIME_SMOKE=1, from the session's folder; skipped otherwise.
     func testSmokeFindsTheClaudeCodeThisRunsIn() throws {
+        try XCTSkipUnless(
+            ProcessInfo.processInfo.environment["AGENT_OVERTIME_SMOKE"] == "1",
+            "Looks through this Mac's processes: set AGENT_OVERTIME_SMOKE=1 to run it, from the session's folder")
         var finder = SessionFinder()
         let found = finder.look()
         var ancestors: [Int32] = []
