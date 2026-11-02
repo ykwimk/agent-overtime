@@ -1158,6 +1158,12 @@ final class CaptureTests: XCTestCase {
         defer { quietWindow.close() }
         RunLoop.main.run(until: Date() + 3)
         let quiet = percent(over: 10) - idle
+        // Finding sessions on: one look at this Mac's processes costs this, once every 5 s. (Only the time is kept.)
+        var finder = SessionFinder()
+        _ = finder.look()
+        let lookStart = cpuSeconds()
+        for _ in 0..<20 { _ = finder.look() }
+        let lookMs = (cpuSeconds() - lookStart) / 20 * 1000
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
         let asleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
@@ -1186,10 +1192,10 @@ final class CaptureTests: XCTestCase {
                 "CPU, 4 islands x 4 seats (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
                 + "(process %.2f%% - idle %.2f%%); side panel open, still: office %.2f%%; walking: office %.2f%%; "
                 + "six walking: office %.2f%%; meeting, still: office %.2f%%; reduce motion: office %.2f%%; "
-                + "four quiet, still: office %.2f%%; one picture: night %.2f ms, day %.2f ms; one walker box: night "
-                + "%.2f ms\n",
+                + "four quiet, still: office %.2f%%; one look for sessions: %.2f ms CPU (%.3f%% at one every 5 s); "
+                + "one picture: night %.2f ms, day %.2f ms; one walker box: night %.2f ms\n",
             "\(visible)", "\(locked)", "\(asleep)", office, total, idle, panelOpen, walking, six, meeting, reduced,
-            quiet, renderMs, dayMs, boxMs)
+            quiet, lookMs, lookMs / 5000 * 100, renderMs, dayMs, boxMs)
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
         XCTAssertLessThan(office, 5)
