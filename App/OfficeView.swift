@@ -106,6 +106,29 @@ final class SidePanel: ObservableObject {
         focusRequest = .edit
     }
 
+    /// What the panel shows for whoever it is open on.
+    enum Facts {
+        /// A session; `named` when its folder has a nickname (the automatic name shows small under it).
+        case session(Session, named: Bool, news: Date?)
+        case teammate(Teammate, of: Session, news: Date?)
+        /// They have gone: the name they had, faded.
+        case wentHome(String)
+    }
+
+    static func facts(_ selection: PanelSelection, in office: OfficeState) -> Facts {
+        switch selection.kind {
+        case .session(let id):
+            guard let session = office.session(id) else { return .wentHome(selection.name) }
+            return .session(
+                session, named: nickname(of: selection.kind, in: office) != nil, news: office.lastNews(session: id))
+        case .teammate(let id):
+            guard let (mate, session) = office.teammate(id) else { return .wentHome(selection.name) }
+            return .teammate(mate, of: session, news: office.lastNews(teammate: id))
+        case .off:
+            return .wentHome(selection.name)
+        }
+    }
+
     /// What VoiceOver says as the panel opens: the name and the state ("my-project, Waiting, 3 min, In a
     /// meeting"). Nothing for someone who went home: the panel says so.
     static func spoken(_ kind: PanelSelection.Kind, in office: OfficeState, now: Date) -> String? {
@@ -381,6 +404,21 @@ struct EmptyOffice<Actions: View>: View {
     }
 }
 
+/// "12 s ago" by the second for its first minute, then by the half minute: every update of the panel costs about
+/// as much as the room's own ticking.
+struct NewsSchedule: TimelineSchedule {
+    /// Until when it counts seconds.
+    let seconds: Date
+
+    func entries(from start: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+        var next = start
+        return AnyIterator {
+            defer { next += next < seconds ? 1 : 30 }
+            return next
+        }
+    }
+}
+
 /// The side panel: a closer look at one person, to read only (a nickname is the one thing it changes).
 struct SidePanelView: View {
     /// Wide enough for a 32-character nickname and a teammate row ("code-reviewer · Waiting · 12 min"); over the
@@ -402,44 +440,38 @@ struct SidePanelView: View {
     let fixedNow: Date?
 
     var body: some View {
-        if let selection = panel.selection {
-            // "12 s ago" counts by the second while the panel is open.
-            if let fixedNow {
-                content(selection, now: fixedNow)
-            } else {
-                TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: 1)) { context in
-                    content(selection, now: context.date)
-                }
-            }
+        if let selection = panel.selection { content(selection) }
+    }
+
+    /// What changes with the clock alone, drawn again on its own every `seconds` ("12 s ago" by the second, minutes
+    /// every 30 s): the rest of the panel and the room around it stay as they are.
+    @ViewBuilder private func ticking<Content: View>(
+        every seconds: TimeInterval, @ViewBuilder _ content: @escaping (Date) -> Content
+    ) -> some View {
+        if let fixedNow {
+            content(fixedNow)
+        } else {
+            TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: 0), by: seconds)) { content($0.date) }
         }
     }
 
-    private func content(_ selection: PanelSelection, now: Date) -> some View {
+    private func content(_ selection: PanelSelection) -> some View {
         let office = model.office
         return VStack(alignment: .leading, spacing: 14) {
-            switch selection.kind {
-            case .session(let id):
-                if let session = office.session(id) {
-                    let named = SidePanel.nickname(of: selection.kind, in: office) != nil
-                    header(Text(verbatim: session.label), auto: named ? Text(verbatim: session.name) : nil)
-                    details(
-                        role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
-                        teammateWaiting: session.teammateWaiting, news: office.lastNews(session: id), now: now)
-                    teammates(session, in: office, now: now)
-                } else {
-                    wentHome(selection.name)
-                }
-            case .teammate(let id):
-                if let (mate, session) = office.teammate(id) {
-                    header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
-                    details(
-                        role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
-                        meets: session.meets, teammateWaiting: false, news: office.lastNews(teammate: id), now: now)
-                } else {
-                    wentHome(selection.name)
-                }
-            case .off:
-                wentHome(selection.name)
+            switch SidePanel.facts(selection, in: office) {
+            case .session(let session, let named, let news):
+                header(Text(verbatim: session.label), auto: named ? Text(verbatim: session.name) : nil)
+                details(
+                    role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
+                    teammateWaiting: session.teammateWaiting, news: news)
+                teammates(session, in: office)
+            case .teammate(let mate, let session, let news):
+                header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
+                details(
+                    role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
+                    meets: session.meets, teammateWaiting: false, news: news)
+            case .wentHome(let name):
+                wentHome(name)
             }
         }
         .padding(16)
@@ -518,14 +550,16 @@ struct SidePanelView: View {
     /// "Session" or "Teammate of my-project", the state and for how long (a wait first, then the meeting), and
     /// when the app last heard from them.
     @ViewBuilder private func details(
-        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool, news: Date?, now: Date
+        role: Text, state: WorkState, since: Date, meets: Bool, teammateWaiting: Bool, news: Date?
     ) -> some View {
         role.foregroundStyle(.secondary)
         VStack(alignment: .leading, spacing: 4) {
             if !meets || state == .waiting {
-                let minutes = Int(now.timeIntervalSince(since) / 60)
-                (state.word + (minutes >= 1 ? Text(verbatim: " · ") + Text("\(minutes) min") : Text(verbatim: "")))
-                    .foregroundStyle(state.color)
+                ticking(every: 30) { now in
+                    let minutes = Int(now.timeIntervalSince(since) / 60)
+                    (state.word + (minutes >= 1 ? Text(verbatim: " · ") + Text("\(minutes) min") : Text(verbatim: "")))
+                        .foregroundStyle(state.color)
+                }
             }
             if teammateWaiting { Text("Teammate waiting").foregroundStyle(Style.waiting) }
             if meets { Text("In a meeting") }
@@ -533,12 +567,16 @@ struct SidePanelView: View {
         HStack {
             Text("Last news").foregroundStyle(.secondary)
             Spacer(minLength: 8)
-            Self.ago(news, now: now)
+            if let fixedNow {
+                Self.ago(news, now: fixedNow)
+            } else {
+                TimelineView(NewsSchedule(seconds: (news ?? .distantPast) + 60)) { Self.ago(news, now: $0.date) }
+            }
         }
     }
 
     /// The session's teammates, one row each; a row opens that teammate's panel.
-    private func teammates(_ session: Session, in office: OfficeState, now: Date) -> some View {
+    private func teammates(_ session: Session, in office: OfficeState) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Teammates").font(.headline)
             if session.teammates.isEmpty { Text("No teammates").foregroundStyle(.secondary) }
@@ -549,7 +587,9 @@ struct SidePanelView: View {
                     HStack {
                         Text(verbatim: mate.label).lineLimit(1).truncationMode(.middle)
                         Spacer(minLength: 8)
-                        mate.state.label(since: mate.since, now: now).foregroundStyle(mate.state.color)
+                        ticking(every: 30) { now in
+                            mate.state.label(since: mate.since, now: now).foregroundStyle(mate.state.color)
+                        }
                     }
                     .contentShape(Rectangle())
                 }
