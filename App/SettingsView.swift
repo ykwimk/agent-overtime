@@ -98,7 +98,7 @@ struct SettingsView: View {
                 LabeledContent {
                     Text(verbatim: "\(count)")
                 } label: {
-                    Text("Nicknames")
+                    Text("Saved nicknames")
                 }
                 Button("Clear All Nicknames") { model.forgetNicknames() }
                     .disabled(count == 0)

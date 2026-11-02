@@ -50,6 +50,7 @@
     "Edit nickname" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "별명 고치기" } } } },
     "Nickname" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "별명" } } } },
     "Nicknames" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "별명" } } } },
+    "Saved nicknames" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "저장한 별명 수" } } } },
     "Clear All Nicknames" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "별명 모두 지우기" } } } },
     "Names you gave sessions and teammates with ✏️ in the side panel. Kept only on this Mac." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "옆 창의 ✏️ 로 세션과 팀원에게 붙인 이름. 이 맥에만 둡니다." } } } },
     "Return saves, Esc cancels. Empty goes back to the automatic name." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Return 으로 저장, Esc 로 취소. 비우면 자동 이름으로 돌아가요." } } } },
