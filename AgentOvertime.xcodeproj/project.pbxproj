@@ -35,6 +35,7 @@
 		AD0000000000000000000301 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000301 /* main.swift */; };
 		AE0000000000000000000401 /* CaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000401 /* CaptureTests.swift */; };
 		AE0000000000000000000402 /* WalkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000402 /* WalkTests.swift */; };
+		AE0000000000000000000403 /* PanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000403 /* PanelTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -93,6 +94,7 @@
 		AB0000000000000000000301 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AB0000000000000000000401 /* CaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000402 /* WalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000403 /* PanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000501 /* AgentOvertime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentOvertime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000502 /* agent-overtime-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "agent-overtime-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000503 /* AgentOvertimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentOvertimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -193,6 +195,7 @@
 			children = (
 				AB0000000000000000000401 /* CaptureTests.swift */,
 				AB0000000000000000000402 /* WalkTests.swift */,
+				AB0000000000000000000403 /* PanelTests.swift */,
 			);
 			path = AppTests;
 			sourceTree = "<group>";
@@ -359,6 +362,7 @@
 			files = (
 				AE0000000000000000000401 /* CaptureTests.swift in Sources */,
 				AE0000000000000000000402 /* WalkTests.swift in Sources */,
+				AE0000000000000000000403 /* PanelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

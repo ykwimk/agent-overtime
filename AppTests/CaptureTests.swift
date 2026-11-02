@@ -291,6 +291,50 @@ final class CaptureTests: XCTestCase {
             "office-meeting-second", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(two))
     }
 
+    /// The side panel on the seat at `slot`, `index`.
+    private func panel(_ model: AppModel, slot: Int, index: Int) throws -> SidePanel {
+        let seat = try XCTUnwrap(model.office.pods.first { $0.slot == slot }?.seats[index])
+        return SidePanel(PanelSelection(seat, at: .seat(slot: slot, index: index)))
+    }
+
+    /// The side panel: a session with three teammates, a teammate, over the smallest window, someone who went
+    /// home, a nickname being typed, and nicknames on the name tags.
+    func testCaptureSidePanel() throws {
+        let now = today(14)
+        let office = team(sessions: 4, teammates: 3, at: now)
+        try capture(
+            "panel-session", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(office, slot: 0, index: 0)).environmentObject(office))
+        try capture(
+            "panel-teammate", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(office, slot: 0, index: 2)).environmentObject(office))
+        try capture(
+            "panel-small", size: OfficeView.minSize,
+            OfficeView(fixedNow: now, panel: try panel(office, slot: 0, index: 1)).environmentObject(office))
+
+        let leaving = team(sessions: 2, teammates: 0, at: now)
+        let gone = try panel(leaving, slot: 0, index: 1)
+        leaving.receive(
+            HookEvent(kind: .sessionEnd, session: "team-1", cwd: FakeScenario.root + "/web-app"), at: now - 10)
+        try capture(
+            "panel-went-home", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: gone).environmentObject(leaving))
+
+        let typing = try panel(office, slot: 0, index: 0)
+        typing.draft = "shop 🛒"
+        try capture(
+            "panel-nickname-typing", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: typing).environmentObject(office))
+
+        let named = team(sessions: 4, teammates: 3, at: now)
+        XCTAssertNotNil(named.rename(.session("team-0"), to: "shop 🛒"))
+        let explore = try XCTUnwrap(named.office.session("team-0")?.teammates.first)
+        XCTAssertNotNil(named.rename(.teammate(explore.id), to: "Scout"))
+        try capture(
+            "panel-nicknames", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(named, slot: 0, index: 0)).environmentObject(named))
+    }
+
     /// The middle of the first moment someone stands and talks, between `from` and `to`.
     private func talking(_ stage: Stage, from: Date, to: Date) throws -> Date {
         let start = try XCTUnwrap(
@@ -746,14 +790,22 @@ final class CaptureTests: XCTestCase {
             defer: false)
         window.isReleasedWhenClosed = false
         let stage = Stage()
+        let panel = SidePanel()
         window.contentView = NSHostingView(
-            rootView: OfficeView(stage: stage, ticksWhileHidden: true).environmentObject(model))
+            rootView: OfficeView(stage: stage, panel: panel, ticksWhileHidden: true).environmentObject(model))
         window.orderFrontRegardless()
         defer { window.close() }
         RunLoop.main.run(until: Date() + 3)
 
         let total = percent(over: 10)
         let visible = window.occlusionState.contains(.visible)
+        // The side panel open on cpu-0, its "12 s ago" ticking every second.
+        let first = try XCTUnwrap(model.office.pods.first?.seats[0])
+        panel.open(PanelSelection(first, at: .seat(slot: 0, index: 0)))
+        RunLoop.main.run(until: Date() + 2)
+        let panelOpen = percent(over: 10) - idle
+        panel.close()
+        RunLoop.main.run(until: Date() + 1)
         // A teammate across the desks of the far island reports to its session and leaves: about 4 s of walking,
         // drawn 30 times a second.
         model.receive(
@@ -830,11 +882,11 @@ final class CaptureTests: XCTestCase {
         let line = String(
             format:
                 "CPU, 4 islands x 4 seats (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
-                + "(process %.2f%% - idle %.2f%%); walking: office %.2f%%; six walking: office %.2f%%; "
-                + "meeting, still: office %.2f%%; reduce motion: office %.2f%%; "
+                + "(process %.2f%% - idle %.2f%%); side panel open, still: office %.2f%%; walking: office %.2f%%; "
+                + "six walking: office %.2f%%; meeting, still: office %.2f%%; reduce motion: office %.2f%%; "
                 + "one picture: night %.2f ms, day %.2f ms; one walker box: night %.2f ms\n",
-            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, walking, six, meeting, reduced, renderMs,
-            dayMs, boxMs)
+            "\(visible)", "\(locked)", "\(asleep)", office, total, idle, panelOpen, walking, six, meeting, reduced,
+            renderMs, dayMs, boxMs)
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
         XCTAssertLessThan(office, 5)
