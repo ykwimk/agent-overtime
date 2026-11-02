@@ -45,6 +45,8 @@
     "Session" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "본 세션" } } } },
     "Teammate of %@" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%@ 의 팀원" } } } },
     "Teammates" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원" } } } },
+    "No teammates" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "팀원 없음" } } } },
+    "Went home" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "퇴근했어요" } } } },
     "Last news" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "마지막 소식" } } } },
     "%lld s ago" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%lld초 전" } } } },
     "%lld min ago" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "%lld분 전" } } } },

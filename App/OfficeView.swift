@@ -358,6 +358,8 @@ struct SidePanelView: View {
                         role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
                         teammateWaiting: session.teammateWaiting, news: office.lastNews(session: id), now: now)
                     teammates(session, in: office, now: now)
+                } else {
+                    wentHome(selection.name)
                 }
             case .teammate(let id):
                 if let (mate, session) = office.teammate(id) {
@@ -365,17 +367,25 @@ struct SidePanelView: View {
                     details(
                         role: Text("Teammate of \(session.name)"), state: mate.state, since: mate.since,
                         meets: session.meets, teammateWaiting: false, news: office.lastNews(teammate: id), now: now)
+                } else {
+                    wentHome(selection.name)
                 }
             case .off:
-                header(selection.name)
+                wentHome(selection.name)
             }
         }
         .padding(16)
     }
 
-    private func header(_ name: String) -> some View {
+    /// Someone who has gone: the name faded, and the panel stays open.
+    @ViewBuilder private func wentHome(_ name: String) -> some View {
+        header(name, faded: true)
+        Text("Went home").foregroundStyle(.secondary)
+    }
+
+    private func header(_ name: String, faded: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(verbatim: name).font(Style.title).lineLimit(2)
+            Text(verbatim: name).font(Style.title).lineLimit(2).foregroundStyle(faded ? .secondary : .primary)
             Spacer(minLength: 4)
             Button {
                 panel.close()
@@ -416,6 +426,7 @@ struct SidePanelView: View {
     private func teammates(_ session: Session, in office: OfficeState, now: Date) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Teammates").font(.headline)
+            if session.teammates.isEmpty { Text("No teammates").foregroundStyle(.secondary) }
             ForEach(session.teammates) { mate in
                 Button {
                     panel.open(PanelSelection(teammate: mate, in: office))
