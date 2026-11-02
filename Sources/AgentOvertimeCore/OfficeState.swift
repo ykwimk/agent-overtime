@@ -381,7 +381,7 @@ public struct OfficeState: Equatable {
             guard event.notification == "idle_prompt" else { return .waiting }
             // idle_prompt also comes while a question or permission prompt is still open: that stays a wait.
             return current == .waiting ? nil : .resting
-        case .sessionEnd, .subagentStart, .subagentStop: return nil
+        case .sessionEnd, .subagentStart, .subagentStop, .postModelSwitch: return nil
         }
     }
 

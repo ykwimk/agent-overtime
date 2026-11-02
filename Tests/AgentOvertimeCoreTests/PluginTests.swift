@@ -15,6 +15,8 @@ final class PluginTests: XCTestCase {
     func testHooksCallOnlyTheFixedHelperPaths() throws {
         let hooks = try XCTUnwrap(try json("plugin/hooks/hooks.json")["hooks"] as? [String: [[String: Any]]])
         XCTAssertEqual(Set(hooks.keys), Set(HookEvent.Kind.allCases.map(\.rawValue)))
+        XCTAssertEqual(hooks.count, 10)
+        XCTAssertNil(hooks["PostModelSwitch"]?.first?["matcher"], "every switch")
 
         for (event, groups) in hooks {
             for group in groups {

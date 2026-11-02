@@ -348,6 +348,20 @@ final class HookEventTests: XCTestCase {
         }
     }
 
+    /// A model switch: the new model's name only, never the old one or the cost figures.
+    func testAModelSwitchKeepsOnlyTheNewModel() throws {
+        let data = input([
+            "hook_event_name": "PostModelSwitch", "session_id": "s", "cwd": "/x", "from_model": "claude-earlier",
+            "to_model": "claude-sonnet-4-5", "estimated_cache_write_usd": 1.25, "pricing": ["input": 3],
+        ])
+        let event = try XCTUnwrap(HookEvent.fromHookInput(data, pid: nil, details: true))
+        XCTAssertEqual(event.kind, .postModelSwitch)
+        XCTAssertEqual(event.model, "claude-sonnet-4-5")
+        let line = wire(event)
+        for leaked in ["earlier", "1.25", "pricing", "usd"] { XCTAssertFalse(line.contains(leaked), line) }
+        XCTAssertNil(try XCTUnwrap(HookEvent.fromHookInput(data, pid: nil)).model, "off")
+    }
+
     /// With Show Details off nothing of it is opened: v0.3's line.
     func testDetailsOffOpensNothing() throws {
         let edit = try details(
@@ -366,10 +380,15 @@ final class HookEventTests: XCTestCase {
             "tool_input": ["file_path": "/Users/me/my-project/big.txt", "content": content],
         ])
         XCTAssertLessThan(data.count, Limits.hookInput)
+        // Reading the JSON is v0.3's own cost at this size; counting is what details add. The helper stops itself at
+        // 0.5 s (a test build on a busy Mac runs well behind the release helper, hence the whole at 1 s).
         let started = Date()
         let event = try XCTUnwrap(HookEvent.fromHookInput(data, pid: nil, details: true))
         let line = event.wireLine()
-        XCTAssertLessThan(Date().timeIntervalSince(started), 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+        let counting = Date()
+        XCTAssertEqual(Detail.lines(content), 380_000)
+        XCTAssertLessThan(Date().timeIntervalSince(counting), 0.5)
         XCTAssertEqual(event.linesAdded, 380_000)
         XCTAssertFalse(String(decoding: line, as: UTF8.self).contains("secret"))
     }

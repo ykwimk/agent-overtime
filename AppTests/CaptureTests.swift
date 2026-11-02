@@ -1329,4 +1329,14 @@ final class HelperTests: XCTestCase {
         XCTAssertEqual(result.status, 0)
         XCTAssertLessThan(result.seconds, 1.0, "0.5 s hard stop")
     }
+
+    /// A model switch's hook output would reach Claude's context: nothing is printed, and it always exits 0.
+    func testAModelSwitchPrintsNothing() throws {
+        try XCTSkipIf(FileManager.default.fileExists(atPath: Paths.socket()), "Agent Overtime is running")
+        let input = Data(
+            #"{"hook_event_name":"PostModelSwitch","session_id":"s","cwd":"/x","from_model":"a","to_model":"b"}"#.utf8)
+        let result = try run(input)
+        XCTAssertEqual(result.status, 0)
+        XCTAssertEqual(result.output.count, 0)
+    }
 }

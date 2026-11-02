@@ -45,6 +45,8 @@ public struct HookEvent: Codable, Equatable {
         case stop = "Stop"
         case subagentStart = "SubagentStart"
         case subagentStop = "SubagentStop"
+        /// Only its `to_model`, with Show Details on.
+        case postModelSwitch = "PostModelSwitch"
     }
 
     /// Notification types that change a state. Everything else (auth_success, quota_*, plugin_notification…) is dropped.
@@ -205,7 +207,9 @@ public struct HookEvent: Codable, Equatable {
     /// The detail fields, each from the one or two input fields named here and nothing else of the input; a field
     /// of another type is dropped. Edit texts and file contents only ever become line counts.
     private mutating func readDetails(_ object: [String: Any]) {
+        // The model name only: never the cost and token figures that come with it, or the model switched from.
         if kind == .sessionStart { model = object["model"] as? String }
+        if kind == .postModelSwitch { model = object["to_model"] as? String }
         guard kind == .preToolUse, let input = object["tool_input"] as? [String: Any] else { return }
         let folder = cwd
         let path = { (key: String) in (input[key] as? String).flatMap { Detail.shortPath($0, in: folder) } }
@@ -338,7 +342,8 @@ public struct HookEvent: Codable, Equatable {
         if update, taskID == nil { taskAction = nil }
         taskStatus = taskAction == .update ? taskStatus : nil
         taskTitle = taskAction == nil ? nil : taskTitle.flatMap { Detail.capped($0, Detail.title) }
-        model = kind == .sessionStart ? model.flatMap { Detail.capped($0, Detail.model) } : nil
+        let modelNews = kind == .sessionStart || kind == .postModelSwitch
+        model = modelNews ? model.flatMap { Detail.capped($0, Detail.model) } : nil
     }
 }
 
