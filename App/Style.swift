@@ -95,12 +95,14 @@ extension WorkState {
         }
     }
 
-    /// The label under a character: "Working", "Waiting · 3 min", "Resting", "Quiet".
-    func label(since: Date, now: Date) -> Text {
+    /// The label under a character: "Working", "Waiting · 3 min", "Resting", "Quiet"; compact (small name tags)
+    /// "Waiting 3 min".
+    func label(since: Date, now: Date, compact: Bool = false) -> Text {
         switch self {
         case .waiting:
             let minutes = Int(now.timeIntervalSince(since) / 60)
-            return minutes < 1 ? Text("Waiting") : Text("Waiting · \(minutes) min")
+            if minutes < 1 { return Text("Waiting") }
+            return compact ? Text("Waiting \(minutes) min") : Text("Waiting · \(minutes) min")
         case .working, .resting, .quiet:
             return word
         }

@@ -148,6 +148,7 @@
     "To disconnect, turn off or remove agent-overtime with /plugin in Claude Code." : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "끊으려면 Claude Code 에서 /plugin 으로 agent-overtime 을 끄거나 지우세요." } } } },
     "Version" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "버전" } } } },
     "Waiting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "답 기다림" } } } },
+    "Waiting %lld min" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "답 기다림 %lld분" } } } },
     "Waiting · %lld min" : { "localizations" : { "en" : { "stringUnit" : { "state" : "translated", "value" : "Waiting · %lld min" } }, "ko" : { "stringUnit" : { "state" : "translated", "value" : "답 기다림 · %lld분째" } } } },
     "Waiting %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "답 기다림 %lld" } } } },
     "Welcome to Agent Overtime" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "Agent Overtime 시작하기" } } } },

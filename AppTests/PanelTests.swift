@@ -369,6 +369,30 @@ final class ZoomTests: XCTestCase {
         XCTAssertEqual(self.model(defaults).zoom, .normal, "an unknown value reads as normal")
     }
 
+    /// Small name tags grow past their desk rather than cut a name short: over the free seat beside, else a little
+    /// outward, still clear of the next island's tags. An 18-character folder name fits over two desks; the short
+    /// wait line ("Waiting 3 min", "답 기다림 3분") over a desk and the bit outward.
+    func testSmallTagsMakeRoomForLongNames() {
+        let desk = CGFloat(RoomLayout.deskWidth)
+        XCTAssertEqual(SeatTag.smallGrowth(left: true, besideFree: true), desk)
+        XCTAssertEqual(SeatTag.smallGrowth(left: false, besideFree: true), -desk)
+        XCTAssertEqual(SeatTag.smallGrowth(left: true, besideFree: false), -14)
+        XCTAssertEqual(SeatTag.smallGrowth(left: false, besideFree: false), 14)
+        XCTAssertLessThan(2 * (14 - 2), CGFloat(RoomLayout.gap), "two islands' outward tags keep apart")
+
+        func width(_ text: Text, _ language: String = "en") -> CGFloat {
+            NSHostingView(rootView: text.fixedSize().environment(\.locale, Locale(identifier: language))).fittingSize
+                .width
+        }
+        let padding = 2 * 5 * CGFloat(Zoom.small.rawValue + 1) / 3
+        let name = width(Text(verbatim: "my-long-project-dir").font(Zoom.small.tagFont(.semibold)))
+        XCTAssertLessThanOrEqual(name + padding, 2 * desk - 4)
+        for language in ["en", "ko"] {
+            let wait = width(Text("Waiting \(3) min").font(Zoom.small.tagFont()), language)
+            XCTAssertLessThanOrEqual(wait + padding, desk - 4 + 14, language)
+        }
+    }
+
     func testViewMenuZooms() throws {
         let model = try XCTUnwrap(AppModel.live, "the host app's model")
         let menu = try XCTUnwrap(NSApp.mainMenu)

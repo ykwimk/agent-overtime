@@ -72,10 +72,11 @@ final class CaptureTests: XCTestCase {
     }
 
     /// One session for each count, with that many teammates.
-    private func team(_ teammates: [Int], at now: Date) -> AppModel {
+    private func team(_ teammates: [Int], at now: Date, folders: [String]? = nil) -> AppModel {
         let model = makeModel(connected: true)
         let names = ["Explore", "Plan", "code-reviewer", nil, "general-purpose"]
-        let folders = ["my-project", "web-app", "blog", "api", "docs", "design", "shop", "mobile-app", "landing"]
+        let folders =
+            folders ?? ["my-project", "web-app", "blog", "api", "docs", "design", "shop", "mobile-app", "landing"]
         for (i, count) in teammates.enumerated() {
             let folder = FakeScenario.root + "/" + folders[i % folders.count]
             let session = "team-\(i)"
@@ -240,13 +241,22 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: today(14)).environmentObject(team([5, 1], at: today(14))))
     }
 
-    /// Zoom: nine sessions in the default window at each step (small shows all nine); a window a little narrower
-    /// than the default with the side panel open, three sessions, one island a row: at normal "1 more team below"
-    /// over the lounge, left of the panel, and small shows all three; the − + buttons at each step.
+    /// Folder names of 11 to 19 characters, as real projects often have.
+    private let longFolders = [
+        "my-long-project-dir", "web-app-frontend", "blog-engine-v2", "api-gateway", "design-system",
+        "mobile-app-ios", "landing-page-kit", "shop-backend", "docs-site-builder",
+    ]
+
+    /// Zoom: nine sessions with long folder names in the default window at each step (small shows all nine, the
+    /// names whole over a free seat, "general-purpose 3" cut in the middle); a window a little narrower than the
+    /// default with the side panel open, three sessions, one island a row: at normal "1 more team below" over the
+    /// lounge, left of the panel, and small shows all three; the − + buttons at each step.
     func testCaptureZoom() throws {
         let now = today(14)
         for zoom in Zoom.allCases {
-            let nine = team([2, 1, 3, 0, 1, 2, 0, 1, 3], at: now)
+            let nine = team([2, 1, 3, 0, 1, 2, 0, 1, 3], at: now, folders: longFolders)
+            XCTAssertTrue(
+                nine.office.desks.flatMap(\.teammates).contains { $0.label == "general-purpose 3" }, "\(zoom)")
             nine.zoom = zoom
             try capture(
                 "office-zoom-\(zoom)", size: OfficeView.defaultSize,
@@ -254,14 +264,15 @@ final class CaptureTests: XCTestCase {
         }
 
         let narrow = makeModel(connected: true)
-        for name in ["my-project", "web-app"] {
+        for name in longFolders.prefix(2) {
             let folder = FakeScenario.root + "/" + name
             narrow.receive(HookEvent(kind: .userPromptSubmit, session: name, cwd: folder), at: now - 900)
             narrow.receive(HookEvent(kind: .stop, session: name, cwd: folder), at: now - 600)
         }
         narrow.receive(
             found: [
-                OfficeState.Found(pid: 9100, started: now - 3600, folder: FakeScenario.root + "/blog", busy: false)
+                OfficeState.Found(
+                    pid: 9100, started: now - 3600, folder: FakeScenario.root + "/" + longFolders[2], busy: false)
             ],
             at: now - 300)
         XCTAssertEqual(narrow.office.islands.map(\.slot), [0, 1, 2])

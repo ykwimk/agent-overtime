@@ -804,14 +804,17 @@ struct OfficeRoom: View {
                 ForEach(0..<Island.size, id: \.self) { index in
                     if let seat = pod.seats[index] {
                         let place = OfficeFocus.seat(slot: pod.slot, index: index)
-                        SeatTag(seat: seat, across: RoomLayout.isAcross(index), now: now, zoom: zoom)
-                            .focused(focus, equals: place)
-                            .onTapGesture { panel.open(PanelSelection(seat, at: place)) }
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityAction { panel.open(PanelSelection(seat, at: place)) }
-                            .offset(
-                                x: CGFloat(origin.x + RoomLayout.deskX(index)) * pixel,
-                                y: CGFloat(origin.y + (RoomLayout.isAcross(index) ? 0 : RoomLayout.nearDesk)) * pixel)
+                        SeatTag(
+                            seat: seat, across: RoomLayout.isAcross(index), now: now, zoom: zoom, left: index < 2,
+                            besideFree: pod.seats[index ^ 2] == nil
+                        )
+                        .focused(focus, equals: place)
+                        .onTapGesture { panel.open(PanelSelection(seat, at: place)) }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { panel.open(PanelSelection(seat, at: place)) }
+                        .offset(
+                            x: CGFloat(origin.x + RoomLayout.deskX(index)) * pixel,
+                            y: CGFloat(origin.y + (RoomLayout.isAcross(index) ? 0 : RoomLayout.nearDesk)) * pixel)
                     }
                 }
             }
@@ -833,6 +836,9 @@ struct SeatTag: View {
     let across: Bool
     let now: Date
     var zoom = Zoom.normal
+    /// The desk's side of the island (seats 0 and 1 on the left), and whether the seat beside it is free.
+    var left = true
+    var besideFree = false
     @ObservedObject private var keyboard = KeyboardNavigation.shared
 
     private var pixel: CGFloat { CGFloat(zoom.rawValue) }
@@ -843,10 +849,10 @@ struct SeatTag: View {
             if across {
                 // Bottom-aligned, so a third line grows up and away from the head; three lines of tag (two when
                 // small) is the room the layout keeps above a far head.
-                tag.frame(width: deskPoints, height: 23 * pixel, alignment: .bottom)
+                fitted.frame(width: deskPoints, height: 23 * pixel, alignment: .bottom)
                     .frame(height: CGFloat(RoomLayout.farDesk) * pixel, alignment: .top)
             } else {
-                tag.frame(width: deskPoints)
+                fitted.frame(width: deskPoints)
                     .padding(.top, 62 * pixel)
                     .frame(height: CGFloat(RoomLayout.islandDepth - RoomLayout.nearDesk) * pixel, alignment: .top)
             }
@@ -859,8 +865,33 @@ struct SeatTag: View {
         .focusable(keyboard.active)
     }
 
-    /// The name, then what they do. Small keeps two lines: the name and the first of the rest.
-    @ViewBuilder private var tag: some View {
+    /// How far a small tag may grow past its own desk rather than cut a name short (negative: to the left): over
+    /// the free seat beside it, else a little into the floor between islands, away from the neighbour's tag.
+    static func smallGrowth(left: Bool, besideFree: Bool) -> CGFloat {
+        let reach = besideFree ? CGFloat(RoomLayout.deskWidth) : -14
+        return left ? reach : -reach
+    }
+
+    /// The tag on its desk: centred while it fits, and when small growing past the desk instead of cutting.
+    @ViewBuilder private var fitted: some View {
+        let room = deskPoints - 4
+        if zoom == .small {
+            let grow = Self.smallGrowth(left: left, besideFree: besideFree)
+            ViewThatFits(in: .horizontal) {
+                tag(maxWidth: .infinity).fixedSize(horizontal: true, vertical: false)
+                tag(maxWidth: room + abs(grow))
+                    .frame(width: room + abs(grow), alignment: grow > 0 ? .leading : .trailing)
+                    .offset(x: grow / 2)
+            }
+            .frame(width: room)
+        } else {
+            tag(maxWidth: room)
+        }
+    }
+
+    /// The name, then what they do. Small keeps two lines, the name and the first of the rest, and cuts a long name
+    /// in the middle so a teammate's number stays.
+    @ViewBuilder private func tag(maxWidth: CGFloat) -> some View {
         let font = zoom.tagFont()
         let compact = zoom == .small
         switch seat {
@@ -868,7 +899,7 @@ struct SeatTag: View {
             // In a meeting the meeting takes the place of "Working" or "Resting"; a wait still comes first.
             let state = !session.meets || session.state == .waiting
             let mateWaits = session.teammateWaiting && !(compact && state)
-            Tag(zoom: zoom) {
+            Tag(zoom: zoom, maxWidth: maxWidth) {
                 HStack(spacing: 4) {
                     Text(verbatim: session.label).font(zoom.tagFont(.semibold)).truncationMode(.middle)
                         .foregroundStyle(Style.tagText)
@@ -877,7 +908,7 @@ struct SeatTag: View {
                     }
                 }
                 if state {
-                    session.state.label(since: session.since, now: now).font(font).foregroundStyle(
+                    session.state.label(since: session.since, now: now, compact: compact).font(font).foregroundStyle(
                         session.state.tagColor)
                 }
                 if mateWaits {
@@ -891,10 +922,11 @@ struct SeatTag: View {
             // At the meeting its empty seat says so, like the session's own tag; a wait still comes first.
             let meets = session.meets(with: mate)
             let state = !meets || mate.state == .waiting
-            Tag(zoom: zoom) {
-                mate.displayName.font(zoom.tagFont(.medium))
+            Tag(zoom: zoom, maxWidth: maxWidth) {
+                mate.displayName.font(zoom.tagFont(.medium)).truncationMode(compact ? .middle : .tail)
                 if state {
-                    mate.state.label(since: mate.since, now: now).font(font).foregroundStyle(mate.state.tagColor)
+                    mate.state.label(since: mate.since, now: now, compact: compact).font(font).foregroundStyle(
+                        mate.state.tagColor)
                 }
                 if meets, !(compact && state) { Text("In a meeting").font(font).foregroundStyle(Style.tagText) }
             }
@@ -999,6 +1031,7 @@ private struct MeetingTag: View {
 /// A small plate behind tag text, so it reads on the wood floor by day and by night (4.5:1 or more).
 private struct Tag<Content: View>: View {
     let zoom: Zoom
+    var maxWidth: CGFloat?
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -1009,7 +1042,7 @@ private struct Tag<Content: View>: View {
             .padding(.horizontal, 5 * step)
             .padding(.vertical, zoom == .small ? 0 : 2 * step)
             .background(RoundedRectangle(cornerRadius: 5 * step).fill(Style.tagPlate))
-            .frame(maxWidth: CGFloat(RoomLayout.deskWidth * zoom.rawValue) - 4)
+            .frame(maxWidth: maxWidth ?? CGFloat(RoomLayout.deskWidth * zoom.rawValue) - 4)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
