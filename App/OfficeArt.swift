@@ -396,6 +396,7 @@ struct OfficeRenderer {
         context.interpolationQuality = .none
         context.setShouldAntialias(false)
         var canvas = Canvas(context: context, height: height, art: art)
+        canvas.clip = crop
         paint(&canvas)
         return context.makeImage()
     }
@@ -432,6 +433,9 @@ struct OfficeRenderer {
         var litLamps: [(sx: Int, x: Int, y: Int, mirrored: Bool)] = []
         /// The meeting room's slide, drawn again over the night shade while a meeting is on.
         var litSlide: (x: Int, y: Int)?
+        /// The only part of the office the bitmap keeps (a walker's box). Anything wholly outside it is skipped
+        /// before it reaches Core Graphics: a box is drawn 30 times a second.
+        var clip: CGRect?
         /// Bitmap pixels per MetroCity pixel, and art pixels per bitmap pixel.
         static let personScale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
         static let bitmapPixel = 1 / CGFloat(OfficeRenderer.density)
@@ -444,6 +448,10 @@ struct OfficeRenderer {
 
         // MARK: primitives
 
+        func visible(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> Bool {
+            clip.map { $0.intersects(CGRect(x: x, y: y, width: w, height: h)) } ?? true
+        }
+
         func image(_ image: CGImage?, _ x: Int, _ y: Int, mirrored: Bool = false) {
             self.image(image, CGFloat(x), CGFloat(y), mirrored: mirrored)
         }
@@ -453,6 +461,7 @@ struct OfficeRenderer {
             guard let image else { return }
             let w = CGFloat(image.width) * pixel
             let h = CGFloat(image.height) * pixel
+            guard visible(x, y, w, h) else { return }
             let rect = CGRect(x: x, y: CGFloat(height) - y - h, width: w, height: h)
             guard mirrored else { return context.draw(image, in: rect) }
             context.saveGState()
@@ -465,6 +474,7 @@ struct OfficeRenderer {
         func sprite(
             _ sheet: String, _ sx: Int, _ sy: Int, _ w: Int, _ h: Int, _ x: Int, _ y: Int, mirrored: Bool = false
         ) {
+            guard visible(CGFloat(x), CGFloat(y), CGFloat(w), CGFloat(h)) else { return }
             let density = OfficeRenderer.density
             image(
                 art.cell(sheet, sx, sy, w, h, scale: density), CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(density),
@@ -472,6 +482,7 @@ struct OfficeRenderer {
         }
 
         func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ hex: UInt32, _ alpha: CGFloat = 1) {
+            guard visible(CGFloat(x), CGFloat(y), CGFloat(w), CGFloat(h)) else { return }
             context.setFillColor(Self.color(hex, alpha))
             context.fill(CGRect(x: x, y: height - y - h, width: w, height: h))
         }
@@ -488,9 +499,22 @@ struct OfficeRenderer {
                 colors: [color(hex, alpha), color(hex, alpha * 0.35), color(hex, 0)] as CFArray, locations: [0, 0.4, 1])
         }
 
-        /// A picture kept at the office's own density, so stamping it copies pixels one to one.
+        /// A picture kept at the office's own density, so stamping it copies pixels one to one. Inside a walker's
+        /// box only that piece of it is drawn (the room and the night shade are the whole office).
         func stamp(_ picture: CGImage?, _ x: Int, _ y: Int) {
-            image(picture, CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(OfficeRenderer.density))
+            guard let picture else { return }
+            let density = OfficeRenderer.density
+            let whole = CGRect(x: x, y: y, width: picture.width / density, height: picture.height / density)
+            guard let clip, !clip.contains(whole) else {
+                return image(picture, CGFloat(x), CGFloat(y), pixel: 1 / CGFloat(density))
+            }
+            let part = whole.intersection(clip.integral)
+            guard !part.isEmpty,
+                let piece = picture.cropping(
+                    to: part.offsetBy(dx: CGFloat(-x), dy: CGFloat(-y)).applying(
+                        CGAffineTransform(scaleX: CGFloat(density), y: CGFloat(density))))
+            else { return }
+            image(piece, part.minX, part.minY, pixel: 1 / CGFloat(density))
         }
 
         /// A soft round light, drawn once per colour and strength and then stamped where it shines.
@@ -975,6 +999,8 @@ struct OfficeRenderer {
         private func person(
             _ look: Look, column: Int, rows: Int = 32, _ x: CGFloat, _ y: CGFloat, mirrored: Bool = false
         ) {
+            let pixel = OfficeRenderer.personPixel
+            guard visible(x, y, 32 * pixel, CGFloat(rows) * pixel) else { return }
             for layer in look.layers {
                 image(
                     art.cell(layer.sheet, column * 32, layer.row * 32, 32, rows, scale: Self.personScale), x, y,
