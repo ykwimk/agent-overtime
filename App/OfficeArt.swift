@@ -168,11 +168,13 @@ enum Prop: CaseIterable {
 enum Mark {
     case dots, bang, zzz
 
-    init(_ state: WorkState) {
+    /// No bubble for someone quiet: nothing is known of what they do.
+    init?(_ state: WorkState) {
         switch state {
         case .working: self = .dots
         case .waiting: self = .bang
         case .resting: self = .zzz
+        case .quiet: return nil
         }
     }
 }
@@ -714,12 +716,13 @@ struct OfficeRenderer {
             // hopping "!", and the glass door shows one too, for a room seen from across the office.
             let hop = scene.frame % 2 == 1 ? 2 : 0
             for person in scene.room {
+                guard let mark = Mark(person.state) else { continue }
                 let x = room.seats[person.seat].x
                 let y = person.state == .waiting ? -hop : 0
                 switch person.seat {
-                case 0..<3: marks.append((Mark(person.state), x + 9, t.y - 25 + y, .down))
-                case 3: marks.append((Mark(person.state), x - 27, t.y + 33 + y, .right))
-                default: marks.append((Mark(person.state), x + 14, t.y + 33 + y, .left))
+                case 0..<3: marks.append((mark, x + 9, t.y - 25 + y, .down))
+                case 3: marks.append((mark, x - 27, t.y + 33 + y, .right))
+                default: marks.append((mark, x + 14, t.y + 33 + y, .left))
                 }
             }
             if scene.room.contains(where: { $0.state == .waiting }) {
@@ -942,15 +945,15 @@ struct OfficeRenderer {
             // chair, on the island's outer side, pointing in: above the head it floated right under the face
             // across the desk and read as that person's.
             for seat in 0..<Island.size {
-                guard let person = here[seat] else { continue }
+                guard let person = here[seat], let mark = Mark(person.state) else { continue }
                 let hop = person.state == .waiting && scene.frame % 2 == 1 ? 2 : 0
                 let cx = x0 + RoomLayout.personX(seat)
                 if RoomLayout.isAcross(seat) {
-                    marks.append((Mark(person.state), cx + 9, far - 25 - hop, .down))
+                    marks.append((mark, cx + 9, far - 25 - hop, .down))
                 } else if seat == 0 {
-                    marks.append((Mark(person.state), cx - 27, near + 25 - hop, .right))
+                    marks.append((mark, cx - 27, near + 25 - hop, .right))
                 } else {
-                    marks.append((Mark(person.state), cx + 14, near + 25 - hop, .left))
+                    marks.append((mark, cx + 14, near + 25 - hop, .left))
                 }
             }
         }

@@ -2,6 +2,9 @@ import Foundation
 
 public enum WorkState: String, Codable, CaseIterable {
     case working, waiting, resting
+    /// Running, but not heard from yet: found on this Mac before any news. It may be waiting for an answer, so it is
+    /// never shown as resting.
+    case quiet
 }
 
 public struct Teammate: Equatable, Identifiable {

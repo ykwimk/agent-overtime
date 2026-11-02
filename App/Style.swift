@@ -40,6 +40,7 @@ extension WorkState {
         case .working: return String(localized: "Working")
         case .waiting: return String(localized: "Waiting")
         case .resting: return String(localized: "Resting")
+        case .quiet: return String(localized: "Quiet")
         }
     }
 
@@ -48,17 +49,18 @@ extension WorkState {
         case .working: return Text("Working")
         case .waiting: return Text("Waiting")
         case .resting: return Text("Resting")
+        case .quiet: return Text("Quiet")
         }
     }
 
-    /// The label under a character: "Working", "Waiting · 3 min", "Resting".
+    /// The label under a character: "Working", "Waiting · 3 min", "Resting", "Quiet".
     func label(since: Date, now: Date) -> Text {
         switch self {
-        case .working: return Text("Working")
-        case .resting: return Text("Resting")
         case .waiting:
             let minutes = Int(now.timeIntervalSince(since) / 60)
             return minutes < 1 ? Text("Waiting") : Text("Waiting · \(minutes) min")
+        case .working, .resting, .quiet:
+            return word
         }
     }
 
@@ -66,7 +68,7 @@ extension WorkState {
         switch self {
         case .working: return .primary
         case .waiting: return Style.waiting
-        case .resting: return .secondary
+        case .resting, .quiet: return .secondary
         }
     }
 
@@ -75,7 +77,7 @@ extension WorkState {
         switch self {
         case .working: return Style.tagText
         case .waiting: return Style.waiting
-        case .resting: return Style.tagSecondary
+        case .resting, .quiet: return Style.tagSecondary
         }
     }
 }

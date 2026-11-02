@@ -77,6 +77,7 @@
     "Remove" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "지우기" } } } },
     "Resting" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "쉬는 중" } } } },
     "Resting %lld" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "쉼 %lld" } } } },
+    "Quiet" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "조용함" } } } },
     "Runs your start command in a new Terminal window (⇧⌘R)" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "등록한 출근 명령을 새 터미널 창에서 실행합니다 (⇧⌘R)" } } } },
     "See what it adds" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "넣을 내용 보기" } } } },
     "Set Up Start Work" : { "localizations" : { "ko" : { "stringUnit" : { "state" : "translated", "value" : "출근 등록" } } } },
