@@ -68,15 +68,20 @@ final class CaptureTests: XCTestCase {
     /// `sessions` sessions, each followed by its teammates (names from the list in turn), in a mix of states, all
     /// seated before `now`.
     private func team(sessions: Int, teammates: Int, at now: Date) -> AppModel {
+        team(Array(repeating: teammates, count: sessions), at: now)
+    }
+
+    /// One session for each count, with that many teammates.
+    private func team(_ teammates: [Int], at now: Date) -> AppModel {
         let model = makeModel(connected: true)
         let names = ["Explore", "Plan", "code-reviewer", nil, "general-purpose"]
         let folders = ["my-project", "web-app", "blog", "api", "docs", "design"]
-        for i in 0..<sessions {
+        for (i, count) in teammates.enumerated() {
             let folder = FakeScenario.root + "/" + folders[i % folders.count]
             let session = "team-\(i)"
             model.receive(HookEvent(kind: .userPromptSubmit, session: session, cwd: folder), at: now - 300)
             if i % 3 == 1 { model.receive(HookEvent(kind: .stop, session: session, cwd: folder), at: now - 300) }
-            for k in 0..<teammates {
+            for k in 0..<count {
                 let agent = "\(session)-\(k)"
                 let name = names[(i + k) % names.count]
                 model.receive(
@@ -132,8 +137,8 @@ final class CaptureTests: XCTestCase {
         _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 3, animate: true)
         leaving.receive(
             HookEvent(kind: .sessionEnd, session: "demo-b1", cwd: FakeScenario.root + "/my-project"),
-            at: today(14) - 1.2)
-        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 1.2, animate: true)
+            at: today(14) - 0.4)
+        _ = leavingStage.sync(leaving.office, width: width, now: today(14) - 0.4, animate: true)
         XCTAssertEqual(leaving.office.islands.map(\.slot), [1, 2, 3])
         let walking = leavingStage.moment(at: today(14))
         XCTAssertEqual(walking.walkers.count + walking.standing.count, 4, "the session and its three teammates")
@@ -163,16 +168,6 @@ final class CaptureTests: XCTestCase {
         let one = team(sessions: 1, teammates: 0, at: today(14))
         try capture("office-one", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(one))
 
-        // 20 people: five islands, the fifth below the fold (the room scrolls).
-        let crowd = team(sessions: 5, teammates: 3, at: today(14))
-        XCTAssertEqual(crowd.office.islands.count, 5)
-        try capture(
-            "office-many", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(crowd))
-        // The same room in a window tall enough to show all of it: the fifth island starts a third row.
-        try capture(
-            "office-many-all", size: CGSize(width: OfficeView.defaultSize.width, height: 1060),
-            OfficeView(fixedNow: today(14)).environmentObject(crowd))
-
         // Both headphone pictures: on someone facing the room and on someone with their back to it.
         let pair = team(sessions: 1, teammates: 3, at: today(14))
         let pairStage = Stage()
@@ -181,7 +176,38 @@ final class CaptureTests: XCTestCase {
             "office-headphones", size: OfficeView.minSize,
             OfficeView(fixedNow: today(14), stage: pairStage).environmentObject(pair))
 
-        // Same names: a folder's second session, and two Plans at once.
+    }
+
+    /// One island a session: a team of five shows "+2", a fifth session scrolls, eight fill four rows, one folder's
+    /// two sessions sit at two islands, a team in the meeting room leaves its island empty, and the smallest window
+    /// keeps the "+2".
+    func testCaptureSessionIslands() throws {
+        // my-project's five teammates: three at its island, "+2" on its tag. Light by day, dark by night.
+        for (suffix, hour) in [("", 14), ("-night", 22)] {
+            let overflow = team([5, 2, 1, 0], at: today(hour))
+            XCTAssertEqual(overflow.office.islands.map(\.slot), [0, 1, 2, 3])
+            guard case .session(_, let more)? = overflow.office.pods[0].seats[0] else { return XCTFail("my-project") }
+            XCTAssertEqual(more, 2)
+            try capture(
+                "office-team-overflow" + suffix, size: OfficeView.defaultSize,
+                OfficeView(fixedNow: today(hour)).environmentObject(overflow))
+        }
+
+        // Five sessions and only nine people: the fifth session's island starts a third row, below the fold.
+        let fifth = team([1, 0, 2, 0, 1], at: today(14))
+        XCTAssertEqual(fifth.office.islands.map(\.slot), [0, 1, 2, 3, 4])
+        try capture(
+            "office-fifth-session", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: today(14)).environmentObject(fifth))
+
+        // Eight sessions in a window tall enough for all four rows.
+        let eight = team([3, 1, 0, 2, 5, 0, 1, 3], at: today(14))
+        XCTAssertEqual(eight.office.islands.count, 8)
+        try capture(
+            "office-all", size: CGSize(width: OfficeView.defaultSize.width, height: 1360),
+            OfficeView(fixedNow: today(14)).environmentObject(eight))
+
+        // One folder, two sessions: two islands, "my-project" and "my-project 2", each with its Plan.
         let twins = makeModel(connected: true)
         let project = FakeScenario.root + "/my-project"
         for session in ["twin-1", "twin-2"] {
@@ -193,8 +219,25 @@ final class CaptureTests: XCTestCase {
         }
         XCTAssertEqual(twins.office.desks[0].sessions.map(\.name), ["my-project", "my-project 2"])
         XCTAssertEqual(twins.office.desks[0].teammates.map(\.number), [1, 2])
+        XCTAssertEqual(twins.office.islands.map(\.slot), [0, 1])
         try capture(
-            "office-same-names", size: OfficeView.minSize, OfficeView(fixedNow: today(14)).environmentObject(twins))
+            "office-same-folder", size: OfficeView.defaultSize, OfficeView(fixedNow: today(14)).environmentObject(twins)
+        )
+
+        // my-project meets its five: the three from its island at the table, "+2" on the glass door, the island
+        // empty.
+        let meeting = meetingOffice(at: today(14), teammates: 5)
+        meeting.advanceMeetings(to: today(14) - 150)
+        XCTAssertEqual(meeting.office.meeting?.members.count, 3)
+        XCTAssertEqual(meeting.office.meeting?.more, 2)
+        try capture(
+            "office-meeting-island", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: today(14)).environmentObject(meeting))
+
+        // The smallest window: one island, its "+2" whole.
+        try capture(
+            "office-min", size: OfficeView.minSize,
+            OfficeView(fixedNow: today(14)).environmentObject(team([5, 1], at: today(14))))
     }
 
     /// my-project hands work to `teammates` teammates and waits for them; web-app works on with a helper, blog

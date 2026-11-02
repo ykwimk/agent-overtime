@@ -168,6 +168,19 @@ final class WalkTests: XCTestCase {
         XCTAssertEqual(after.out, [])
     }
 
+    /// A fourth teammate waits outside; once a seat frees it walks in from the door, while the one that left walks
+    /// out.
+    func testAWaitingTeammateWalksInWhenASeatFrees() {
+        send(.userPromptSubmit, at: 0)
+        for k in 0..<4 { send(.subagentStart, agent: "a\(k)", type: "Explore", at: 1) }
+        XCTAssertTrue(stage.moment(at: t0 + 30).walkers.isEmpty, "nobody walks for the one waiting")
+        send(.subagentStop, agent: "a0", type: "Explore", at: 60)
+        let moment = stage.moment(at: t0 + 60.5)
+        XCTAssertTrue(moment.away.contains("m:a3"), "on its way in")
+        XCTAssertTrue(moment.out.contains("m:a0"), "on its way out")
+        XCTAssertEqual(stage.moment(at: t0 + 90).walkers.count, 0, "seated")
+    }
+
     /// No more than six walk at once: the seventh is just there.
     func testAtMostSixWalkAtOnce() {
         send(.userPromptSubmit, at: 0)
