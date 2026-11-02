@@ -401,9 +401,11 @@ struct OfficeRenderer {
     /// and the wood floor, in step with the room's own tiles so no seam shows, under the same night shade. Nothing
     /// in it moves, so it is drawn once per size and light, at one bitmap pixel per art pixel: never more pixels than
     /// the room's own picture.
-    func backdrop(width: Int, height: Int, room: Int, darkness: Double) -> CGImage? {
+    /// With `meetingRoom`, it also closes the meeting room, which reaches the room's right end: its glass end and
+    /// a pot past it, so the room shows inside the office.
+    func backdrop(width: Int, height: Int, room: Int, meetingRoom: Bool, darkness: Double) -> CGImage? {
         Self.picture(width: width, height: height, density: 1, art: art) {
-            $0.backdrop(width: width, room: room, darkness: darkness)
+            $0.backdrop(width: width, room: room, meetingRoom: meetingRoom, darkness: darkness)
         }
     }
 
@@ -681,13 +683,18 @@ struct OfficeRenderer {
         }
 
         /// See `OfficeRenderer.backdrop`.
-        func backdrop(width: Int, room: Int, darkness: Double) {
+        func backdrop(width: Int, room: Int, meetingRoom: Bool, darkness: Double) {
             floor(width: width)
             paint(width: width)
-            let panes = stride(from: room + 40, through: width - 76, by: 92).map {
+            let panes = stride(from: room + 48, through: width - 76, by: 92).map {
                 CGRect(x: $0 + 2, y: 19, width: 72, height: 36)
             }
             for pane in panes { window(Int(pane.minX) - 2, 8, 76, 50) }
+            if meetingRoom {
+                // The glass end as at the room's left, then a tall pot as at the start of the row along the front.
+                sideGlass(room)
+                sprite(Sheet.planter, 128, 32, 32, 64, room + 10, MeetingRoom.front + 8 - 47)
+            }
             let d = CGFloat(darkness)
             guard d > 0 else { return }
             context.setBlendMode(.multiply)
@@ -807,19 +814,8 @@ struct OfficeRenderer {
             let tint: UInt32 = 0xCFE8F3
             let foot = MeetingRoom.front
             let top = foot - MeetingRoom.glassHeight
-            let sideTop = RoomLayout.wall - MeetingRoom.glassHeight
-            // Panes rather than a post: the same tint and slanted sheen as the front, framed on both sides, capped
-            // on top, with rails where it meets the floor at the back wall and halfway to the front.
-            let side = 10
-            fill(left, sideTop, side, foot - sideTop, tint, 0.45)
-            for streak in stride(from: sideTop + 16, to: foot - 8, by: 22) {
-                for k in 0..<5 { fill(left + 2 + k, streak - k * 2, 2, 2, 0xFFFFFF, 0.45) }
-            }
-            fill(left, sideTop, 1, foot - sideTop, ink)
-            fill(left + side - 1, sideTop, 1, foot - sideTop, ink)
-            fill(left, sideTop - 2, side, 2, ink)
-            fill(left + 1, sideTop, side - 2, 1, 0xF4FAFD, 0.8)
-            for rail in [RoomLayout.wall - 1, (RoomLayout.wall + foot) / 2] { fill(left + 1, rail, side - 2, 1, ink) }
+            let side = Self.sideGlass
+            sideGlass(left)
 
             let doorX = left + MeetingRoom.doorX
             let doorRight = doorX + MeetingRoom.doorWidth
@@ -840,6 +836,27 @@ struct OfficeRenderer {
             fill(left, top, right - left, 1, 0xF4FAFD, 0.8)
             fill(left, foot - 2, right - left, 2, ink)
             glassDoor(doorX, top, foot, open: doorOpen)
+        }
+
+        static let sideGlass = 10
+
+        /// A glass end of the meeting room seen along its length, from the back wall to the front. Panes rather than
+        /// a post: the same tint and slanted sheen as the front, framed on both sides, capped on top, with rails
+        /// where it meets the floor at the back wall and halfway to the front.
+        private func sideGlass(_ left: Int) {
+            let ink: UInt32 = 0x2B2A33
+            let foot = MeetingRoom.front
+            let sideTop = RoomLayout.wall - MeetingRoom.glassHeight
+            let side = Self.sideGlass
+            fill(left, sideTop, side, foot - sideTop, 0xCFE8F3, 0.45)
+            for streak in stride(from: sideTop + 16, to: foot - 8, by: 22) {
+                for k in 0..<5 { fill(left + 2 + k, streak - k * 2, 2, 2, 0xFFFFFF, 0.45) }
+            }
+            fill(left, sideTop, 1, foot - sideTop, ink)
+            fill(left + side - 1, sideTop, 1, foot - sideTop, ink)
+            fill(left, sideTop - 2, side, 2, ink)
+            fill(left + 1, sideTop, side - 2, 1, 0xF4FAFD, 0.8)
+            for rail in [RoomLayout.wall - 1, (RoomLayout.wall + foot) / 2] { fill(left + 1, rail, side - 2, 1, ink) }
         }
 
         /// The meeting room's glass door, shut or standing open (swung in against its hinge on the left).

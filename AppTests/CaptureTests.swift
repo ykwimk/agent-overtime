@@ -1029,7 +1029,8 @@ final class CaptureTests: XCTestCase {
 
     /// Zoomed out, the office goes on past the room with no seam, by day and by night: the backdrop's wall (top
     /// edge, paint, skirting) and floor are the room's own, pixel for pixel, where both are drawn; it is drawn at one
-    /// bitmap pixel per art pixel and never has more pixels than the room's picture.
+    /// bitmap pixel per art pixel and never has more pixels than the room's picture. Just past the room it closes
+    /// the meeting room with its glass end; without a meeting room there is only floor.
     func testBackdropContinuesTheRoomWithoutASeam() throws {
         func pixel(_ image: CGImage, _ x: Int, _ y: Int) throws -> [UInt8] {
             let data = try XCTUnwrap(image.dataProvider?.data as Data?)
@@ -1047,7 +1048,8 @@ final class CaptureTests: XCTestCase {
             let width = Int(view.width)
             let back = try XCTUnwrap(
                 OfficeRenderer().backdrop(
-                    width: width, height: Int(view.height), room: layout.width, darkness: darkness))
+                    width: width, height: Int(view.height), room: layout.width, meetingRoom: true,
+                    darkness: darkness))
             XCTAssertEqual([back.width, back.height], [width, Int(view.height)], "one bitmap pixel per art pixel")
             XCTAssertLessThanOrEqual(back.width * back.height, room.width * room.height * 2)
             let d = RoomLayout.pointsPerPixel
@@ -1062,6 +1064,15 @@ final class CaptureTests: XCTestCase {
             XCTAssertEqual(try pixel(back, layout.width + 30, 50), try pixel(back, layout.width - 2, 50))
             XCTAssertEqual(
                 try pixel(back, layout.width + 5, height + 40), try pixel(back, layout.width + 5 - 32, height + 40))
+            // The meeting room's glass end, just past the room, and none without one.
+            let glass = (layout.width + 5, MeetingRoom.front - 20)
+            let floor = (layout.width + 5 + 128, MeetingRoom.front - 20)
+            XCTAssertNotEqual(try pixel(back, glass.0, glass.1), try pixel(back, floor.0, floor.1), "glass end")
+            let open = try XCTUnwrap(
+                OfficeRenderer().backdrop(
+                    width: width, height: Int(view.height), room: layout.width, meetingRoom: false,
+                    darkness: darkness))
+            XCTAssertEqual(try pixel(open, glass.0, glass.1), try pixel(open, floor.0, floor.1), "no meeting room")
         }
     }
 
@@ -1373,16 +1384,16 @@ final class CaptureTests: XCTestCase {
 
         let zoom = OfficeZoom()
         (model, window) = office(at: 1, zoom: zoom)
-        let began = Date()
+        // A pinch move 60 times a second for 5 s, the run loop drawing in between.
+        let (cpu, began) = (cpuSeconds(), Date())
         var last = 1.0
-        let pinch = Timer(timeInterval: 1.0 / 60, repeats: true) { _ in
+        while Date().timeIntervalSince(began) < 5 {
             let next = 1 + 0.4 * sin(Date().timeIntervalSince(began) * 2)
             zoom.pinch(by: next / last, at: CGPoint(x: 400, y: 300))
             last = next
+            RunLoop.main.run(until: Date() + 1.0 / 60)
         }
-        RunLoop.main.add(pinch, forMode: .common)
-        let pinching = percent(over: 5) - idle
-        pinch.invalidate()
+        let pinching = (cpuSeconds() - cpu) / Date().timeIntervalSince(began) * 100 - idle
         close(window)
 
         let line = String(

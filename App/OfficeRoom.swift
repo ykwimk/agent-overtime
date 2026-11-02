@@ -585,9 +585,11 @@ final class Stage: ObservableObject {
     /// The wall and floor past the room, `width` by `height` art pixels, for a view zoomed out beyond the room: drawn
     /// again only for a new size or light (`OfficeRenderer.backdrop`).
     func backdrop(width: Int, height: Int, darkness: Double) -> CGImage? {
-        let key = "\(width)x\(height) \(layout.width) \(Int(darkness * 100))"
+        let key = "\(width)x\(height) \(layout.width) \(layout.pillar ?? 0) \(Int(darkness * 100))"
         if let backdrop, backdrop.key == key { return backdrop.image }
-        let image = OfficeRenderer().backdrop(width: width, height: height, room: layout.width, darkness: darkness)
+        let image = OfficeRenderer().backdrop(
+            width: width, height: height, room: layout.width, meetingRoom: layout.meetingRoom != nil,
+            darkness: darkness)
         backdrop = (key, image)
         return image
     }
