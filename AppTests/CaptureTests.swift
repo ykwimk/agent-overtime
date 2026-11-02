@@ -1020,7 +1020,9 @@ final class CaptureTests: XCTestCase {
         RunLoop.main.run(until: Date() + 8)
         XCTAssertEqual(stage.moment(at: Date()).room.count, 4, "cpu-0 and its three teammates at the table")
         let meeting = percent(over: 10) - idle
+        // A closed window's picture still ticks (it is allowed to while hidden): take it out of each window measured.
         window.close()
+        window.contentView = nil
 
         // The same office with Reduce Motion: nobody walks, the picture ticks every 30 s.
         let calm = NSWindow(
@@ -1033,6 +1035,27 @@ final class CaptureTests: XCTestCase {
         defer { calm.close() }
         RunLoop.main.run(until: Date() + 3)
         let reduced = percent(over: 10) - idle
+        calm.close()
+        calm.contentView = nil
+
+        // Four sessions found on this Mac, all quiet: nobody types or nods, nothing hops.
+        let found = makeModel(connected: true)
+        found.receive(
+            found: (0..<4).map {
+                OfficeState.Found(
+                    pid: Int32(9000 + $0), started: Date() - 600, folder: FakeScenario.root + "/quiet-\($0)",
+                    busy: false)
+            })
+        let quietWindow = NSWindow(
+            contentRect: CGRect(origin: .zero, size: OfficeView.defaultSize), styleMask: [.titled], backing: .buffered,
+            defer: false)
+        quietWindow.isReleasedWhenClosed = false
+        quietWindow.contentView = NSHostingView(
+            rootView: OfficeView(ticksWhileHidden: true).environmentObject(found))
+        quietWindow.orderFrontRegardless()
+        defer { quietWindow.close() }
+        RunLoop.main.run(until: Date() + 3)
+        let quiet = percent(over: 10) - idle
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         let locked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
         let asleep = CGDisplayIsAsleep(CGMainDisplayID()) != 0
@@ -1061,9 +1084,10 @@ final class CaptureTests: XCTestCase {
                 "CPU, 4 islands x 4 seats (window visible=%@, locked=%@, display asleep=%@): still: office %.2f%% "
                 + "(process %.2f%% - idle %.2f%%); side panel open, still: office %.2f%%; walking: office %.2f%%; "
                 + "six walking: office %.2f%%; meeting, still: office %.2f%%; reduce motion: office %.2f%%; "
-                + "one picture: night %.2f ms, day %.2f ms; one walker box: night %.2f ms\n",
+                + "four quiet, still: office %.2f%%; one picture: night %.2f ms, day %.2f ms; one walker box: night "
+                + "%.2f ms\n",
             "\(visible)", "\(locked)", "\(asleep)", office, total, idle, panelOpen, walking, six, meeting, reduced,
-            renderMs, dayMs, boxMs)
+            quiet, renderMs, dayMs, boxMs)
         print(line)
         try line.write(to: out.appendingPathComponent("cpu.txt"), atomically: true, encoding: .utf8)
         XCTAssertLessThan(office, 5)
