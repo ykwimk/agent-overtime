@@ -67,19 +67,21 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(narrow.columns, 2)
     }
 
-    /// Zoom is a magnification only: settling on the nearest sharp step (0.5, 1, 1.5), a step at a time from the
-    /// menu, kept within the range, the point under the pointer kept in place. The layout is the window's at normal
-    /// size whatever the zoom.
+    /// Zoom is a magnification only: settling on the nearest step (50, 75, 100, 125, 150 %), a step at a time from
+    /// the menu, kept within the range, the point under the pointer kept in place. The layout is the window's at
+    /// normal size whatever the zoom.
     func testZoomLikeAMap() {
-        XCTAssertEqual(Zoom.steps, [0.5, 1, 1.5])
+        XCTAssertEqual(Zoom.steps, [0.5, 0.75, 1, 1.25, 1.5])
         for step in Zoom.steps {
             XCTAssertEqual((4 * step).truncatingRemainder(dividingBy: 1), 0, "room pixels whole at \(step)")
-            XCTAssertEqual((6 * step).truncatingRemainder(dividingBy: 1), 0, "people pixels whole at \(step)")
         }
-        XCTAssertEqual([0.5, 0.74, 0.76, 1.2, 1.3, 1.5].map(Zoom.nearest), [0.5, 0.5, 1, 1, 1.5, 1.5])
-        XCTAssertEqual(Zoom.step(from: 1, by: 1), 1.5)
+        XCTAssertEqual(
+            [0.5, 0.6, 0.65, 0.8, 0.9, 1.1, 1.2, 1.4, 1.5].map(Zoom.nearest),
+            [0.5, 0.5, 0.75, 0.75, 1, 1, 1.25, 1.5, 1.5])
+        XCTAssertEqual(Zoom.step(from: 1, by: 1), 1.25)
+        XCTAssertEqual(Zoom.step(from: 1.25, by: 1), 1.5)
         XCTAssertNil(Zoom.step(from: 1.5, by: 1), "the end")
-        XCTAssertEqual(Zoom.step(from: 1, by: -1), 0.5)
+        XCTAssertEqual(Zoom.step(from: 1, by: -1), 0.75)
         XCTAssertNil(Zoom.step(from: 0.5, by: -1), "the end")
         XCTAssertEqual(Zoom.step(from: 0.8, by: 1), 1, "from between steps, the next one")
         XCTAssertEqual([0.1, 0.7, 9, .infinity, .nan].map(Zoom.clamped), [0.5, 0.7, 1.5, 1, 1])
@@ -98,13 +100,13 @@ final class OfficePlanTests: XCTestCase {
     /// The saved zoom is a step in percent; the earlier 1, 2 and 3 read as the same small, normal and large; anything
     /// else (out of range, not a step, not a number, nothing) is normal, so no setting can draw the room bigger.
     func testStoredZoom() {
-        XCTAssertEqual([50, 100, 150].map { Zoom.stored($0) }, [0.5, 1, 1.5])
+        XCTAssertEqual([50, 75, 100, 125, 150].map { Zoom.stored($0) }, [0.5, 0.75, 1, 1.25, 1.5])
         XCTAssertEqual([1, 2, 3].map { Zoom.stored($0) }, [0.5, 1, 1.5])
-        XCTAssertEqual([0, 4, 75, 400, -100, 1_000_000].map { Zoom.stored($0) }, Array(repeating: 1, count: 6))
+        XCTAssertEqual([0, 4, 60, 400, -100, 1_000_000].map { Zoom.stored($0) }, Array(repeating: 1, count: 6))
         XCTAssertEqual(Zoom.stored("150"), 1)
         XCTAssertEqual(Zoom.stored(nil), 1)
         XCTAssertEqual(Zoom.stored(1.5), 1)
-        XCTAssertEqual(Zoom.steps.map(Zoom.percent), [50, 100, 150])
+        XCTAssertEqual(Zoom.steps.map(Zoom.percent), [50, 75, 100, 125, 150])
     }
 
     /// "1 more team below": the islands whose middle is out of the view, nearest first; pressing it scrolls to the
@@ -130,7 +132,7 @@ final class OfficePlanTests: XCTestCase {
         XCTAssertEqual(nine.outOfSight([0, 3, 8], top: 0, height: 351).below, [8], "only islands in use")
         // The same nine at each step in the default window (702 points under the top bar).
         let below = Zoom.steps.map { nine.outOfSight(Array(0..<9), top: 0, height: Int(702 / (2 * $0))).below.count }
-        XCTAssertEqual(below, [1, 5, 7])
+        XCTAssertEqual(below, [1, 3, 5, 5, 7], "at 125 % the second row's middle is just in sight")
     }
 
     /// The meeting room (and the lounge under it) lives in the right-hand column only, so the smallest window has

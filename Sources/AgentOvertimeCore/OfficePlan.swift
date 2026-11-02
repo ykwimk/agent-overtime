@@ -29,11 +29,11 @@ public struct Pod: Equatable, Identifiable {
 
 /// How big the office is shown, like a map: a magnification of the room as laid out for the window (1 is normal).
 /// The layout never changes with it. A pinch or ⌘-scroll goes anywhere in `range`, and letting go settles on the
-/// nearest of the `steps`, where every pixel of the room and of the people lands on whole screen pixels of a Retina
-/// display: the room's art pixels are 4 × m screen pixels and the people's 6 × m.
+/// nearest of the `steps`. On a Retina display the room's art pixels are 4 × m screen pixels, whole at every step;
+/// the people's are 6 × m, whole at 0.5, 1 and 1.5 and a pixel uneven at 0.75 and 1.25 (4.5 and 7.5).
 public enum Zoom {
     public static let normal = 1.0
-    public static let steps = [0.5, 1, 1.5]
+    public static let steps = [0.5, 0.75, 1, 1.25, 1.5]
     public static let range = 0.5...1.5
 
     public static func clamped(_ magnification: Double) -> Double {
@@ -51,11 +51,11 @@ public enum Zoom {
             ? steps.first { $0 > magnification + 0.001 } : steps.last { $0 < magnification - 0.001 }
     }
 
-    /// The saved setting, a step in percent (50, 100, 150). The earlier 1, 2 and 3 meant small, normal and large;
-    /// anything else, or nothing, is normal.
+    /// The saved setting, a step in percent (50, 75, 100, 125, 150). The earlier 1, 2 and 3 meant small, normal and
+    /// large; anything else, or nothing, is normal.
     public static func stored(_ value: Any?) -> Double {
         guard let number = value as? Int else { return normal }
-        if (1...3).contains(number) { return steps[number - 1] }
+        if (1...3).contains(number) { return [0.5, 1, 1.5][number - 1] }
         return steps.first { percent($0) == number } ?? normal
     }
 

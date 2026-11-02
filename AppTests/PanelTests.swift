@@ -376,8 +376,10 @@ final class ZoomTests: XCTestCase {
         XCTAssertEqual(model.zoom, 1, "normal until changed")
         model.zoomIn()
         model.zoomIn()
+        model.zoomIn()
         XCTAssertEqual(model.zoom, 1.5, "the last step")
         model.zoom = Zoom.normal
+        model.zoomOut()
         model.zoomOut()
         model.zoomOut()
         XCTAssertEqual(model.zoom, 0.5, "the first step")
@@ -431,19 +433,20 @@ final class ZoomTests: XCTestCase {
         XCTAssertTrue(island(2, width: 1176).map { $0 == (2, 0) } ?? false, "one island a row, from the width")
     }
 
-    /// Zoomed-out name tags (under 75 %) grow past their desk rather than cut a name short: over the free seat beside,
-    /// else a little outward, still clear of the next island's tags. At 50 % an 18-character folder name fits over
-    /// two desks; the short wait line ("Waiting 3 min", "답 기다림 3분") over a desk and the bit outward.
+    /// Zoomed-out name tags (under 100 %) grow past their desk rather than cut a name short: over the free seat
+    /// beside, else a little outward, still clear of the next island's tags. At 50 % an 18-character folder name fits
+    /// over two desks; the short wait line ("Waiting 3 min", "답 기다림 3분") over a desk and the bit outward.
     func testZoomedOutTagsMakeRoomForLongNames() {
         XCTAssertTrue(SeatTag.isCompact(1))
-        XCTAssertTrue(SeatTag.isCompact(1.49))
-        XCTAssertFalse(SeatTag.isCompact(1.5))
+        XCTAssertTrue(SeatTag.isCompact(1.5))
+        XCTAssertFalse(SeatTag.isCompact(2), "normal as it was")
+        XCTAssertFalse(SeatTag.isCompact(2.5))
         let desk = CGFloat(RoomLayout.deskWidth)
         XCTAssertEqual(SeatTag.growth(left: true, besideFree: true, scale: 1), desk)
         XCTAssertEqual(SeatTag.growth(left: false, besideFree: true, scale: 1), -desk)
         XCTAssertEqual(SeatTag.growth(left: true, besideFree: false, scale: 1), -14)
         XCTAssertEqual(SeatTag.growth(left: false, besideFree: false, scale: 1.4), 14 * 1.4)
-        for scale in [1.0, 1.25, 1.49] {
+        for scale in [1.0, 1.5] {
             XCTAssertLessThan(2 * (14 * scale - 2), CGFloat(RoomLayout.gap) * scale, "two islands' tags keep apart")
         }
 
@@ -482,6 +485,6 @@ final class ZoomTests: XCTestCase {
                 context: nil, characters: "+", charactersIgnoringModifiers: "+", isARepeat: false, keyCode: 24))
         XCTAssertTrue(menu.performKeyEquivalent(with: plus))
         RunLoop.main.run(until: Date() + 0.2)
-        XCTAssertEqual(model.zoom, 1.5)
+        XCTAssertEqual(model.zoom, 1.25, "the next step")
     }
 }

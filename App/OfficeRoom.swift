@@ -1045,8 +1045,9 @@ struct SeatTag: View {
 
     private var pixel: CGFloat { scale }
     private var deskPoints: CGFloat { CGFloat(RoomLayout.deskWidth) * pixel }
-    /// Zoomed out under 75 %, where the 9-point floor makes text big for the room: two lines, and room to grow.
-    static func isCompact(_ scale: CGFloat) -> Bool { scale < 1.5 }
+    /// Zoomed out under 100 %, where text gets big for the room (it never goes under 9 points): two lines, the wait
+    /// in minutes, names cut in the middle, and room to grow.
+    static func isCompact(_ scale: CGFloat) -> Bool { scale < CGFloat(RoomLayout.pointsPerPixel) }
 
     var body: some View {
         Group {
