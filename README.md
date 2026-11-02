@@ -19,7 +19,7 @@ Works with Claude Code. Not affiliated with Anthropic.
 | Off duty | The session ended | Walks out the door; while others still work at that island, its seat keeps a dimmed name tag |
 
 - People sit at islands of four facing desks, nearest the door first, only while their session is on. A session's name tag is its folder's name; a second session in the same folder is "name 2".
-- Subagents walk in and sit at the island of whoever called them. The caller walks over to hand out the work, and a subagent that finishes walks over to report before it leaves. When a session hands work to two or more subagents and waits, they meet in the glass meeting room.
+- Subagents walk in and sit at the island of whoever called them. The caller walks over to hand out the work, and a subagent that finishes walks over to report before it leaves. When a session hands work to two or more subagents and waits, they meet in the glass meeting room; if the caller keeps working, that subagent puts on headphones and skips meetings.
 - Click a character or its name tag for a side panel: the state and for how long, the kind of tool in use, the subagents. The pencil button next to the name gives a nickname, kept on this Mac.
 - The menu bar icon turns into `! 2` while sessions wait for you. Everything stays on this Mac.
 
