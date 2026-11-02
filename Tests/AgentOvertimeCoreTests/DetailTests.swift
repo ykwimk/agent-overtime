@@ -2,6 +2,9 @@ import XCTest
 
 @testable import AgentOvertimeCore
 
+/// This thread's CPU time, so a busy Mac does not fail the timing tests the way wall-clock time does.
+func threadCPUSeconds() -> Double { Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1e9 }
+
 /// File names shortened and edits counted inside the helper, from the text alone.
 final class DetailTests: XCTestCase {
     let folder = "/Users/me/my-project"
@@ -51,15 +54,16 @@ final class DetailTests: XCTestCase {
         XCTAssertEqual(Detail.lines(String(repeating: "\n", count: 2_000_000)), Detail.maxLines, "capped")
     }
 
-    /// Near the 8 MiB input limit, counting stays well inside the helper's 0.5 s.
+    /// Near the 8 MiB input limit, counting stays linear.
     func testAHugeEditIsCountedQuickly() {
         let half = String(repeating: "let x = 1\n", count: 400_000)  // 4 MB
         let (old, new) = (half + "old\n" + half, half + "new\n" + half)
-        let started = Date()
+        let started = threadCPUSeconds()
         let change = Detail.lineChange(old: old, new: new)
         XCTAssertTrue(change == (1, 1), "\(change)")
         XCTAssertEqual(Detail.lines(old), 800_001)
-        XCTAssertLessThan(Date().timeIntervalSince(started), 0.5)
+        // A debug build, so not the release helper's 0.5 s: quadratic code (a line diff) would take minutes here.
+        XCTAssertLessThan(threadCPUSeconds() - started, 2)
     }
 }
 

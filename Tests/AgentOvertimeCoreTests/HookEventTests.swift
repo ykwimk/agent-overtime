@@ -372,7 +372,7 @@ final class HookEventTests: XCTestCase {
         XCTAssertNil(todo.taskTitle)
     }
 
-    /// Near the 8 MiB input limit the helper's work stays well inside 0.5 s, and no text crosses.
+    /// Near the 8 MiB input limit the helper's work stays linear, and no text crosses.
     func testAHugeWriteIsCountedQuicklyAndNeverSent() throws {
         let content = String(repeating: "secret line of code\n", count: 380_000)  // 7.6 MB
         let data = input([
@@ -380,15 +380,15 @@ final class HookEventTests: XCTestCase {
             "tool_input": ["file_path": "/Users/me/my-project/big.txt", "content": content],
         ])
         XCTAssertLessThan(data.count, Limits.hookInput)
-        // Reading the JSON is v0.3's own cost at this size; counting is what details add. The helper stops itself at
-        // 0.5 s (a test build on a busy Mac runs well behind the release helper, hence the whole at 1 s).
-        let started = Date()
+        // Reading the JSON is v0.3's own cost at this size; counting is what details add. A debug build, so not the
+        // release helper's 0.5 s: quadratic code (a line diff) would take minutes here and still fails these.
+        let started = threadCPUSeconds()
         let event = try XCTUnwrap(HookEvent.fromHookInput(data, pid: nil, details: true))
         let line = event.wireLine()
-        XCTAssertLessThan(Date().timeIntervalSince(started), 1)
-        let counting = Date()
+        XCTAssertLessThan(threadCPUSeconds() - started, 5)
+        let counting = threadCPUSeconds()
         XCTAssertEqual(Detail.lines(content), 380_000)
-        XCTAssertLessThan(Date().timeIntervalSince(counting), 0.5)
+        XCTAssertLessThan(threadCPUSeconds() - counting, 2)
         XCTAssertEqual(event.linesAdded, 380_000)
         XCTAssertFalse(String(decoding: line, as: UTF8.self).contains("secret"))
     }
