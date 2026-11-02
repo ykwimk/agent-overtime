@@ -492,7 +492,7 @@ final class Stage: ObservableObject {
     typealias Picture = (room: CGImage?, walkers: [(box: CGRect, image: CGImage?)])
 
     private var last: (key: String, picture: Picture)?
-    private var room: (key: String, image: CGImage?)?
+    private var room: (key: String, image: CGImage?, lights: Lights)?
 
     /// The office at `now`. The room is drawn again only when it changes (the 2.5-a-second frame, the clock's
     /// minute, the light, the door, someone sitting down or standing to talk); each frame of a walk draws only
@@ -510,8 +510,12 @@ final class Stage: ObservableObject {
             + "\(layout.width) \(generation) "
             + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
             + "\(scene.meetingLit)"
-        if room?.key != roomKey { room = (roomKey, OfficeRenderer().render(scene)) }
+        if room?.key != roomKey {
+            let drawn = OfficeRenderer().renderWithLights(scene)
+            room = (roomKey, drawn.image, drawn.lights)
+        }
         scene.walkers += walking
+        scene.lights = room?.lights
         let bounds = CGRect(x: 0, y: 0, width: layout.width, height: height)
         let walkers = walking.map { walker -> (box: CGRect, image: CGImage?) in
             let box = walker.box.intersection(bounds)

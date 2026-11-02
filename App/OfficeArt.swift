@@ -263,6 +263,16 @@ struct RoomPerson {
     let headphones: Bool
 }
 
+/// Where the night's light comes from in one picture of the office: a pool at every seat in use, a bulb in each
+/// lamp, a glow at each laptop, lamps and the meeting room's slide drawn again over the dark.
+struct Lights {
+    var pools: [(x: Int, y: Int)] = []
+    var bulbs: [(x: Int, y: Int)] = []
+    var screens: [(x: Int, y: Int)] = []
+    var litLamps: [(sx: Int, x: Int, y: Int, mirrored: Bool)] = []
+    var litSlide: (x: Int, y: Int)?
+}
+
 /// Everything one picture of the office needs. Sizes are art pixels.
 struct OfficeScene {
     var layout: RoomLayout
@@ -288,6 +298,9 @@ struct OfficeScene {
     var headphones: Set<String> = []
     /// Where two people talk: the top-left corner of each speaking mark.
     var talks: [(x: Int, y: Int)] = []
+    /// The lights of the whole picture, from the room drawn without walkers. With them a walker's box draws only
+    /// the islands it touches and still lights them as the whole picture does.
+    var lights: Lights?
     var calendar = Calendar.current
 
     /// Who walks to and from a seat. Nobody walks for a seat someone went home from.
@@ -378,6 +391,16 @@ struct OfficeRenderer {
         }
     }
 
+    /// The whole office, and where its night light comes from (for the walkers' boxes).
+    func renderWithLights(_ scene: OfficeScene) -> (image: CGImage?, lights: Lights) {
+        var lights = Lights()
+        let image = Self.picture(width: scene.layout.width, height: scene.height, density: Self.density, art: art) {
+            $0.draw(scene)
+            lights = $0.lights
+        }
+        return (image, lights)
+    }
+
     /// A new bitmap `density` times the art size, painted in top-left art-pixel coordinates. Pictures reused
     /// inside the office (the empty room, glows, night views) stay at 1 and are scaled up without smoothing.
     private static func picture(
@@ -436,6 +459,18 @@ struct OfficeRenderer {
         /// The only part of the office the bitmap keeps (a walker's box). Anything wholly outside it is skipped
         /// before it reaches Core Graphics: a box is drawn 30 times a second.
         var clip: CGRect?
+
+        /// The light sources gathered so far.
+        var lights: Lights {
+            get { Lights(pools: pools, bulbs: bulbs, screens: screens, litLamps: litLamps, litSlide: litSlide) }
+            set {
+                pools = newValue.pools
+                bulbs = newValue.bulbs
+                screens = newValue.screens
+                litLamps = newValue.litLamps
+                litSlide = newValue.litSlide
+            }
+        }
         /// Bitmap pixels per MetroCity pixel, and art pixels per bitmap pixel.
         static let personScale = Int(OfficeRenderer.personPixel * CGFloat(OfficeRenderer.density))
         static let bitmapPixel = 1 / CGFloat(OfficeRenderer.density)
@@ -563,10 +598,17 @@ struct OfficeRenderer {
             stamp(room, 0, 0)
             clock(center: (123, 21), scene.now, scene.calendar)
             plants(scene)
+            // A walker's box with the whole picture's lights at hand draws only what it touches: the lights of the
+            // rest come from that list, so the night looks the same.
+            let skips = clip != nil && scene.lights != nil
             var walkers = scene.walkers.sorted { $0.y < $1.y }[...]
             if let meeting = scene.layout.meetingRoom {
                 let inside = { (walker: Walker) in walker.x >= meeting.left && walker.y < MeetingRoom.front }
-                meetingRoomFront(meeting, scene, walkers: walkers.filter(inside))
+                let column = CGRect(
+                    x: meeting.left - 16, y: 0, width: width - meeting.left + 16, height: MeetingRoom.front + 20)
+                if !skips || visible(column.minX, column.minY, column.width, column.height) {
+                    meetingRoomFront(meeting, scene, walkers: walkers.filter(inside))
+                }
                 walkers.removeAll(where: inside)
             }
             // Back to front: someone walking behind an island's far seats is drawn before the island.
@@ -576,9 +618,15 @@ struct OfficeRenderer {
                     self.walker(walker)
                     walkers.removeFirst()
                 }
+                // Bubbles and props reach a little past the island.
+                let reach = CGRect(
+                    x: origin.x - 32, y: origin.y - 32, width: RoomLayout.islandWidth + 64,
+                    height: RoomLayout.islandDepth + 64)
+                guard !skips || visible(reach.minX, reach.minY, reach.width, reach.height) else { continue }
                 self.pod(pod, origin: origin, scene: scene)
             }
             for walker in walkers { self.walker(walker) }
+            if skips, let lights = scene.lights { self.lights = lights }
             night(scene, glass: plan.glass)
             for (mark, x, y, tail) in marks { bubble(mark, x, y, tail) }
             for talk in scene.talks { self.talk(talk.x, talk.y) }
