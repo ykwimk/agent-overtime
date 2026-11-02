@@ -493,19 +493,24 @@ final class Stage: ObservableObject {
 
     private var last: (key: String, picture: Picture)?
     private var room: (key: String, image: CGImage?, lights: Lights)?
+    /// The 2.5-a-second frame held while someone walks: drawing the whole room again under the walkers cost more
+    /// than the walks themselves, so typing, nodding and the hopping "!" wait for the few seconds of a walk.
+    private var heldFrame: Int?
 
-    /// The office at `now`. The room is drawn again only when it changes (the 2.5-a-second frame, the clock's
-    /// minute, the light, the door, someone sitting down or standing to talk); each frame of a walk draws only
-    /// the walkers' boxes. A box is the whole office drawn inside it, so a walker stays under the night light and
-    /// behind lit lamps and bubbles exactly as in one picture. A tick can draw the view twice; the second time
-    /// reuses the first.
+    /// The office at `now`. The room is drawn again only when it changes (the 2.5-a-second frame while nobody
+    /// walks, the clock's minute, the light, the door, someone sitting down or standing to talk); each frame of a
+    /// walk draws only the walkers' boxes. A box is the whole office drawn inside it, so a walker stays under the
+    /// night light and behind lit lamps and bubbles exactly as in one picture. A tick can draw the view twice; the
+    /// second time reuses the first.
     func picture(at now: Date, frame: Int, height: Int, reduceMotion: Bool) -> Picture {
         let key = "\(now.timeIntervalSinceReferenceDate) \(frame) \(height) \(layout.width) \(generation)"
         if let last, last.key == key { return last.picture }
         var (scene, walking) = scene(at: now, frame: frame, height: height, reduceMotion: reduceMotion)
+        heldFrame = walking.isEmpty ? nil : heldFrame ?? frame
+        scene.frame = heldFrame ?? frame
         let minute = Int(now.timeIntervalSinceReferenceDate / 60)
         let roomKey =
-            "\(frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
+            "\(scene.frame) \(minute) \(scene.darkness) \(scene.doorOpen) \(scene.away.sorted()) \(scene.out.sorted()) "
             + "\(scene.walkers.map { "\($0.x),\($0.y)" }) \(scene.talks.map { "\($0.x),\($0.y)" }) \(height) "
             + "\(layout.width) \(generation) "
             + "\(headphones.sorted()) \(scene.room.map { "\($0.seat)\($0.state)" }) \(scene.meetingDoorOpen) "
