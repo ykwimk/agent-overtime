@@ -15,19 +15,31 @@ public struct Teammate: Equatable, Identifiable {
     public var since: Date
     /// When it started while the app was listening; nil for one already at work, who sits down without walking in.
     public var arrived: Date? = nil
+    /// The nickname given to its name on this Mac, if any, and its number among those shown under the same
+    /// name: shown in place of `name` and `number`, which stay for its look.
+    public internal(set) var nickname: String? = nil
+    public internal(set) var labelNumber = 1
 
     mutating func set(_ newState: WorkState, now: Date) {
         if state != newState { since = now }
         state = newState
     }
+
+    /// The name it shows, without its number: its nickname, else its own name (nil: the default helper).
+    var shownName: String? { nickname ?? name }
 }
 
 public struct Session: Equatable, Identifiable {
     public let id: String
     /// The folder's name, with " 2" and up when another running session already has that name. Numbers go by
-    /// arrival, the smallest free one first, and never change while the session runs.
+    /// arrival, the smallest free one first, and never change while the session runs. Its look goes by it.
     public internal(set) var name = ""
     public internal(set) var number = 1
+    /// What it shows: its folder's nickname or name, then " 2" and up while another running session shows the
+    /// same, numbered the same way.
+    public var label: String { labelNumber == 1 ? labelBase : "\(labelBase) \(labelNumber)" }
+    var labelBase = ""
+    var labelNumber = 1
     public var pid: Int32?
     public var state: WorkState
     public var since: Date
@@ -133,6 +145,23 @@ public enum Seat: Equatable {
     case off(name: String, folder: String)
 }
 
+/// Names given on this Mac: a session's by its folder path, a teammate's by its name (agent_type; "" for the
+/// default helper). The office shows them in place of the folder's or the teammate's own name.
+public struct Nicknames: Equatable {
+    public static let maxLength = 32
+    public internal(set) var folders: [String: String] = [:]
+    public internal(set) var agents: [String: String] = [:]
+
+    public init() {}
+
+    /// A nickname as typed: hidden characters dropped, spaces at the ends trimmed. nil when nothing is left or it
+    /// is longer than `maxLength` characters (an emoji counts as one).
+    public static func cleaned(_ text: String) -> String? {
+        guard let clean = Sanitize.clean(text, max: Limits.line) else { return nil }
+        return clean.count <= maxLength ? clean : nil
+    }
+}
+
 public struct OfficeState: Equatable {
     public static let maxDesks = 24
     /// Guards against a runaway process flooding the socket, far above real use, so every real session and
@@ -163,15 +192,52 @@ public struct OfficeState: Equatable {
     /// by the app's clock. Memory only, and gone with them.
     private var news: [String: Date] = [:]
 
-    /// `folders` are remembered from earlier runs, for Start Work. Nobody sits anywhere yet.
-    public init(folders: [String] = []) {
+    public private(set) var nicknames: Nicknames
+
+    /// `folders` are remembered from earlier runs, for Start Work, and so are `nicknames`. Nobody sits anywhere
+    /// yet.
+    public init(folders: [String] = [], nicknames: Nicknames = Nicknames()) {
         desks = folders.prefix(Self.maxDesks).map { Desk(folder: $0) }
+        self.nicknames = nicknames
     }
 
     /// Equal when everything drawn is: the time of the last news alone changes nothing on screen but the side
     /// panel, which keeps its own clock, so one more tool doesn't draw the whole room again.
     public static func == (a: OfficeState, b: OfficeState) -> Bool {
-        a.desks == b.desks && a.islands == b.islands
+        a.desks == b.desks && a.islands == b.islands && a.nicknames == b.nicknames
+    }
+
+    /// The folder a session runs in.
+    public func folder(ofSession id: String) -> String? {
+        desks.first { $0.sessions.contains { $0.id == id } }?.folder
+    }
+
+    /// Gives a folder's sessions a nickname, or takes it away (nil, or nothing visible typed). False when it is
+    /// longer than `Nicknames.maxLength`.
+    @discardableResult
+    public mutating func rename(folder: String, to text: String?) -> Bool {
+        let name = text.flatMap { Sanitize.clean($0, max: Limits.line) }
+        if let name, Nicknames.cleaned(name) == nil { return false }
+        nicknames.folders[folder] = name
+        relabelSessions { $0 == folder }
+        return true
+    }
+
+    /// The same for teammates of a name (nil: the default helper).
+    @discardableResult
+    public mutating func rename(agent: String?, to text: String?) -> Bool {
+        let name = text.flatMap { Sanitize.clean($0, max: Limits.line) }
+        if let name, Nicknames.cleaned(name) == nil { return false }
+        nicknames.agents[agent ?? ""] = name
+        relabelTeammates { $0.name == agent }
+        return true
+    }
+
+    /// Takes every nickname away.
+    public mutating func forgetNicknames() {
+        nicknames = Nicknames()
+        relabelSessions { _ in true }
+        relabelTeammates { _ in true }
     }
 
     public var folders: [String] { desks.map(\.folder) }
@@ -244,11 +310,15 @@ public struct OfficeState: Equatable {
         case (_, nil):
             if mates.count < Self.maxTeammates {
                 let taken = desks.flatMap(\.teammates).filter { $0.name == event.agentType }.map(\.number)
-                mates.append(
-                    Teammate(
-                        id: agentID, name: event.agentType, number: Self.firstFree(taken),
-                        state: Self.state(for: event, from: .working) ?? .working, since: now,
-                        arrived: event.kind == .subagentStart ? now : nil))
+                var mate = Teammate(
+                    id: agentID, name: event.agentType, number: Self.firstFree(taken),
+                    state: Self.state(for: event, from: .working) ?? .working, since: now,
+                    arrived: event.kind == .subagentStart ? now : nil)
+                mate.nickname = nicknames.agents[event.agentType ?? ""]
+                mate.labelNumber = Self.number(
+                    keeping: mate.nickname == nil ? mate.number : nil,
+                    taken: teammateNumbers(showing: mate.shownName))
+                mates.append(mate)
                 sit(.teammate(agentID), folder: desks[d].folder, near: event.session)
             }
         }
@@ -351,12 +421,72 @@ public struct OfficeState: Equatable {
         guard let d else { return nil }
         let name = desks[d].name
         let number = Self.firstFree(desks.filter { $0.name == name }.flatMap(\.sessions).map(\.number))
-        desks[d].sessions.append(
-            Session(
-                id: event.session, name: number == 1 ? name : "\(name) \(number)", number: number, pid: event.pid,
-                state: .resting, since: now, arrived: event.kind == .sessionStart ? now : nil))
+        var session = Session(
+            id: event.session, name: number == 1 ? name : "\(name) \(number)", number: number, pid: event.pid,
+            state: .resting, since: now, arrived: event.kind == .sessionStart ? now : nil)
+        session.labelBase = nicknames.folders[event.cwd] ?? name
+        session.labelNumber = Self.number(
+            keeping: nicknames.folders[event.cwd] == nil ? number : nil,
+            taken: sessionNumbers(showing: session.labelBase))
+        desks[d].sessions.append(session)
         sit(.session(event.session), folder: event.cwd)
         return (d, desks[d].sessions.count - 1)
+    }
+
+    // MARK: nicknames
+
+    /// The numbers taken among those showing a name (0 is a session or teammate being renamed).
+    private func sessionNumbers(showing base: String) -> [Int] {
+        desks.flatMap(\.sessions).filter { $0.labelBase == base && $0.labelNumber > 0 }.map(\.labelNumber)
+    }
+
+    private func teammateNumbers(showing name: String?) -> [Int] {
+        desks.flatMap(\.teammates).filter { $0.shownName == name && $0.labelNumber > 0 }.map(\.labelNumber)
+    }
+
+    /// Shows the current nicknames on the sessions of the folders picked. Each takes the smallest number free
+    /// among the others showing the same name, so nobody else's number changes.
+    private mutating func relabelSessions(_ picks: (String) -> Bool) {
+        let picked = desks.indices.filter { picks(desks[$0].folder) }
+        for d in picked {
+            for s in desks[d].sessions.indices { desks[d].sessions[s].labelNumber = 0 }
+        }
+        for d in picked {
+            for s in desks[d].sessions.indices {
+                let nickname = nicknames.folders[desks[d].folder]
+                let base = nickname ?? desks[d].name
+                desks[d].sessions[s].labelBase = base
+                desks[d].sessions[s].labelNumber = Self.number(
+                    keeping: nickname == nil ? desks[d].sessions[s].number : nil, taken: sessionNumbers(showing: base))
+            }
+        }
+    }
+
+    /// The same for the teammates picked.
+    private mutating func relabelTeammates(_ picks: (Teammate) -> Bool) {
+        var picked: [(Int, Int, Int)] = []
+        for d in desks.indices {
+            for s in desks[d].sessions.indices {
+                for m in desks[d].sessions[s].teammates.indices where picks(desks[d].sessions[s].teammates[m]) {
+                    desks[d].sessions[s].teammates[m].labelNumber = 0
+                    picked.append((d, s, m))
+                }
+            }
+        }
+        for (d, s, m) in picked {
+            let nickname = nicknames.agents[desks[d].sessions[s].teammates[m].name ?? ""]
+            desks[d].sessions[s].teammates[m].nickname = nickname
+            desks[d].sessions[s].teammates[m].labelNumber = Self.number(
+                keeping: nickname == nil ? desks[d].sessions[s].teammates[m].number : nil,
+                taken: teammateNumbers(showing: desks[d].sessions[s].teammates[m].shownName))
+        }
+    }
+
+    /// Without a nickname the shown number is the automatic one, so taking a nickname away gives the automatic
+    /// name back; otherwise (or if it is taken) the smallest free.
+    private static func number(keeping automatic: Int?, taken: [Int]) -> Int {
+        if let automatic, !taken.contains(automatic) { return automatic }
+        return firstFree(taken)
     }
 
     // MARK: islands
@@ -435,7 +565,7 @@ public struct OfficeState: Equatable {
         for d in desks.indices {
             let leaving = desks[d].sessions.filter(shouldRemove)
             for session in leaving {
-                vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.name))
+                vacate(.session(session.id), leaving: .off(folder: desks[d].folder, name: session.label))
                 news["s:" + session.id] = nil
                 for mate in session.teammates {
                     vacate(.teammate(mate.id))

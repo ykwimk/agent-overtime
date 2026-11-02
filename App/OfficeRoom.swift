@@ -635,7 +635,7 @@ struct OfficeRoom: View {
                 let pixel = CGFloat(RoomLayout.pointsPerPixel)
                 let door = CGFloat(room.left + MeetingRoom.doorX + MeetingRoom.doorWidth / 2) * pixel
                 let top = CGFloat(MeetingRoom.front - MeetingRoom.glassHeight - 1) * pixel
-                MeetingTag(name: meeting.session.name, more: meeting.more)
+                MeetingTag(name: meeting.session.label, more: meeting.more)
                     .frame(width: SeatTag.deskPoints, height: 40, alignment: .bottom)
                     .offset(x: door - SeatTag.deskPoints / 2, y: top - 40)
             }
@@ -701,7 +701,7 @@ struct SeatTag: View {
         case .session(let session, let unseated):
             Tag {
                 HStack(spacing: 4) {
-                    Text(verbatim: session.name).font(.subheadline.weight(.semibold)).truncationMode(.middle)
+                    Text(verbatim: session.label).font(.subheadline.weight(.semibold)).truncationMode(.middle)
                         .foregroundStyle(Style.tagText)
                     if unseated > 0 {
                         Text("+\(unseated)").font(.subheadline).foregroundStyle(Style.tagSecondary).layoutPriority(1)
@@ -740,7 +740,7 @@ struct SeatTag: View {
         let comma = Text(verbatim: ", ")
         switch seat {
         case .session(let session, let unseated):
-            var text = Text(verbatim: session.name)
+            var text = Text(verbatim: session.label)
             if !session.meets || session.state == .waiting { text = text + comma + session.state.word }
             let minutes = Int(now.timeIntervalSince(session.since) / 60)
             if session.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
@@ -756,7 +756,7 @@ struct SeatTag: View {
             if unseated > 0 { text = text + comma + Text("\(unseated) more teammates") }
             return text
         case .teammate(let mate, let session):
-            var text = mate.displayName + comma + Text("teammate of \(session.name)") + comma + mate.state.word
+            var text = mate.displayName + comma + Text("teammate of \(session.label)") + comma + mate.state.word
             let minutes = Int(now.timeIntervalSince(mate.since) / 60)
             if mate.state == .waiting, minutes >= 1 { text = text + comma + Text("\(minutes) min") }
             if session.meets { text = text + comma + Text("In a meeting") }

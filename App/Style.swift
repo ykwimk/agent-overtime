@@ -72,16 +72,22 @@ extension WorkState {
 }
 
 extension Teammate {
-    /// "Explore", or "Explore 2" while another Explore works too.
+    /// "Explore", or "Explore 2" while another Explore works too; its nickname in place of its name if it has one.
     var displayName: Text {
-        let base = name.map { Text(verbatim: $0) } ?? Text("Helper")
-        return number > 1 ? base + Text(verbatim: " \(number)") : base
+        let base = (nickname ?? name).map { Text(verbatim: $0) } ?? Text("Helper")
+        return labelNumber > 1 ? base + Text(verbatim: " \(labelNumber)") : base
     }
 
     /// The same name as plain text, to go inside a sentence.
     var label: String {
-        let base = name ?? String(localized: "Helper")
-        return number > 1 ? "\(base) \(number)" : base
+        let base = nickname ?? name ?? String(localized: "Helper")
+        return labelNumber > 1 ? "\(base) \(labelNumber)" : base
+    }
+
+    /// The name it has without a nickname.
+    var autoName: Text {
+        let base = name.map { Text(verbatim: $0) } ?? Text("Helper")
+        return number > 1 ? base + Text(verbatim: " \(number)") : base
     }
 }
 

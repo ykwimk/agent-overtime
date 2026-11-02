@@ -5,6 +5,7 @@ enum OfficeFocus: Hashable {
     case seat(slot: Int, index: Int)
     case close
     case edit
+    case nickname
     case mate(String)
 }
 
@@ -27,7 +28,7 @@ struct PanelSelection: Equatable {
         switch seat {
         case .session(let session, _):
             kind = .session(session.id)
-            name = session.name
+            name = session.label
         case .teammate(let mate, _):
             kind = .teammate(mate.id)
             name = mate.label
@@ -53,35 +54,65 @@ struct PanelSelection: Equatable {
     }
 }
 
-/// The side panel's state, apart from the view so tests can drive it: whose details it shows, and where keyboard
-/// focus is and goes back to.
+/// The side panel's state, apart from the view so tests can drive it: whose details it shows, the nickname being
+/// typed, and where keyboard focus is and goes back to.
 final class SidePanel: ObservableObject {
     @Published var selection: PanelSelection?
+    /// The nickname as typed so far, while it is being typed.
+    @Published var draft: String?
     /// Focus for the view to move to (FocusState lives in the view), and where it is now.
     @Published var focusRequest: OfficeFocus?
     var focus: OfficeFocus?
 
-    init(_ selection: PanelSelection? = nil) {
+    init(_ selection: PanelSelection? = nil, draft: String? = nil) {
         self.selection = selection
+        self.draft = draft
     }
 
     /// Opens the panel on someone. From the keyboard, focus moves into it.
     func open(_ chosen: PanelSelection) {
         selection = chosen
-        if KeyboardNavigation.shared.active { focusRequest = .close }
+        draft = nil
+        if KeyboardNavigation.shared.active { focusRequest = chosen.kind == .off ? .close : .edit }
     }
 
     /// Closes the panel; focus goes back to the seat it came from.
     func close() {
         focusRequest = selection?.seat
         selection = nil
+        draft = nil
     }
 
-    /// Esc: closes the panel. False when it is not open.
+    /// Esc: stops typing a nickname, else closes the panel. False when it is not open.
     func escape() -> Bool {
         guard selection != nil else { return false }
-        close()
+        if draft != nil {
+            stopEditing()
+        } else {
+            close()
+        }
         return true
+    }
+
+    /// Starts typing a nickname, from the one given now (empty for none).
+    func edit(in office: OfficeState) {
+        guard let selection else { return }
+        draft = Self.nickname(of: selection.kind, in: office) ?? ""
+        focusRequest = .nickname
+    }
+
+    func stopEditing() {
+        draft = nil
+        focusRequest = .edit
+    }
+
+    /// The nickname someone shows now: their folder's, or their name's.
+    static func nickname(of kind: PanelSelection.Kind, in office: OfficeState) -> String? {
+        switch kind {
+        case .session(let id): return office.folder(ofSession: id).flatMap { office.nicknames.folders[$0] }
+        case .teammate(let id): return office.teammate(id).flatMap { office.nicknames.agents[$0.teammate.name ?? ""] }
+        case .off: return nil
+        }
     }
 
     /// Space on what has keyboard focus: a seat opens its panel, a button in the panel does what it says.
@@ -95,7 +126,9 @@ final class SidePanel: ObservableObject {
         case .mate(let id)?:
             guard let mate = office.teammate(id)?.teammate else { return false }
             open(PanelSelection(teammate: mate, in: office))
-        case .edit?, nil:
+        case .edit?:
+            edit(in: office)
+        case .nickname?, nil:
             return false
         }
         return true
@@ -353,7 +386,8 @@ struct SidePanelView: View {
             switch selection.kind {
             case .session(let id):
                 if let session = office.session(id) {
-                    header(session.name)
+                    let named = SidePanel.nickname(of: selection.kind, in: office) != nil
+                    header(Text(verbatim: session.label), auto: named ? Text(verbatim: session.name) : nil)
                     details(
                         role: Text("Session"), state: session.state, since: session.since, meets: session.meets,
                         teammateWaiting: session.teammateWaiting, news: office.lastNews(session: id), now: now)
@@ -363,9 +397,9 @@ struct SidePanelView: View {
                 }
             case .teammate(let id):
                 if let (mate, session) = office.teammate(id) {
-                    header(mate.label)
+                    header(mate.displayName, auto: mate.nickname != nil ? mate.autoName : nil)
                     details(
-                        role: Text("Teammate of \(session.name)"), state: mate.state, since: mate.since,
+                        role: Text("Teammate of \(session.label)"), state: mate.state, since: mate.since,
                         meets: session.meets, teammateWaiting: false, news: office.lastNews(teammate: id), now: now)
                 } else {
                     wentHome(selection.name)
@@ -379,24 +413,71 @@ struct SidePanelView: View {
 
     /// Someone who has gone: the name faded, and the panel stays open.
     @ViewBuilder private func wentHome(_ name: String) -> some View {
-        header(name, faded: true)
+        header(Text(verbatim: name), faded: true)
         Text("Went home").foregroundStyle(.secondary)
     }
 
-    private func header(_ name: String, faded: Bool = false) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(verbatim: name).font(Style.title).lineLimit(2).foregroundStyle(faded ? .secondary : .primary)
-            Spacer(minLength: 4)
-            Button {
-                panel.close()
-            } label: {
-                Image(systemName: "xmark").font(.body.weight(.semibold))
+    /// The name with ✏️ to give a nickname (the automatic name small under it, when there is one), or the field
+    /// to type it in; × to close.
+    private func header(_ name: Text, auto: Text? = nil, faded: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if panel.draft != nil, !faded {
+                    nicknameField(prompt: auto ?? name)
+                } else {
+                    name.font(Style.title).lineLimit(2).foregroundStyle(faded ? .secondary : .primary)
+                    if !faded {
+                        Button {
+                            panel.edit(in: model.office)
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .focusable(keyboard.active)
+                        .focused(focus, equals: .edit)
+                        .help(Text("Edit nickname"))
+                        .accessibilityLabel(Text("Edit nickname"))
+                    }
+                }
+                Spacer(minLength: 4)
+                Button {
+                    panel.close()
+                } label: {
+                    Image(systemName: "xmark").font(.body.weight(.semibold))
+                }
+                .buttonStyle(.borderless)
+                .focusable(keyboard.active)
+                .focused(focus, equals: .close)
+                .help(Text("Close"))
+                .accessibilityLabel(Text("Close"))
             }
-            .buttonStyle(.borderless)
-            .focusable(keyboard.active)
-            .focused(focus, equals: .close)
-            .help(Text("Close"))
-            .accessibilityLabel(Text("Close"))
+            if panel.draft != nil, !faded {
+                Text("Return saves, Esc cancels. Empty goes back to the automatic name.")
+                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            } else if let auto {
+                auto.font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// Typing a nickname: at most 32 characters; Return saves (empty: the automatic name), Esc cancels.
+    private func nicknameField(prompt: Text) -> some View {
+        TextField(
+            text: Binding(
+                get: { panel.draft ?? "" },
+                set: { panel.draft = String($0.prefix(Nicknames.maxLength)) }),
+            prompt: prompt
+        ) {
+            Text("Nickname")
+        }
+        .textFieldStyle(.roundedBorder)
+        .focused(focus, equals: .nickname)
+        .onSubmit {
+            guard let selection = panel.selection, let draft = panel.draft,
+                let label = model.rename(selection.kind, to: draft)
+            else { return }
+            panel.selection?.name = label
+            panel.stopEditing()
         }
     }
 

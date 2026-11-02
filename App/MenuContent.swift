@@ -61,7 +61,7 @@ struct MenuContent: View {
                     )
                     .frame(width: 7, height: 7)
                     .accessibilityHidden(true)
-                    Text(verbatim: session.name).lineLimit(1).truncationMode(.middle)
+                    Text(verbatim: session.label).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: 8)
                     shown.state.label(since: shown.since, now: now)
                         .foregroundStyle(shown.state.color)

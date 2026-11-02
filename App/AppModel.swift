@@ -182,6 +182,30 @@ final class AppModel: ObservableObject {
         meetingTimer = timer
     }
 
+    /// Gives whoever the panel shows a nickname: all sessions of that folder, or all teammates of that name. Empty
+    /// takes it away. The new name shown, or nil when refused.
+    func rename(_ kind: PanelSelection.Kind, to text: String) -> String? {
+        var renamed = office
+        switch kind {
+        case .session(let id):
+            guard let folder = office.folder(ofSession: id), renamed.rename(folder: folder, to: text) else {
+                return nil
+            }
+            office = renamed
+            save()
+            return office.session(id)?.label
+        case .teammate(let id):
+            guard let mate = office.teammate(id)?.teammate, renamed.rename(agent: mate.name, to: text) else {
+                return nil
+            }
+            office = renamed
+            save()
+            return office.teammate(id)?.teammate.label
+        case .off:
+            return nil
+        }
+    }
+
     func forgetIdleFolders() {
         office.forgetIdleFolders()
         save()
