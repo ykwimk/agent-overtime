@@ -171,12 +171,14 @@ final class WalkTests: XCTestCase {
     /// No more than six walk at once: the seventh is just there.
     func testAtMostSixWalkAtOnce() {
         send(.userPromptSubmit, at: 0)
-        for k in 0..<6 { send(.subagentStart, agent: "a\(k)", type: "Explore", at: 1) }
+        for k in 0..<3 { send(.subagentStart, agent: "a\(k)", type: "Explore", at: 1) }
         meet(at: 11)
         send(.sessionStart, "s2", at: 11)
+        send(.subagentStart, "s2", agent: "b0", type: "Plan", at: 11)
+        send(.subagentStart, "s2", agent: "b1", type: "Plan", at: 11)
         let counts = stride(from: 11.0, to: 30, by: 0.1).map { stage.moment(at: t0 + $0).walkers.count }
-        XCTAssertEqual(counts.max(), Stage.maxWalkers, "the session and five teammates")
-        XCTAssertFalse(stage.moment(at: t0 + 11.5).away.contains("p:s2"), "the newcomer is at its desk at once")
+        XCTAssertEqual(counts.max(), Stage.maxWalkers, "s1 and its three to the meeting, s2 and b0 in")
+        XCTAssertFalse(stage.moment(at: t0 + 11.5).away.contains("m:b1"), "the seventh is at its desk at once")
     }
 
     /// Reduce Motion: nobody walks. ① shows the speaking mark at the session's own seat for 2 s, and a meeting

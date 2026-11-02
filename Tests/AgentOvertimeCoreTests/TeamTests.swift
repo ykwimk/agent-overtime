@@ -83,11 +83,12 @@ final class TeamTests: XCTestCase {
         office.advance(to: t0 + 60)
         XCTAssertNil(office.meeting)
 
-        // A newcomer after that is waited on again; two of them meet.
+        // A newcomer after that is waited on again; two of them meet. a4 found the island full: it meets as "+1".
         start(&office, "a3")
         start(&office, "a4")
         office.advance(to: t0 + 60 + OfficeState.meetingDelay)
-        XCTAssertEqual(office.meeting?.members.map(\.id), ["a3", "a4"], "those with headphones stay at their desks")
+        XCTAssertEqual(office.meeting?.members.map(\.id), ["a3"], "those with headphones stay at their desks")
+        XCTAssertEqual(office.meeting?.more, 1)
         // Only those two count as meeting: the name tag's number and "In a meeting" go by them.
         let session = office.desks[0].sessions[0]
         XCTAssertEqual(session.direct.count, 2)
@@ -175,19 +176,19 @@ final class TeamTests: XCTestCase {
         XCTAssertEqual(callers(office), ["b1": "-"])
     }
 
-    /// A teammate's newcomer sits at that teammate's island (the nearest with room when it is full).
-    func testANewcomerSitsAtItsCallersIsland() {
+    /// A teammate's newcomer sits at its session's island too.
+    func testANewcomerSitsAtItsSessionsIsland() {
         var office = OfficeState()
         for i in 0..<4 {
             office.apply(HookEvent(kind: .userPromptSubmit, session: "o\(i)", cwd: "/w/p\(i)"), now: t0)
         }
-        // s1 sits at the second island; its teammate a1 there too.
+        // s1 sits at the fifth island; its teammate a1 there too.
         office.apply(HookEvent(kind: .userPromptSubmit, session: "s1", cwd: folder), now: t0)
         start(&office, "a1")
         let island = { (id: String) in office.islands.first { $0.seats.contains(.teammate(id)) }?.slot }
-        XCTAssertEqual(island("a1"), 1)
+        XCTAssertEqual(island("a1"), 4)
         call(&office, from: "a1")
         start(&office, "b1", "Plan")
-        XCTAssertEqual(island("b1"), 1, "next to its caller")
+        XCTAssertEqual(island("b1"), 4, "next to its caller")
     }
 }

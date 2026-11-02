@@ -187,26 +187,6 @@ final class CaptureTests: XCTestCase {
         XCTAssertEqual(twins.office.desks[0].teammates.map(\.number), [1, 2])
         try capture(
             "office-same-names", size: OfficeView.minSize, OfficeView(fixedNow: today(14)).environmentObject(twins))
-
-        // Went home: a faded name, a pushed-back chair and a closed laptop, across the desks and with the back to
-        // the room, while someone still works at the island.
-        let home = makeModel(connected: true)
-        for (session, folder) in [("h1", "my-project"), ("h2", "web-app"), ("h3", "blog"), ("h4", "api")] {
-            home.receive(
-                HookEvent(kind: .userPromptSubmit, session: session, cwd: FakeScenario.root + "/" + folder),
-                at: today(22) - 300)
-        }
-        for (session, folder) in [("h2", "web-app"), ("h3", "blog")] {
-            home.receive(
-                HookEvent(kind: .sessionEnd, session: session, cwd: FakeScenario.root + "/" + folder),
-                at: today(22) - 100)
-        }
-        XCTAssertEqual(home.office.pods[0].seats[1], .off(name: "web-app", folder: FakeScenario.root + "/web-app"))
-        for (time, hour) in [("day", 14), ("night", 22)] {
-            try capture(
-                "office-went-home-\(time)", size: OfficeView.minSize,
-                OfficeView(fixedNow: today(hour)).environmentObject(home))
-        }
     }
 
     /// my-project hands work to `teammates` teammates and waits for them; web-app works on with a helper, blog
@@ -255,10 +235,11 @@ final class CaptureTests: XCTestCase {
             "office-meeting-gathering", size: OfficeView.defaultSize,
             OfficeView(fixedNow: now, stage: stage).environmentObject(walking))
 
-        // Seven teammates: five at the table, "+2" on the glass door, two at their desks.
+        // Seven teammates: the three seated at my-project's island at the table, "+4" on the glass door for the
+        // four still waiting for a seat.
         let full = meetingOffice(at: now, teammates: 7)
         full.advanceMeetings(to: now - 150)
-        XCTAssertEqual(full.office.meeting?.more, 2)
+        XCTAssertEqual(full.office.meeting?.more, 4)
         try capture(
             "office-meeting-full", size: CGSize(width: OfficeView.defaultSize.width, height: 1060),
             OfficeView(fixedNow: now).environmentObject(full))
@@ -368,7 +349,7 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: now, panel: try panel(office, slot: 0, index: 1)).environmentObject(office))
 
         let leaving = team(sessions: 2, teammates: 0, at: now)
-        let gone = try panel(leaving, slot: 0, index: 1)
+        let gone = try panel(leaving, slot: 1, index: 0)
         leaving.receive(
             HookEvent(kind: .sessionEnd, session: "team-1", cwd: FakeScenario.root + "/web-app"), at: now - 10)
         try capture(
@@ -424,17 +405,15 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: visit, stage: handOff).environmentObject(visited))
 
         // ① to a newcomer across the desks: the caller stands at the island's end, off the name tags. The first
-        // teammate sits across from its session (that end is the lane); with the island's other seats taken by
-        // sessions, the newcomer sits across on the right.
-        for (name, sessions) in [
-            ("office-hand-off-front", ["my-project"]),
-            ("office-hand-off-front-right", ["my-project", "web-app", "blog"]),
-        ] {
+        // teammate sits across from its session (that end is the lane); with two teammates there before it, the
+        // newcomer sits across on the right.
+        for (name, earlier) in [("office-hand-off-front", 0), ("office-hand-off-front-right", 2)] {
             let stage = Stage()
             let model = makeModel(connected: true)
-            for (i, folder) in sessions.enumerated() {
+            model.receive(HookEvent(kind: .userPromptSubmit, session: "f0", cwd: folder), at: base - 300)
+            for (k, type) in ["Plan", "code-reviewer"].prefix(earlier).enumerated() {
                 model.receive(
-                    HookEvent(kind: .userPromptSubmit, session: "f\(i)", cwd: FakeScenario.root + "/" + folder),
+                    HookEvent(kind: .subagentStart, session: "f0", cwd: folder, agentID: "e\(k)", agentType: type),
                     at: base - 300)
             }
             _ = stage.sync(model.office, width: width, now: base - 30, animate: true)
@@ -443,7 +422,7 @@ final class CaptureTests: XCTestCase {
                 at: base - 20)
             _ = stage.sync(model.office, width: width, now: base - 20, animate: true)
             XCTAssertEqual(
-                model.office.pods.first?.seats.compactMap { $0 }.count, sessions.count + 1, "all at the first island")
+                model.office.pods.first?.seats[1 + earlier].flatMap(OfficeScene.id), "m:x1", "seat \(1 + earlier)")
             try capture(
                 name, size: OfficeView.defaultSize,
                 OfficeView(fixedNow: try talking(stage, from: base - 20, to: base), stage: stage).environmentObject(
@@ -490,17 +469,26 @@ final class CaptureTests: XCTestCase {
             OfficeView(fixedNow: base, stage: calm).environmentObject(still))
     }
 
-    /// Every desk prop twice: once across the desks and once with the back to the room. Folder names are picked so
-    /// each prop comes up; the second session of a folder gets the same prop at another seat.
+    /// Every desk prop twice: once across the desks and once with the back to the room. Folder and teammate names
+    /// are picked so each prop comes up: at each island the session and its first teammate get one prop, its other
+    /// two teammates the next.
     func testCaptureDeskProps() throws {
         let model = makeModel(connected: true)
         let names = Prop.allCases.map { prop in (0...).lazy.map { "desk-\($0)" }.first { Prop.pick($0) == prop }! }
-        for (i, name) in (names + names).enumerated() {
-            model.receive(
-                HookEvent(kind: .userPromptSubmit, session: "prop-\(i)", cwd: FakeScenario.root + "/" + name),
-                at: today(14) - 300)
+        for first in stride(from: 0, to: names.count, by: 2) {
+            let session = "prop-\(first)"
+            let folder = FakeScenario.root + "/" + names[first]
+            model.receive(HookEvent(kind: .userPromptSubmit, session: session, cwd: folder), at: today(14) - 300)
+            let next = names[min(first + 1, names.count - 1)]
+            for (k, name) in [names[first], next, next].enumerated() {
+                model.receive(
+                    HookEvent(
+                        kind: .subagentStart, session: session, cwd: folder, agentID: "\(session)-\(k)",
+                        agentType: name), at: today(14) - 300)
+            }
         }
-        XCTAssertEqual(model.office.islands.count, 6)
+        XCTAssertEqual(model.office.islands.count, (names.count + 1) / 2)
+        XCTAssertEqual(model.office.pods.flatMap(\.seats).compactMap { $0 }.count, model.office.islands.count * 4)
         for (time, hour) in [("day", 14), ("night", 22)] {
             try capture(
                 "office-props-\(time)", size: CGSize(width: OfficeView.defaultSize.width, height: 1060),
@@ -703,7 +691,7 @@ final class CaptureTests: XCTestCase {
         }
         office.apply(HookEvent(kind: .sessionEnd, session: "a", cwd: folder), now: today(14))
         let seats = office.pods.flatMap(\.seats).compactMap { $0 }
-        XCTAssertEqual(seats.count, 5, "a's teammate left with it; a's seat stays, faded")
+        XCTAssertEqual(seats.count, 4, "a's island left with it")
         let props = { (wanted: (Seat) -> Bool) in Set(seats.filter(wanted).map(OfficeScene.prop)) }
         let sessions = props {
             switch $0 {
@@ -711,7 +699,7 @@ final class CaptureTests: XCTestCase {
             case .teammate: return false
             }
         }
-        XCTAssertEqual(sessions.count, 1, "my-project 2, my-project 3 and the seat my-project left")
+        XCTAssertEqual(sessions.count, 1, "my-project 2 and my-project 3")
         XCTAssertEqual(
             props { if case .teammate = $0 { return true } else { return false } }.count, 1, "Plan 2, Plan 3")
         let names = ["my-project", "web-app", "blog", "api", "Explore", "Plan", "code-reviewer", "helper"]

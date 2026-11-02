@@ -58,10 +58,10 @@ public struct RoomLayout: Equatable {
     /// From an island's top: the back edge of the far desks, and the top of the near desks' picture.
     public static let farDesk = 50
     public static let nearDesk = 58
-    /// The default window shows four islands (16 people) and the right-hand column without scrolling: the lane,
-    /// two islands, the row offset, the gaps and the column make 600 art pixels (8 to spare), and the wall, two
-    /// rows and the top bar about 758 pt. 1216 × 760 stays inside a 1280 × 800 screen. The smallest window holds
-    /// one island and its name tags.
+    /// The default window shows four islands (four sessions, 16 people) and the right-hand column without
+    /// scrolling; a fifth session starts a row below and the room scrolls. The lane, two islands, the row offset,
+    /// the gaps and the column make 600 art pixels (8 to spare), and the wall, two rows and the top bar about
+    /// 758 pt. 1216 × 760 stays inside a 1280 × 800 screen. The smallest window holds one island and its name tags.
     public static let defaultWindow = (width: 1216, height: 760)
     public static let minWindow = (width: 560, height: 470)
 

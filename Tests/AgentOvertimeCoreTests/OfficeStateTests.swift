@@ -280,7 +280,8 @@ final class OfficeStateTests: XCTestCase {
         office.apply(event(.permissionRequest, "s1", agent: "a9"), now: t0)
         XCTAssertEqual(office.count(.waiting), 2, "so does the 9th teammate's")
         XCTAssertEqual(office.desks[0].sessions.map(\.name), ["shop", "shop 2", "shop 3", "shop 4", "shop 5"])
-        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 14, "everyone has a seat")
+        XCTAssertEqual(office.islands.count, 5, "a session each")
+        XCTAssertEqual(office.islands.flatMap(\.seats).compactMap { $0 }.count, 8, "s1's fourth to ninth wait")
     }
 
     func testCounts() {

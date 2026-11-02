@@ -13,7 +13,8 @@ public struct Teammate: Equatable, Identifiable {
     public internal(set) var number = 1
     public var state: WorkState
     public var since: Date
-    /// When it started while the app was listening; nil for one already at work, who sits down without walking in.
+    /// When it started while the app was listening, or got a seat after waiting for one; nil for one already at
+    /// work, who sits down without walking in.
     public var arrived: Date? = nil
     /// The nickname given to its name on this Mac, if any, and its number among those shown under the same
     /// name: shown in place of `name` and `number`, which stay for its look.
@@ -127,32 +128,20 @@ public enum Occupant: Equatable {
     }
 }
 
-/// Four desks facing each other: two seats with their backs to the room (0, 2) and two across (1, 3). An island
-/// is there only while someone at it works, and keeps its place in the room until then.
+/// Four desks facing each other: two seats with their backs to the room (0, 2) and two across (1, 3). One
+/// session's island: the session at seat 0, its teammates (and theirs) at 1, 2 and 3 as they come. It keeps its
+/// place in the room while the session runs.
 public struct Island: Equatable, Identifiable {
     public static let size = 4
     /// Its place in the room, 0 nearest the door.
     public let slot: Int
     public internal(set) var seats: [Occupant?] = Array(repeating: nil, count: Island.size)
     public var id: Int { slot }
-
-    /// The seat a newcomer from `folder` takes: one its own folder went home from, then an empty one, then one
-    /// anyone went home from; lower seats first. nil when everyone here is at work.
-    func seat(for folder: String) -> Int? {
-        let ranked = seats.indices.compactMap { i -> (rank: Int, seat: Int)? in
-            switch seats[i] {
-            case .off(let from, _)?: return (from == folder ? 0 : 2, i)
-            case nil: return (1, i)
-            case .session?, .teammate?: return nil
-            }
-        }
-        return ranked.min { ($0.rank, $0.seat) < ($1.rank, $1.seat) }?.seat
-    }
 }
 
 /// One seat as the office draws it.
 public enum Seat: Equatable {
-    /// A session at work; `unseated` of its teammates found no seat (only past `OfficeState.maxIslands`).
+    /// A session at work; `unseated` of its teammates wait for a free seat at its island, shown as "+n".
     case session(Session, unseated: Int)
     case teammate(Teammate, of: Session)
     case off(name: String, folder: String)
@@ -221,7 +210,9 @@ public struct OfficeState: Equatable {
     /// teammate is counted in the summary and the menu bar.
     public static let maxSessions = 64
     public static let maxTeammates = 64
-    /// 128 seats. Anyone past them is still counted, and a session's tag shows its unseated teammates as "+n".
+    /// One island a session. Sessions past them are still counted in the summary and the menu bar.
+    // shortcut: a session past them never gets an island, even after another leaves; seat it then if 32 sessions at
+    // once turn out to be real.
     public static let maxIslands = 32
     /// How long a session stays quiet with two or more teammates out before they meet, so a short pause between
     /// two tools doesn't send everyone to the meeting room and back.
@@ -241,9 +232,9 @@ public struct OfficeState: Equatable {
     /// Who sits in the one meeting room.
     public struct Meeting: Equatable {
         public let session: Session
-        /// Its teammates at the table, first come first.
+        /// Its teammates at the table, first come first: those with a seat at its island.
         public let members: [Teammate]
-        /// Teammates who stay at their desks: the table is full.
+        /// Teammates in the meeting but not at the table: past its seats, or still waiting for a seat at the island.
         public let more: Int
     }
 
@@ -405,7 +396,13 @@ public struct OfficeState: Equatable {
             for k in mates.indices where mates[k].calledBy == agentID { mates[k].calledBy = leaving.calledBy }
             news["a:" + agentID] = nil
             vacate(.teammate(agentID))
-            closeEmptyIslands()
+            // The one that waited longest for a seat takes it, and walks in from the door now.
+            let seated = seatedTeammates
+            if let k = mates.firstIndex(where: { !seated.contains($0.id) }),
+                sit(.teammate(mates[k].id), at: event.session)
+            {
+                mates[k].arrived = now
+            }
         case (.subagentStop, nil):
             news["a:" + agentID] = nil
         case (_, let i?):
@@ -426,7 +423,7 @@ public struct OfficeState: Equatable {
                     mate.calledBy = caller.flatMap { id in mates.contains { $0.id == id } ? id : nil }
                 }
                 mates.append(mate)
-                sit(.teammate(agentID), folder: desks[d].folder, near: event.session, caller: mate.calledBy)
+                sit(.teammate(agentID), at: event.session)
             }
         }
         // Only seated teammates keep news and a tool kind: a stranger's message, or one past the limit, leaves none.
@@ -498,11 +495,11 @@ public struct OfficeState: Equatable {
         let first = desks.flatMap(\.sessions).filter(\.meets).min {
             ($0.quietSince ?? .distantPast, $0.id) < ($1.quietSince ?? .distantPast, $1.id)
         }
+        let seated = seatedTeammates
         return first.map { session in
             let direct = session.direct
-            return Meeting(
-                session: session, members: Array(direct.prefix(Self.meetingSeats - 1)),
-                more: max(0, direct.count - (Self.meetingSeats - 1)))
+            let members = Array(direct.filter { seated.contains($0.id) }.prefix(Self.meetingSeats - 1))
+            return Meeting(session: session, members: members, more: direct.count - members.count)
         }
     }
 
@@ -574,7 +571,7 @@ public struct OfficeState: Equatable {
             keeping: nicknames.folders[event.cwd] == nil ? number : nil,
             taken: sessionNumbers(showing: session.labelBase))
         desks[d].sessions.append(session)
-        sit(.session(event.session), folder: event.cwd)
+        openIsland(for: event.session)
         return (d, desks[d].sessions.count - 1)
     }
 
@@ -644,8 +641,7 @@ public struct OfficeState: Equatable {
             sessions[session.id] = session
             for mate in session.teammates { mates[mate.id] = (mate, session) }
         }
-        var seated: Set<String> = []
-        for case .teammate(let id)? in islands.flatMap(\.seats) { seated.insert(id) }
+        let seated = seatedTeammates
         return islands.map { island in
             let seats = island.seats.map { occupant -> Seat? in
                 switch occupant {
@@ -665,28 +661,32 @@ public struct OfficeState: Equatable {
         }
     }
 
-    /// Seats someone who just arrived. A session takes the island nearest the door that has room. A teammate
-    /// sits at its caller's island (the teammate that called it, else its session), else at the island with room
-    /// nearest to it, else at a new island. A new island takes the free place nearest the door; no island ever
-    /// moves.
-    private mutating func sit(_ who: Occupant, folder: String, near session: String? = nil, caller: String? = nil) {
-        let placed = islands
-        let callers = [caller.map(Occupant.teammate), session.map(Occupant.session)].compactMap { $0 }
-        let home = callers.compactMap { occupant in placed.first { $0.seats.contains(occupant) }?.slot }.first ?? 0
-        let open = islands.indices.filter { islands[$0].seat(for: folder) != nil }.map { i in
-            (i: i, distance: abs(islands[i].slot - home), slot: islands[i].slot)
-        }
-        if let i = open.min(by: { ($0.distance, $0.slot) < ($1.distance, $1.slot) })?.i,
-            let seat = islands[i].seat(for: folder)
-        {
-            islands[i].seats[seat] = who
-        } else if islands.count < Self.maxIslands {
-            let used = Set(islands.map(\.slot))
-            var island = Island(slot: (0...).first { !used.contains($0) }!)
-            island.seats[0] = who
-            islands.append(island)
-            islands.sort { $0.slot < $1.slot }
-        }
+    /// Teammates with a seat; the others wait for one at their session's island.
+    private var seatedTeammates: Set<String> {
+        var seated: Set<String> = []
+        for case .teammate(let id)? in islands.flatMap(\.seats) { seated.insert(id) }
+        return seated
+    }
+
+    /// A new session's own island, at the free place nearest the door. No island ever moves.
+    private mutating func openIsland(for session: String) {
+        guard islands.count < Self.maxIslands else { return }
+        let used = Set(islands.map(\.slot))
+        var island = Island(slot: (0...).first { !used.contains($0) }!)
+        island.seats[0] = .session(session)
+        islands.append(island)
+        islands.sort { $0.slot < $1.slot }
+    }
+
+    /// Seats a teammate at the first free seat of its session's island, whoever called it. False when there is
+    /// none: it waits, counted on the session's tag.
+    @discardableResult
+    private mutating func sit(_ who: Occupant, at session: String) -> Bool {
+        guard let i = islands.firstIndex(where: { $0.seats[0] == .session(session) }),
+            let seat = islands[i].seats.firstIndex(of: nil)
+        else { return false }
+        islands[i].seats[seat] = who
+        return true
     }
 
     /// Empties `who`'s seat, or leaves `mark` there.
