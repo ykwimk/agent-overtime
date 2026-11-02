@@ -1038,6 +1038,17 @@ final class CaptureTests: XCTestCase {
                         agentType: "Explore"))
             }
         }
+        // cpu-0's panel has details to show: steps, edits, a task list, the model.
+        for (index, name) in ["a.swift", "b.swift", "c.swift"].enumerated() {
+            var edit = HookEvent(
+                kind: .preToolUse, session: "cpu-0", cwd: FakeScenario.root + "/cpu-0",
+                toolKind: index == 1 ? .read : .edit)
+            (edit.file, edit.linesAdded, edit.linesRemoved) = ("src/" + name, 3, 1)
+            model.receive(edit, at: Date() - Double(60 * (3 - index)))
+        }
+        var todo = HookEvent(kind: .preToolUse, session: "cpu-0", cwd: FakeScenario.root + "/cpu-0", toolKind: .tasks)
+        (todo.taskAction, todo.todoTotal, todo.todoDone, todo.taskTitle) = (.todo, 3, 1, "Speed up the office")
+        model.receive(todo)
         func cpuSeconds() -> Double {
             var usage = rusage()
             getrusage(RUSAGE_SELF, &usage)
@@ -1423,7 +1434,11 @@ final class HelperTests: XCTestCase {
 
     /// A model switch's hook output would reach Claude's context: nothing is printed, and it always exits 0.
     func testAModelSwitchPrintsNothing() throws {
-        try XCTSkipIf(FileManager.default.fileExists(atPath: Paths.socket()), "Agent Overtime is running")
+        // The helper may reach the real socket: only while no other copy of the app is open (a socket file can
+        // outlive it).
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: ShowDetails.appID)
+            .filter { $0.processIdentifier != getpid() }
+        try XCTSkipIf(!others.isEmpty, "Agent Overtime is running")
         let input = Data(
             #"{"hook_event_name":"PostModelSwitch","session_id":"s","cwd":"/x","from_model":"a","to_model":"b"}"#.utf8)
         let result = try run(input)
