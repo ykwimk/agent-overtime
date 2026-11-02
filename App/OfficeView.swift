@@ -106,6 +106,34 @@ final class SidePanel: ObservableObject {
         focusRequest = .edit
     }
 
+    /// What VoiceOver says as the panel opens: the name and the state ("my-project, Waiting, 3 min, In a
+    /// meeting"). Nothing for someone who went home: the panel says so.
+    static func spoken(_ kind: PanelSelection.Kind, in office: OfficeState, now: Date) -> String? {
+        func state(_ state: WorkState, since: Date, meets: Bool) -> [String] {
+            var words: [String] = []
+            if !meets || state == .waiting {
+                words.append(state.spoken)
+                let minutes = Int(now.timeIntervalSince(since) / 60)
+                if minutes >= 1 { words.append(String(localized: "\(minutes) min")) }
+            }
+            if meets { words.append(String(localized: "In a meeting")) }
+            return words
+        }
+        switch kind {
+        case .session(let id):
+            guard let session = office.session(id) else { return nil }
+            return ([session.label] + state(session.state, since: session.since, meets: session.meets))
+                .joined(separator: ", ")
+        case .teammate(let id):
+            guard let (mate, session) = office.teammate(id) else { return nil }
+            return
+                ([mate.label, String(localized: "teammate of \(session.label)")]
+                + state(mate.state, since: mate.since, meets: session.meets)).joined(separator: ", ")
+        case .off:
+            return nil
+        }
+    }
+
     /// The nickname someone shows now: their folder's, or their name's.
     static func nickname(of kind: PanelSelection.Kind, in office: OfficeState) -> String? {
         switch kind {
@@ -221,6 +249,12 @@ struct OfficeView: View {
             }
         }
         .onChange(of: focus) { panel.focus = $0 }
+        .onChange(of: panel.selection?.kind) { kind in
+            // The panel opens without moving VoiceOver's cursor, so it says who it shows.
+            if let kind, let text = SidePanel.spoken(kind, in: model.office, now: fixedNow ?? Date()) {
+                AppModel.announce(text)
+            }
+        }
         .onChange(of: panel.focusRequest) { request in
             guard let request else { return }
             focus = request

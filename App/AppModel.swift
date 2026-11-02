@@ -286,7 +286,7 @@ final class AppModel: ObservableObject {
     }
 
     /// The bar's question and errors appear without moving focus, so VoiceOver would not read them on its own.
-    private static func announce(_ text: String) {
+    static func announce(_ text: String) {
         guard let app = NSApp else { return }
         NSAccessibility.post(
             element: app, notification: .announcementRequested,

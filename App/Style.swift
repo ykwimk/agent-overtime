@@ -34,6 +34,15 @@ enum Style {
 
 extension WorkState {
     /// "Working" / "Waiting" / "Resting" as one word, for summaries and VoiceOver.
+    /// The same word as text for VoiceOver to say.
+    var spoken: String {
+        switch self {
+        case .working: return String(localized: "Working")
+        case .waiting: return String(localized: "Waiting")
+        case .resting: return String(localized: "Resting")
+        }
+    }
+
     var word: Text {
         switch self {
         case .working: return Text("Working")
