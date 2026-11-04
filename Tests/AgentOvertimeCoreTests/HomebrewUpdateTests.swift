@@ -227,6 +227,17 @@ final class UpdateTerminalStateTests: XCTestCase {
         XCTAssertFalse(state.isInTerminal)
     }
 
+    func testATerminalThatNeverRanLeavesAFailureAndAPressClearsIt() {
+        var state = available()
+        _ = state.beginTerminal(at: start)
+        state.endTerminal(.install)
+        XCTAssertFalse(state.isInTerminal)
+        XCTAssertEqual(state.shownFailure, .install)
+        XCTAssertEqual(state.newVersion, newer)
+        XCTAssertTrue(state.beginTerminal(at: start + 1), "try again")
+        XCTAssertNil(state.shownFailure)
+    }
+
     func testTurningTheCheckOffEndsIt() {
         var state = available()
         _ = state.beginTerminal(at: start)

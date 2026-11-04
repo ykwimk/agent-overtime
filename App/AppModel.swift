@@ -374,7 +374,9 @@ final class AppModel: ObservableObject {
         guard updates.beginTerminal(at: Date()) else { return }
         Self.announce(String(localized: "Updating in Terminal. You may need to allow it after."))
         homebrew.openTerminal { [weak self] error in
-            if error != nil { self?.updates.endTerminal() }
+            guard error != nil else { return }
+            self?.updates.endTerminal(.install)
+            Self.announce(UpdateFailure.install.spoken)
         }
     }
 

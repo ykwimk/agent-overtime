@@ -297,12 +297,15 @@ public struct UpdateState: Equatable {
         guard newVersion != nil, terminalSince == nil else { return false }
         terminalSince = now
         newerOnDisk = false
+        failure = nil
         return true
     }
 
-    public mutating func endTerminal() {
+    /// `failure` when Terminal never got to run: the line says why instead of going back without a word.
+    public mutating func endTerminal(_ failure: UpdateFailure? = nil) {
         terminalSince = nil
         newerOnDisk = false
+        if let failure { self.failure = failure }
     }
 
     /// On the tick while Terminal runs. True when the app should reopen: a newer app on disk on two ticks in a row,

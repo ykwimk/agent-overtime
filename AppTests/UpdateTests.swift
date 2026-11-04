@@ -148,14 +148,22 @@ final class HomebrewUpdateModelTests: XCTestCase {
         XCTAssertTrue(model.updates.isInTerminal)
     }
 
-    func testTerminalThatWontOpenGoesBackToNewVersion() async {
+    func testTerminalThatWontOpenSaysSoAndCanBeTriedAgain() async {
         let fake = Fake()
         fake.terminalError = CocoaError(.fileNoSuchFile)
         let model = model(fake)
         model.startUpdate(version)
         await settle()
         XCTAssertFalse(model.updates.isInTerminal)
+        XCTAssertEqual(model.updates.shownFailure, .install)
         XCTAssertEqual(model.updates.newVersion, version)
+
+        fake.terminalError = nil
+        model.startUpdate(version)
+        await settle()
+        XCTAssertEqual(fake.terminals, 2)
+        XCTAssertTrue(model.updates.isInTerminal)
+        XCTAssertNil(model.updates.shownFailure)
     }
 
     func testNoChangeOnDiskGoesBackAfterFiveMinutes() {
