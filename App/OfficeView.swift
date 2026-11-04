@@ -484,7 +484,7 @@ struct OfficeBar: View {
                         }
                         .buttonStyle(.link)
                         .popover(isPresented: $explainsConnectUpdate) {
-                            ConnectUpdateNote().padding(14).frame(width: 340)
+                            ConnectUpdateNote().padding(14).frame(width: 420)
                         }
                         Button {
                             model.justUpdated = nil

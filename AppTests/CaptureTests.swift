@@ -1543,7 +1543,7 @@ final class CaptureTests: XCTestCase {
             try capture("update-\(name)-menu", MenuContent(fixedNow: now).environmentObject(model))
             try capture("settings-update-\(name)", SettingsView().environmentObject(model))
         }
-        try capture("update-connect-note", ConnectUpdateNote().padding(14).frame(width: 340))
+        try capture("update-connect-note", ConnectUpdateNote().padding(14).frame(width: 420))
     }
 
     /// Start Work feedback, the inline "one more?" question, and the not-connected / idle variants.
