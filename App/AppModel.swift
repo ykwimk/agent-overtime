@@ -119,12 +119,29 @@ final class AppModel: ObservableObject {
     func zoomIn() { zoom = Zoom.step(from: zoom, by: 1) ?? zoom }
     func zoomOut() { zoom = Zoom.step(from: zoom, by: -1) ?? zoom }
 
+    /// New versions. Check for Updates (Settings > Updates) is on by default; off, nothing is ever asked.
+    @Published private(set) var updates: UpdateState
+    private let askLatest: @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome
+    private var updateTask: Task<Void, Never>?
+
+    var checksForUpdates: Bool {
+        get { updates.isOn }
+        set {
+            defaults.set(newValue, forKey: Keys.checksForUpdates)
+            if !newValue { updateTask?.cancel() }
+            updates.turn(on: newValue)
+            askForUpdate()
+        }
+    }
+
     private enum Keys {
         static let approved = "approvedStartFingerprint"
         static let everConnected = "everConnected"
         static let welcomeDismissed = "welcomeDismissed"
         static let findsSessions = "findsSessions"
         static let zoom = "zoom"
+        static let checksForUpdates = "checksForUpdates"
+        static let lastUpdateCheck = "lastUpdateCheck"
     }
 
     static let hooksURL = URL(
@@ -133,10 +150,15 @@ final class AppModel: ObservableObject {
         string: "https://github.com/\(Release.repository)/blob/\(Release.tag)/App/Art/CREDITS.txt")!
     static let repositoryURL = URL(string: "https://github.com/\(Release.repository)")!
 
-    init(supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath)
-    {
+    init(
+        supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath,
+        askLatest: @escaping @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome = {
+            await UpdateCheck.ask(current: $0)
+        }
+    ) {
         self.socketPath = socketPath
         self.defaults = defaults
+        self.askLatest = askLatest
         configURL = URL(fileURLWithPath: supportFolder).appendingPathComponent("config.json")
         location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
         everConnected = defaults.bool(forKey: Keys.everConnected)
@@ -146,6 +168,9 @@ final class AppModel: ObservableObject {
         showsDetails = defaults.bool(forKey: ShowDetails.key)
         findsSessions = defaults.object(forKey: Keys.findsSessions) as? Bool ?? true
         zoom = Zoom.stored(defaults.object(forKey: Keys.zoom))
+        updates = UpdateState(
+            isOn: defaults.object(forKey: Keys.checksForUpdates) as? Bool ?? true,
+            lastChecked: defaults.object(forKey: Keys.lastUpdateCheck) as? Date)
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =
@@ -162,7 +187,9 @@ final class AppModel: ObservableObject {
             let defaults = UserDefaults(suiteName: "AgentOvertimeTests-\(getpid())")!
             // Tests send their own made-up sessions; this Mac's real ones stay out.
             defaults.set(false, forKey: Keys.findsSessions)
-            model = AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
+            model = AppModel(
+                supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults,
+                askLatest: { _ in .failed })
         } else {
             model = AppModel(supportFolder: Paths.supportFolder(), socketPath: Paths.socket(), defaults: .standard)
         }
@@ -187,12 +214,36 @@ final class AppModel: ObservableObject {
         }
         // Right away, so sessions already running show within the first seconds; then on the 5 s tick only.
         lookForSessions()
+        askForUpdate()
     }
 
     /// One look at this Mac's Claude Code processes, on the 5 s tick (never more often, window shown or not).
     func lookForSessions() {
         guard findsSessions, ticker != nil else { return }
         receive(found: finder.look())
+    }
+
+    /// One question to GitHub when one is due, from the app opening, the 5 s tick or the Settings switch. Only while
+    /// listening: models made by tests never reach the network.
+    func askForUpdate(at now: Date = Date()) {
+        // Assign only when one goes out: every assignment redraws everything that watches the model.
+        var asking = updates
+        guard ticker != nil, let current = ReleaseVersion(tag: Release.tag), asking.begin(at: now) else { return }
+        updates = asking
+        updateTask = Task { [askLatest] in
+            let outcome = await askLatest(current)
+            if !Task.isCancelled { receive(update: outcome) }
+        }
+    }
+
+    func receive(update outcome: UpdateCheck.Outcome, at now: Date = Date()) {
+        updates.finish(outcome, at: now)
+        defaults.set(updates.lastChecked, forKey: Keys.lastUpdateCheck)
+    }
+
+    /// Update and What's New: the release's page in the browser.
+    func openRelease(_ version: ReleaseVersion) {
+        NSWorkspace.shared.open(UpdateCheck.releaseURL(version))
     }
 
     var shouldShowWelcome: Bool { !everConnected && !welcomeDismissed }
@@ -237,6 +288,7 @@ final class AppModel: ObservableObject {
             bookMeeting()
         }
         lookForSessions()
+        askForUpdate()
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }
