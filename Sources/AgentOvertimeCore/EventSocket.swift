@@ -15,6 +15,15 @@ public enum EventClient {
         // One short line fits the socket buffer, so a single non-blocking write either goes or is dropped.
         return line.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) } == line.count
     }
+
+    /// Whether an app is listening at `path`. Connecting and closing sends nothing, and the listener drops it.
+    public static func isListening(at path: String) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        guard var address = UnixAddress(path) else { return false }
+        return address.withSockaddr({ connect(fd, $0, $1) }) == 0
+    }
 }
 
 /// Listens on a unix socket that only this user can open, and hands each valid event to `onEvent`

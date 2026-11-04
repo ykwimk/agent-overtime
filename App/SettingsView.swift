@@ -1,9 +1,35 @@
 import SwiftUI
 
+/// What to do with the three lines just copied, and the two that bring the plugin back if they stop partway.
+struct ConnectUpdateNote: View {
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Copied. Paste into Claude Code, then restart the sessions you have open.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("If it stops partway and the connection is lost, paste these two lines:")
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(.secondary)
+            Text(verbatim: Release.connectCommands)
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            Button("Copy These Two Lines") { Self.copy(Release.connectCommands) }
+        }
+        .font(.callout)
+        .lineLimit(nil)
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var editing = false
     @State private var copied = false
+    @State private var copiedUpdate = false
     @State private var confirmRemove = false
 
     private var version: String {
@@ -40,10 +66,18 @@ struct SettingsView: View {
                     NSPasteboard.general.setString(Release.connectCommands, forType: .string)
                     copied = true
                 }
+                Text("For the first connection on this Mac.").font(.callout).foregroundStyle(.secondary)
                 if copied {
                     Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(
                         .secondary)
                 }
+                Button("Copy Connection Update Commands") {
+                    ConnectUpdateNote.copy(Release.connectUpdateCommands)
+                    copiedUpdate = true
+                }
+                Text("After updating the app, moves the connection to this version.").font(.callout).foregroundStyle(
+                    .secondary)
+                if copiedUpdate { ConnectUpdateNote() }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
                 Toggle("Find Sessions Without the Plugin", isOn: $model.findsSessions)
@@ -129,6 +163,19 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Check for Updates", isOn: $model.checksForUpdates)
+                    .disabled(model.updates.isDownloading)
+                Text(
+                    "Asks GitHub for the latest version number when the app opens and once a day. The app makes no other requests on its own. As with any web request, GitHub sees your IP address and this app's version."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
+                if model.updates.isOn { updateStatus }
+            } header: {
+                Text("Updates")
+            }
+
+            Section {
                 LabeledContent {
                     Text(verbatim: version)
                 } label: {
@@ -196,6 +243,46 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You can set it up again with Start Work at any time.")
+        }
+    }
+
+    @ViewBuilder private var updateStatus: some View {
+        switch model.updates.result {
+        case nil:
+            Text("Checking…").foregroundStyle(.secondary)
+        case .upToDate:
+            Text("You're up to date").foregroundStyle(.secondary)
+        case .failed:
+            if let date = model.updates.lastChecked {
+                Text("Last checked \(Text(date, format: .relative(presentation: .named)))").foregroundStyle(.secondary)
+            } else {
+                Text("Couldn't check yet").foregroundStyle(.secondary)
+            }
+        case .available(let version):
+            Text("\(version.number) is available")
+            if model.updates.isInTerminal {
+                Text("Updating in Terminal. You may need to allow it after.").foregroundStyle(.secondary)
+            } else if model.updates.isDownloading {
+                Text("Downloading the new version…").foregroundStyle(.secondary)
+            } else if let failure = model.updates.shownFailure {
+                UpdateFailureLine(failure: failure)
+            } else if model.canUpdateHere {
+                HStack {
+                    Button("Update") { model.startUpdate(version) }
+                    Button("What's New") { model.openRelease(version) }
+                }
+                if model.updatesWithHomebrew {
+                    Text(
+                        "After updating, you may need to allow the new version in System Settings, as on first install."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
+                }
+            } else {
+                Button("Open Download Page") { model.openRelease(version) }
+                Text("The app can't replace itself here. Download the new version and put it in Applications.")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.callout).foregroundStyle(.secondary)
+            }
         }
     }
 }

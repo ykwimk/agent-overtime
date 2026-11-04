@@ -119,12 +119,45 @@ final class AppModel: ObservableObject {
     func zoomIn() { zoom = Zoom.step(from: zoom, by: 1) ?? zoom }
     func zoomOut() { zoom = Zoom.step(from: zoom, by: -1) ?? zoom }
 
+    /// New versions. Check for Updates (Settings > Updates) is on by default; off, nothing is ever asked.
+    @Published private(set) var updates: UpdateState
+    private let askLatest: @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome
+    private var updateTask: Task<Void, Never>?
+    private var installTask: Task<Void, Never>?
+    private let route: UpdateRoute
+    /// The version this run updated to, until the office bar's line is closed.
+    @Published var justUpdated: ReleaseVersion?
+
+    var updatesWithHomebrew: Bool {
+        if case .homebrew = route { return true }
+        return false
+    }
+
+    /// False where the app can't update itself: the buttons offer the download page from the start.
+    var canUpdateHere: Bool {
+        if case .page = route { return false }
+        return true
+    }
+
+    var checksForUpdates: Bool {
+        get { updates.isOn }
+        set {
+            defaults.set(newValue, forKey: Keys.checksForUpdates)
+            if !newValue { updateTask?.cancel() }
+            updates.turn(on: newValue)
+            askForUpdate()
+        }
+    }
+
     private enum Keys {
         static let approved = "approvedStartFingerprint"
         static let everConnected = "everConnected"
         static let welcomeDismissed = "welcomeDismissed"
         static let findsSessions = "findsSessions"
         static let zoom = "zoom"
+        static let checksForUpdates = "checksForUpdates"
+        static let lastUpdateCheck = "lastUpdateCheck"
+        static let lastRunVersion = "lastRunVersion"
     }
 
     static let hooksURL = URL(
@@ -133,10 +166,17 @@ final class AppModel: ObservableObject {
         string: "https://github.com/\(Release.repository)/blob/\(Release.tag)/App/Art/CREDITS.txt")!
     static let repositoryURL = URL(string: "https://github.com/\(Release.repository)")!
 
-    init(supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath)
-    {
+    init(
+        supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath,
+        askLatest: @escaping @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome = {
+            await UpdateCheck.ask(current: $0)
+        },
+        route: UpdateRoute = .page
+    ) {
         self.socketPath = socketPath
         self.defaults = defaults
+        self.askLatest = askLatest
+        self.route = route
         configURL = URL(fileURLWithPath: supportFolder).appendingPathComponent("config.json")
         location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
         everConnected = defaults.bool(forKey: Keys.everConnected)
@@ -146,6 +186,18 @@ final class AppModel: ObservableObject {
         showsDetails = defaults.bool(forKey: ShowDetails.key)
         findsSessions = defaults.object(forKey: Keys.findsSessions) as? Bool ?? true
         zoom = Zoom.stored(defaults.object(forKey: Keys.zoom))
+        updates = UpdateState(
+            isOn: defaults.object(forKey: Keys.checksForUpdates) as? Bool ?? true,
+            lastChecked: defaults.object(forKey: Keys.lastUpdateCheck) as? Date)
+
+        if let running = ReleaseVersion(tag: Release.tag) {
+            let last = defaults.string(forKey: Keys.lastRunVersion).flatMap { ReleaseVersion(tag: $0) }
+            // No number yet but connected before: updated by hand from a version that didn't keep one.
+            let connectedBefore = defaults.bool(forKey: Keys.everConnected)
+            if let last, last < running { justUpdated = running }
+            if last == nil, connectedBefore { justUpdated = running }
+            defaults.set(running.tag, forKey: Keys.lastRunVersion)
+        }
 
         try? EventServer.prepareFolder(supportFolder)
         let stored =
@@ -162,9 +214,23 @@ final class AppModel: ObservableObject {
             let defaults = UserDefaults(suiteName: "AgentOvertimeTests-\(getpid())")!
             // Tests send their own made-up sessions; this Mac's real ones stay out.
             defaults.set(false, forKey: Keys.findsSessions)
-            model = AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
+            model = AppModel(
+                supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults,
+                askLatest: { _ in .failed })
         } else {
-            model = AppModel(supportFolder: Paths.supportFolder(), socketPath: Paths.socket(), defaults: .standard)
+            let bundlePath = Bundle.main.bundlePath
+            let support = Paths.supportFolder()
+            let socket = Paths.socket()
+            let location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
+            let route: UpdateRoute
+            if HomebrewUpdate.manages(location: location) {
+                route = .homebrew(.live(bundlePath: bundlePath, scriptFolder: URL(fileURLWithPath: support)))
+            } else if let place = AppPlace(bundlePath: bundlePath, location: location) {
+                route = .selfUpdate(.live(SelfUpdate(place: place), socketPath: socket))
+            } else {
+                route = .page
+            }
+            model = AppModel(supportFolder: support, socketPath: socket, defaults: .standard, route: route)
         }
         model.listen()
         live = model
@@ -179,6 +245,8 @@ final class AppModel: ObservableObject {
         do {
             try server.start()
             self.server = server
+            // Listening proves this app runs, so what an update left beside it can go.
+            if case .selfUpdate(let selfUpdate) = route { selfUpdate.removeCopy() }
         } catch {
             serverFailed = true
         }
@@ -187,12 +255,152 @@ final class AppModel: ObservableObject {
         }
         // Right away, so sessions already running show within the first seconds; then on the 5 s tick only.
         lookForSessions()
+        askForUpdate()
     }
 
     /// One look at this Mac's Claude Code processes, on the 5 s tick (never more often, window shown or not).
     func lookForSessions() {
         guard findsSessions, ticker != nil else { return }
         receive(found: finder.look())
+    }
+
+    /// One question to GitHub when one is due, from the app opening, the 5 s tick or the Settings switch. Only while
+    /// listening: models made by tests never reach the network.
+    func askForUpdate(at now: Date = Date()) {
+        // Assign only when one goes out: every assignment redraws everything that watches the model.
+        var asking = updates
+        guard ticker != nil, let current = ReleaseVersion(tag: Release.tag), asking.begin(at: now) else { return }
+        updates = asking
+        updateTask = Task { [askLatest] in
+            let outcome = await askLatest(current)
+            if !Task.isCancelled { receive(update: outcome) }
+        }
+    }
+
+    func receive(update outcome: UpdateCheck.Outcome, at now: Date = Date()) {
+        updates.finish(outcome, at: now)
+        defaults.set(updates.lastChecked, forKey: Keys.lastUpdateCheck)
+    }
+
+    /// What's New, and Update where the app can't update itself: the release's page in the browser.
+    func openRelease(_ version: ReleaseVersion) {
+        NSWorkspace.shared.open(UpdateCheck.releaseURL(version))
+    }
+
+    func openRepository() {
+        NSWorkspace.shared.open(Self.repositoryURL)
+    }
+
+    /// The Update button. Only a person's press starts this, and only once at a time.
+    func startUpdate(_ version: ReleaseVersion) {
+        guard let current = ReleaseVersion(tag: Release.tag) else {
+            openRelease(version)
+            return
+        }
+        switch route {
+        case .page:
+            openRelease(version)
+        case .homebrew(let homebrew):
+            startInTerminal(homebrew, current: current)
+        case .selfUpdate(let selfUpdate):
+            guard updates.beginDownload() else { return }
+            Self.announce(String(localized: "Downloading the new version…"))
+            installTask = Task {
+                let failure = await install(version, current: current, with: selfUpdate)
+                updates.endDownload(failure)
+                if let failure { Self.announce(failure.spoken) }
+            }
+        }
+    }
+
+    /// Asks GitHub again first: a line that stayed up is no permission to install a release since withdrawn. Then the
+    /// order that keeps a working app at the path: swap, let go of the socket, open the new app, and only when it has
+    /// taken the socket delete the old one and quit. If it never does, the old app comes back.
+    private func install(
+        _ version: ReleaseVersion, current: ReleaseVersion, with selfUpdate: SelfUpdateRoute
+    ) async -> UpdateFailure? {
+        let answer = await askLatest(current)
+        guard answer != .failed else { return .network }
+        guard case .newer(let latest) = answer, latest >= version else {
+            receive(update: answer)
+            return nil
+        }
+        receive(update: answer)
+        if let failure = await selfUpdate.prepare(latest, current) { return failure }
+
+        save()
+        guard selfUpdate.swap() else {
+            selfUpdate.removeCopy()
+            return .install
+        }
+        server?.stop()
+        var opened: NSRunningApplication?
+        var couldNotOpen = false
+        var gaveUp = false
+        selfUpdate.open { [weak self] app in
+            opened = app
+            couldNotOpen = app == nil
+            // macOS answered after the wait ended. The app it opened may have taken the socket from this one.
+            if gaveUp, let app {
+                selfUpdate.stopNewApp(app)
+                self?.server?.stop()
+                try? self?.server?.start()
+            }
+        }
+        let deadline = Date() + selfUpdate.patience
+        while Date() < deadline, !couldNotOpen {
+            if selfUpdate.isListening() {
+                selfUpdate.removeCopy()
+                selfUpdate.quit()
+                return nil
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        gaveUp = true
+        if let opened { selfUpdate.stopNewApp(opened) }
+        // If this fails the new app stays at the path and the old one beside it: the next launch sorts that out.
+        if selfUpdate.swap() { selfUpdate.removeCopy() }
+        try? server?.start()
+        return .install
+    }
+
+    private func startInTerminal(_ homebrew: HomebrewRoute, current: ReleaseVersion) {
+        guard !updates.isInTerminal else { return }
+        // Already on disk: brew finished after the wait for it ended.
+        if let installed = homebrew.installedVersion(), installed > current {
+            reopen(homebrew)
+            return
+        }
+        guard updates.beginTerminal(at: Date()) else { return }
+        Self.announce(String(localized: "Updating in Terminal. You may need to allow it after."))
+        homebrew.openTerminal { [weak self] error in
+            guard error != nil else { return }
+            self?.updates.endTerminal(.install)
+            Self.announce(UpdateFailure.install.spoken)
+        }
+    }
+
+    /// On the 5 s tick while Terminal runs: brew leaves this process running with the new app on disk.
+    func followUpdate(at now: Date = Date()) {
+        guard updates.isInTerminal, case .homebrew(let homebrew) = route,
+            let current = ReleaseVersion(tag: Release.tag)
+        else { return }
+        var followed = updates
+        let isReady = followed.follow(installed: homebrew.installedVersion(), current: current, at: now)
+        if followed != updates { updates = followed }
+        if isReady { reopen(homebrew) }
+    }
+
+    /// The socket goes first: stopping unlinks the path, which after the new app opened would be the new app's. The
+    /// new app may be blocked by macOS; this one quits anyway (the Terminal window says what to do), because with it
+    /// running at that path, allowing the new app could only bring this one forward.
+    private func reopen(_ homebrew: HomebrewRoute) {
+        save()
+        server?.stop()
+        if !homebrew.reopen() {
+            try? server?.start()
+            updates.endTerminal()
+        }
     }
 
     var shouldShowWelcome: Bool { !everConnected && !welcomeDismissed }
@@ -237,6 +445,8 @@ final class AppModel: ObservableObject {
             bookMeeting()
         }
         lookForSessions()
+        askForUpdate()
+        followUpdate()
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }
@@ -366,6 +576,22 @@ final class AppModel: ObservableObject {
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
         } catch {
             // Saving is best effort: the office still works from memory.
+        }
+    }
+}
+
+extension UpdateFailure {
+    /// What VoiceOver reads when the office bar shows this failure (same keys as UpdateFailureLine).
+    var spoken: String {
+        switch self {
+        case .network:
+            return String(localized: "Couldn't update. This app is unchanged. Please check your internet connection.")
+        case .install:
+            return String(
+                localized: "Couldn't update. This app is unchanged. The new version couldn't be installed.")
+        case .unverified:
+            return String(
+                localized: "This version couldn't be verified, so it wasn't installed. This app is unchanged.")
         }
     }
 }

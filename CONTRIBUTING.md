@@ -9,7 +9,7 @@ Thanks for helping. Agent Overtime is maintained by one person; we'll reply as s
 
 - One change per pull request. Title: `<type>: <summary>`, where type is `feat`, `fix`, `docs`, `refactor`, `test`, `style`, `perf`, `build` or `chore`. Example: `fix: empty office after waking from sleep`. Pull requests are squash-merged, so the title becomes the commit on main.
 - If you change the README, change both files: `README.md` (English) and `README.ko.md` (Korean). A test checks that they keep the same sections and commands.
-- No new dependencies, and no network access in the app.
+- No new dependencies. The only network access in the app is the update check and the download after the user clicks Update.
 - Code comments in English.
 
 ## Before you open one

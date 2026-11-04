@@ -29,6 +29,9 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            versionLine
+            updateRow
+            Divider().padding(.vertical, 4)
             sessions.padding(.vertical, 6)
             Divider().padding(.vertical, 4)
             MenuRow(title: "Open Office", shortcut: "⌘O") { show("office") }
@@ -42,6 +45,40 @@ struct MenuContent: View {
         }
         .padding(.vertical, 6)
         .frame(width: 300)
+    }
+
+    /// The checked number of this release, in the same words whatever the language.
+    @ViewBuilder private var versionLine: some View {
+        if let version = ReleaseVersion(tag: Release.tag) {
+            Text(verbatim: "Agent Overtime \(version.number)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 15)
+                .padding(.vertical, 3)
+        }
+    }
+
+    @ViewBuilder private var updateRow: some View {
+        let updates = model.updates
+        if updates.isInTerminal {
+            Text("Updating in Terminal. You may need to allow it after.").foregroundStyle(.secondary).padding(
+                .horizontal, 15
+            ).padding(.vertical, 3)
+        } else if updates.isDownloading {
+            Text("Downloading the new version…").foregroundStyle(.secondary).padding(.horizontal, 15).padding(
+                .vertical, 3)
+        } else if updates.shownFailure == .unverified {
+            MenuRow(title: "This version wasn't verified — See Repository News") { model.openRepository() }
+        } else if let version = updates.newVersion {
+            if updates.shownFailure != nil || !model.canUpdateHere {
+                MenuRow(title: "New version available — Open Download Page") { model.openRelease(version) }
+            } else {
+                MenuRow(title: "New version available — Update") {
+                    model.startUpdate(version)
+                    if model.updates.isInTerminal || model.updates.isDownloading { show("office") }
+                }
+            }
+        }
     }
 
     @ViewBuilder private var sessions: some View {

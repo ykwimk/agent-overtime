@@ -28,6 +28,9 @@
 		AC0000000000000000000205 /* Paths.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000205 /* Paths.swift */; };
 		AC0000000000000000000206 /* StartCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000206 /* StartCommand.swift */; };
 		AC0000000000000000000207 /* OfficePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000207 /* OfficePlan.swift */; };
+		AC0000000000000000000208 /* UpdateCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000208 /* UpdateCheck.swift */; };
+		AC0000000000000000000209 /* HomebrewUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000209 /* HomebrewUpdate.swift */; };
+		AC000000000000000000020A /* SelfUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000020A /* SelfUpdate.swift */; };
 		AC0000000000000000000502 /* agent-overtime-hook in Embed Helper */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000502 /* agent-overtime-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		AD0000000000000000000201 /* EventSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000201 /* EventSocket.swift */; };
 		AD0000000000000000000203 /* HookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000203 /* HookEvent.swift */; };
@@ -36,6 +39,7 @@
 		AE0000000000000000000401 /* CaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000401 /* CaptureTests.swift */; };
 		AE0000000000000000000402 /* WalkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000402 /* WalkTests.swift */; };
 		AE0000000000000000000403 /* PanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000403 /* PanelTests.swift */; };
+		AE0000000000000000000404 /* UpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000404 /* UpdateTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -91,10 +95,14 @@
 		AB0000000000000000000205 /* Paths.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paths.swift; sourceTree = "<group>"; };
 		AB0000000000000000000206 /* StartCommand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartCommand.swift; sourceTree = "<group>"; };
 		AB0000000000000000000207 /* OfficePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficePlan.swift; sourceTree = "<group>"; };
+		AB0000000000000000000208 /* UpdateCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheck.swift; sourceTree = "<group>"; };
+		AB0000000000000000000209 /* HomebrewUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomebrewUpdate.swift; sourceTree = "<group>"; };
+		AB000000000000000000020A /* SelfUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfUpdate.swift; sourceTree = "<group>"; };
 		AB0000000000000000000301 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AB0000000000000000000401 /* CaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000402 /* WalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000403 /* PanelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelTests.swift; sourceTree = "<group>"; };
+		AB0000000000000000000404 /* UpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000501 /* AgentOvertime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AgentOvertime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000502 /* agent-overtime-hook */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "agent-overtime-hook"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB0000000000000000000503 /* AgentOvertimeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AgentOvertimeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -177,6 +185,9 @@
 				AB0000000000000000000205 /* Paths.swift */,
 				AB0000000000000000000206 /* StartCommand.swift */,
 				AB0000000000000000000207 /* OfficePlan.swift */,
+				AB0000000000000000000208 /* UpdateCheck.swift */,
+				AB0000000000000000000209 /* HomebrewUpdate.swift */,
+				AB000000000000000000020A /* SelfUpdate.swift */,
 			);
 			name = AgentOvertimeCore;
 			path = Sources/AgentOvertimeCore;
@@ -196,6 +207,7 @@
 				AB0000000000000000000401 /* CaptureTests.swift */,
 				AB0000000000000000000402 /* WalkTests.swift */,
 				AB0000000000000000000403 /* PanelTests.swift */,
+				AB0000000000000000000404 /* UpdateTests.swift */,
 			);
 			path = AppTests;
 			sourceTree = "<group>";
@@ -342,6 +354,9 @@
 				AC0000000000000000000205 /* Paths.swift in Sources */,
 				AC0000000000000000000206 /* StartCommand.swift in Sources */,
 				AC0000000000000000000207 /* OfficePlan.swift in Sources */,
+				AC0000000000000000000208 /* UpdateCheck.swift in Sources */,
+				AC0000000000000000000209 /* HomebrewUpdate.swift in Sources */,
+				AC000000000000000000020A /* SelfUpdate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -363,6 +378,7 @@
 				AE0000000000000000000401 /* CaptureTests.swift in Sources */,
 				AE0000000000000000000402 /* WalkTests.swift in Sources */,
 				AE0000000000000000000403 /* PanelTests.swift in Sources */,
+				AE0000000000000000000404 /* UpdateTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -401,7 +417,7 @@
 				GCC_OPTIMIZATION_LEVEL = 0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -428,7 +444,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.5.0;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;

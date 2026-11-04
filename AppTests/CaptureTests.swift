@@ -72,8 +72,10 @@ final class CaptureTests: XCTestCase {
     }
 
     /// One session for each count, with that many teammates.
-    private func team(_ teammates: [Int], at now: Date, folders: [String]? = nil) -> AppModel {
-        let model = makeModel(connected: true)
+    private func team(
+        _ teammates: [Int], at now: Date, folders: [String]? = nil, route: UpdateRoute = .page
+    ) -> AppModel {
+        let model = makeModel(connected: true, route: route)
         let names = ["Explore", "Plan", "code-reviewer", nil, "general-purpose"]
         let folders =
             folders ?? ["my-project", "web-app", "blog", "api", "docs", "design", "shop", "mobile-app", "landing"]
@@ -1425,6 +1427,137 @@ final class CaptureTests: XCTestCase {
                 .environmentObject(configured))
     }
 
+    /// A new version in the office bar and the menu, at every window size; then each state of Settings > Updates.
+    func testCaptureUpdates() throws {
+        let now = today(14)
+        let newer = UpdateCheck.Outcome.newer(try XCTUnwrap(ReleaseVersion(tag: "v0.5.1")))
+        let route = selfUpdateRoute(failing: .network)
+        let busy = team([3, 1], at: now, route: route)
+        busy.receive(update: newer)
+        XCTAssertTrue(busy.canUpdateHere, "a real install, not the can't-update-here state")
+        let office = { OfficeView(fixedNow: now).environmentObject(busy) }
+        try capture("update-office", size: OfficeView.defaultSize, office())
+        try capture("update-office-1176", size: CGSize(width: 1176, height: OfficeView.defaultSize.height), office())
+        try capture("update-office-min", size: OfficeView.minSize, office())
+        try capture(
+            "update-office-panel", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(busy, slot: 0, index: 0)).environmentObject(busy))
+        try capture("update-menu", MenuContent(fixedNow: now).environmentObject(busy))
+
+        func settings(_ name: String, _ prepare: (AppModel) -> Void) throws {
+            let model = makeModel(connected: true, route: route)
+            prepare(model)
+            try capture("settings-update-\(name)", SettingsView().environmentObject(model))
+        }
+        try settings("checking") { _ in }
+        try settings("latest") { $0.receive(update: .upToDate) }
+        try settings("new") { $0.receive(update: newer) }
+        try settings("off") { $0.checksForUpdates = false }
+        try settings("never-answered") { $0.receive(update: .failed) }
+        try settings("offline") {
+            $0.receive(update: .upToDate, at: Date() - 3 * 24 * 60 * 60)
+            $0.receive(update: .failed)
+        }
+    }
+
+    /// Update with Homebrew: the note in Settings before it starts, then Terminal running, everywhere it shows.
+    func testCaptureUpdateInTerminal() throws {
+        let now = today(14)
+        let version = try XCTUnwrap(ReleaseVersion(tag: "v0.5.1"))
+        let route = UpdateRoute.homebrew(
+            HomebrewRoute(openTerminal: { _ in }, installedVersion: { nil }, reopen: { false }))
+        let ready = makeModel(connected: true, route: route)
+        ready.receive(update: .newer(version))
+        try capture("settings-update-homebrew", SettingsView().environmentObject(ready))
+
+        let running = makeModel(connected: true, route: route)
+        for event in FakeScenario.events { running.receive(event, at: now - 200) }
+        running.receive(update: .newer(version))
+        running.startUpdate(version)
+        XCTAssertTrue(running.updates.isInTerminal)
+        try capture(
+            "update-terminal", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(running))
+        try capture(
+            "update-terminal-min", size: OfficeView.minSize, OfficeView(fixedNow: now).environmentObject(running))
+        try capture(
+            "update-terminal-1176", size: CGSize(width: 1176, height: 760),
+            OfficeView(fixedNow: now).environmentObject(running))
+        try capture(
+            "update-terminal-panel", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(running, slot: 0, index: 0)).environmentObject(running))
+        try capture("update-terminal-menu", MenuContent(fixedNow: now).environmentObject(running))
+        try capture("settings-update-terminal", SettingsView().environmentObject(running))
+    }
+
+    /// A stand-in for the app's own way of Update: only tests can make a model take it here.
+    private func selfUpdateRoute(failing failure: UpdateFailure) -> UpdateRoute {
+        .selfUpdate(
+            SelfUpdateRoute(
+                prepare: { _, _ in failure }, swap: { false }, removeCopy: {}, open: { _ in },
+                isListening: { false }, stopNewApp: { _ in }, quit: {}))
+    }
+
+    /// Update on the app's own way, in each state and at every window size, with Settings for each.
+    func testCaptureSelfUpdate() throws {
+        let now = today(14)
+        let version = try XCTUnwrap(ReleaseVersion(tag: "v0.5.1"))
+
+        func office(
+            route: UpdateRoute = .page, askLatest: @escaping @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome
+        ) -> AppModel {
+            let model = makeModel(connected: true, route: route, askLatest: askLatest)
+            for event in FakeScenario.events { model.receive(event, at: now - 200) }
+            model.receive(update: .newer(version))
+            return model
+        }
+        func press(_ model: AppModel) {
+            model.startUpdate(version)
+            RunLoop.main.run(until: Date() + 0.2)
+        }
+
+        let downloading = office(route: selfUpdateRoute(failing: .network)) { _ in
+            try? await Task.sleep(nanoseconds: 600_000_000_000)
+            return .failed
+        }
+        press(downloading)
+        XCTAssertTrue(downloading.updates.isDownloading)
+
+        let failed = office(route: selfUpdateRoute(failing: .network)) { _ in .newer(version) }
+        press(failed)
+        XCTAssertEqual(failed.updates.shownFailure, .network)
+
+        let notPutInPlace = office(route: selfUpdateRoute(failing: .install)) { _ in .newer(version) }
+        press(notPutInPlace)
+        XCTAssertEqual(notPutInPlace.updates.shownFailure, .install)
+
+        let refused = office(route: selfUpdateRoute(failing: .unverified)) { _ in .newer(version) }
+        press(refused)
+        XCTAssertEqual(refused.updates.shownFailure, .unverified)
+
+        let page = office { _ in .failed }
+        XCTAssertFalse(page.canUpdateHere)
+
+        let updated = office(route: selfUpdateRoute(failing: .network)) { _ in .failed }
+        updated.receive(update: .upToDate)
+        updated.justUpdated = version
+
+        for (name, model) in [
+            ("downloading", downloading), ("failed", failed), ("failed-install", notPutInPlace),
+            ("unverified", refused), ("page", page), ("updated", updated),
+        ] {
+            let view = { OfficeView(fixedNow: now).environmentObject(model) }
+            try capture("update-\(name)", size: OfficeView.defaultSize, view())
+            try capture("update-\(name)-1176", size: CGSize(width: 1176, height: 760), view())
+            try capture("update-\(name)-min", size: OfficeView.minSize, view())
+            try capture(
+                "update-\(name)-panel", size: OfficeView.defaultSize,
+                OfficeView(fixedNow: now, panel: try panel(model, slot: 0, index: 0)).environmentObject(model))
+            try capture("update-\(name)-menu", MenuContent(fixedNow: now).environmentObject(model))
+            try capture("settings-update-\(name)", SettingsView().environmentObject(model))
+        }
+        try capture("update-connect-note", ConnectUpdateNote().padding(14).frame(width: 420))
+    }
+
     /// Start Work feedback, the inline "one more?" question, and the not-connected / idle variants.
     func testCaptureStatesAndErrors() throws {
         let later = Date() + 200
@@ -1506,7 +1639,10 @@ final class CaptureTests: XCTestCase {
 
     // MARK: helpers
 
-    private func makeModel(connected: Bool, start: StartCommand? = nil) -> AppModel {
+    private func makeModel(
+        connected: Bool, start: StartCommand? = nil, route: UpdateRoute = .page,
+        askLatest: @escaping @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome = { _ in .failed }
+    ) -> AppModel {
         let folder = (Paths.userTempFolder as NSString).appendingPathComponent("ao-cap-\(UUID().uuidString.prefix(8))")
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         if let start {
@@ -1515,7 +1651,10 @@ final class CaptureTests: XCTestCase {
         }
         let defaults = UserDefaults(suiteName: "ao-cap-\(UUID().uuidString)")!
         defaults.set(connected, forKey: "everConnected")
-        return AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
+        defaults.set(Release.tag, forKey: "lastRunVersion")
+        return AppModel(
+            supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults, askLatest: askLatest,
+            route: route)
     }
 
     /// Light and dark, English and Korean.
