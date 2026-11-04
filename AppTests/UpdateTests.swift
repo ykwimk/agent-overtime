@@ -228,6 +228,7 @@ final class SelfUpdateModelTests: XCTestCase {
         var listens = true
         var socket = ""
         var socketGoneAtOpen = false
+        var lateAnswer: ((NSRunningApplication?) -> Void)?
     }
 
     private let version = ReleaseVersion(tag: "v99.0.0")!
@@ -256,8 +257,10 @@ final class SelfUpdateModelTests: XCTestCase {
                     fake.log.append("open")
                     fake.socketGoneAtOpen = !FileManager.default.fileExists(atPath: fake.socket)
                     if !fake.opens { completion(nil) }
+                    fake.lateAnswer = { app in Task { @MainActor in completion(app) } }
                 },
                 isListening: { fake.listens },
+                stopNewApp: { _ in fake.log.append("stop new app") },
                 quit: { fake.log.append("quit") },
                 patience: 0.3))
         let model = AppModel(
@@ -300,6 +303,37 @@ final class SelfUpdateModelTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fake.socket), "listening again")
     }
 
+    func testANewAppThatOpensAfterTheWaitIsStoppedAndTheSocketIsTakenBack() async throws {
+        let fake = Fake()
+        fake.listens = false
+        let model = model(fake)
+        model.listen()
+        model.startUpdate(version)
+        await finish(model)
+        XCTAssertEqual(model.updates.shownFailure, .install)
+
+        // What the late app would do: take the path for itself.
+        try FileManager.default.removeItem(atPath: fake.socket)
+        let late = EventServer(path: fake.socket) { _ in }
+        try late.start()
+        fake.log = []
+        fake.lateAnswer?(NSRunningApplication.current)
+        for _ in 0..<20 { await Task.yield() }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(fake.log, ["stop new app"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fake.socket))
+    }
+
+    func testANewAppThatAnswersInTimeIsLeftAlone() async {
+        let fake = Fake()
+        let model = model(fake)
+        model.startUpdate(version)
+        await finish(model)
+        fake.lateAnswer?(NSRunningApplication.current)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertFalse(fake.log.contains("stop new app"))
+    }
+
     func testIfTheNewAppWontOpenTheOldOneComesBackAtOnce() async {
         let fake = Fake()
         fake.opens = false
@@ -331,7 +365,7 @@ final class SelfUpdateModelTests: XCTestCase {
                         return swaps.count == 1
                     },
                     removeCopy: { fake.log.append("remove") }, open: { _ in }, isListening: { false },
-                    quit: { fake.log.append("quit") }, patience: 0.1)))
+                    stopNewApp: { _ in }, quit: { fake.log.append("quit") }, patience: 0.1)))
         model.receive(update: .newer(version))
         model.startUpdate(version)
         await finish(model)

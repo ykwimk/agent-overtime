@@ -56,6 +56,8 @@ struct SelfUpdateRoute {
     /// Whether the app that was just opened has taken the socket. This one let go of it first, so an answer can only
     /// come from the new app: past launch and macOS's checks, running this app's start-up code.
     var isListening: () -> Bool
+    /// Ends a new app the update gave up on.
+    var stopNewApp: (NSRunningApplication) -> Void
     var quit: () -> Void
     /// How long the new app has to take the socket before the old one comes back.
     var patience: TimeInterval = 30
@@ -76,6 +78,7 @@ struct SelfUpdateRoute {
                 }
             },
             isListening: { EventClient.isListening(at: socketPath) },
+            stopNewApp: { _ = $0.forceTerminate() },
             quit: { NSApp.terminate(nil) })
     }
 }

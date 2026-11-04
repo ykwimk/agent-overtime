@@ -336,9 +336,16 @@ final class AppModel: ObservableObject {
         server?.stop()
         var opened: NSRunningApplication?
         var couldNotOpen = false
-        selfUpdate.open { app in
+        var gaveUp = false
+        selfUpdate.open { [weak self] app in
             opened = app
             couldNotOpen = app == nil
+            // macOS answered after the wait ended. The app it opened may have taken the socket from this one.
+            if gaveUp, let app {
+                selfUpdate.stopNewApp(app)
+                self?.server?.stop()
+                try? self?.server?.start()
+            }
         }
         let deadline = Date() + selfUpdate.patience
         while Date() < deadline, !couldNotOpen {
@@ -349,7 +356,8 @@ final class AppModel: ObservableObject {
             }
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
-        opened?.forceTerminate()
+        gaveUp = true
+        if let opened { selfUpdate.stopNewApp(opened) }
         // If this fails the new app stays at the path and the old one beside it: the next launch sorts that out.
         if selfUpdate.swap() { selfUpdate.removeCopy() }
         try? server?.start()

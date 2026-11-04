@@ -1496,7 +1496,7 @@ final class CaptureTests: XCTestCase {
             .selfUpdate(
                 SelfUpdateRoute(
                     prepare: { _, _ in failure }, swap: { false }, removeCopy: {}, open: { _ in },
-                    isListening: { false }, quit: {}))
+                    isListening: { false }, stopNewApp: { _ in }, quit: {}))
         }
         func press(_ model: AppModel) {
             model.startUpdate(version)
