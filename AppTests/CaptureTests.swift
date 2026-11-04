@@ -72,8 +72,10 @@ final class CaptureTests: XCTestCase {
     }
 
     /// One session for each count, with that many teammates.
-    private func team(_ teammates: [Int], at now: Date, folders: [String]? = nil) -> AppModel {
-        let model = makeModel(connected: true)
+    private func team(
+        _ teammates: [Int], at now: Date, folders: [String]? = nil, route: UpdateRoute = .page
+    ) -> AppModel {
+        let model = makeModel(connected: true, route: route)
         let names = ["Explore", "Plan", "code-reviewer", nil, "general-purpose"]
         let folders =
             folders ?? ["my-project", "web-app", "blog", "api", "docs", "design", "shop", "mobile-app", "landing"]
@@ -1429,8 +1431,10 @@ final class CaptureTests: XCTestCase {
     func testCaptureUpdates() throws {
         let now = today(14)
         let newer = UpdateCheck.Outcome.newer(try XCTUnwrap(ReleaseVersion(tag: "v0.5.1")))
-        let busy = team([3, 1], at: now)
+        let route = selfUpdateRoute(failing: .network)
+        let busy = team([3, 1], at: now, route: route)
         busy.receive(update: newer)
+        XCTAssertTrue(busy.canUpdateHere, "a real install, not the can't-update-here state")
         let office = { OfficeView(fixedNow: now).environmentObject(busy) }
         try capture("update-office", size: OfficeView.defaultSize, office())
         try capture("update-office-1176", size: CGSize(width: 1176, height: OfficeView.defaultSize.height), office())
@@ -1441,7 +1445,7 @@ final class CaptureTests: XCTestCase {
         try capture("update-menu", MenuContent(fixedNow: now).environmentObject(busy))
 
         func settings(_ name: String, _ prepare: (AppModel) -> Void) throws {
-            let model = makeModel(connected: true)
+            let model = makeModel(connected: true, route: route)
             prepare(model)
             try capture("settings-update-\(name)", SettingsView().environmentObject(model))
         }
@@ -1479,6 +1483,14 @@ final class CaptureTests: XCTestCase {
         try capture("settings-update-terminal", SettingsView().environmentObject(running))
     }
 
+    /// A stand-in for the app's own way of Update: only tests can make a model take it here.
+    private func selfUpdateRoute(failing failure: UpdateFailure) -> UpdateRoute {
+        .selfUpdate(
+            SelfUpdateRoute(
+                prepare: { _, _ in failure }, swap: { false }, removeCopy: {}, open: { _ in },
+                isListening: { false }, stopNewApp: { _ in }, quit: {}))
+    }
+
     /// Update on the app's own way, in each state and at every window size, with Settings for each.
     func testCaptureSelfUpdate() throws {
         let now = today(14)
@@ -1492,40 +1504,34 @@ final class CaptureTests: XCTestCase {
             model.receive(update: .newer(version))
             return model
         }
-        func selfUpdate(failing failure: UpdateFailure) -> UpdateRoute {
-            .selfUpdate(
-                SelfUpdateRoute(
-                    prepare: { _, _ in failure }, swap: { false }, removeCopy: {}, open: { _ in },
-                    isListening: { false }, stopNewApp: { _ in }, quit: {}))
-        }
         func press(_ model: AppModel) {
             model.startUpdate(version)
             RunLoop.main.run(until: Date() + 0.2)
         }
 
-        let downloading = office(route: selfUpdate(failing: .network)) { _ in
+        let downloading = office(route: selfUpdateRoute(failing: .network)) { _ in
             try? await Task.sleep(nanoseconds: 600_000_000_000)
             return .failed
         }
         press(downloading)
         XCTAssertTrue(downloading.updates.isDownloading)
 
-        let failed = office(route: selfUpdate(failing: .network)) { _ in .newer(version) }
+        let failed = office(route: selfUpdateRoute(failing: .network)) { _ in .newer(version) }
         press(failed)
         XCTAssertEqual(failed.updates.shownFailure, .network)
 
-        let notPutInPlace = office(route: selfUpdate(failing: .install)) { _ in .newer(version) }
+        let notPutInPlace = office(route: selfUpdateRoute(failing: .install)) { _ in .newer(version) }
         press(notPutInPlace)
         XCTAssertEqual(notPutInPlace.updates.shownFailure, .install)
 
-        let refused = office(route: selfUpdate(failing: .unverified)) { _ in .newer(version) }
+        let refused = office(route: selfUpdateRoute(failing: .unverified)) { _ in .newer(version) }
         press(refused)
         XCTAssertEqual(refused.updates.shownFailure, .unverified)
 
         let page = office { _ in .failed }
         XCTAssertFalse(page.canUpdateHere)
 
-        let updated = office(route: selfUpdate(failing: .network)) { _ in .failed }
+        let updated = office(route: selfUpdateRoute(failing: .network)) { _ in .failed }
         updated.receive(update: .upToDate)
         updated.justUpdated = version
 
