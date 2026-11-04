@@ -41,4 +41,21 @@ final class ReadmeTests: XCTestCase {
             XCTAssertTrue(text.contains(Self.brewInstall), name)
         }
     }
+
+    /// What the documents promise about the network, in step with the app.
+    func testNetworkPromisesMatchTheApp() throws {
+        for name in ["README.md", "README.ko.md"] {
+            let text = try lines(name).joined(separator: "\n")
+            XCTAssertTrue(text.contains(UpdateCheck.latest.absoluteString), name)
+            XCTAssertTrue(text.contains("brew upgrade --cask ykwimk/tap/agent-overtime"), name)
+        }
+        let english = try lines("README.md").joined(separator: "\n")
+        XCTAssertFalse(english.contains("never checks for updates"))
+        XCTAssertFalse(english.contains("Network: none"))
+        let korean = try lines("README.ko.md").joined(separator: "\n")
+        XCTAssertFalse(korean.contains("업데이트를 확인하지 않습니다"))
+        XCTAssertFalse(korean.contains("네트워크: 없음"))
+        XCTAssertFalse(try lines("CONTRIBUTING.md").joined().contains("no network access"))
+        XCTAssertFalse(try lines("SECURITY.md").joined().contains("nothing over the network"))
+    }
 }

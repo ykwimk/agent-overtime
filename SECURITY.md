@@ -8,4 +8,4 @@ Please include what you found, how to reproduce it, and the versions of the app,
 
 Fixes go into the latest release only.
 
-For what the app reads, keeps and sends (nothing over the network), see [How it works](README.md#how-it-works).
+For what the app reads, keeps and sends (only the update check goes over the network), see [How it works](README.md#how-it-works).
