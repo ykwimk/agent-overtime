@@ -112,6 +112,16 @@ final class SelfUpdateTests: XCTestCase {
         let temp: String
     }
 
+    private func update(_ place: AppPlace, tempRoot: String) -> SelfUpdate {
+        SelfUpdate(
+            place: place, publicKey: Self.key.publicKey.rawRepresentation, tempRoot: tempRoot,
+            configuration: {
+                let configuration = UpdateCheck.downloadConfiguration
+                configuration.protocolClasses = [FakeReleases.self]
+                return configuration
+            })
+    }
+
     /// An app at 0.5.0 in a folder of its own, and an update aimed at it.
     private func stage() throws -> Stage {
         let home = try folder()
@@ -120,14 +130,7 @@ final class SelfUpdateTests: XCTestCase {
         let bundle = home + "/AgentOvertime.app"
         try makeApp(at: bundle, number: "0.5.0", signed: false)
         let place = try XCTUnwrap(AppPlace(checking: bundle))
-        let update = SelfUpdate(
-            place: place, publicKey: Self.key.publicKey.rawRepresentation, tempRoot: temp,
-            configuration: {
-                let configuration = UpdateCheck.downloadConfiguration
-                configuration.protocolClasses = [FakeReleases.self]
-                return configuration
-            })
-        return Stage(update: update, place: place, temp: temp)
+        return Stage(update: update(place, tempRoot: temp), place: place, temp: temp)
     }
 
     private func number(_ bundle: String) -> String? {
@@ -258,6 +261,40 @@ final class SelfUpdateTests: XCTestCase {
         XCTAssertEqual(missing, .unverified, "or the download page would lead to the unsigned file")
         let redirect = try await failure(dmg: .status(302), sig: .file(try signature(of: dmg)))
         XCTAssertEqual(redirect, .unverified)
+    }
+
+    /// The real temporary folder is under /var/folders, a link to /private/var/folders, while the system says the
+    /// image is mounted on the /private path: the two must still be seen as the same place.
+    func testTheImageIsClosedWhenTheTemporaryPathHasALink() async throws {
+        let dmg = try goodImage()
+        FakeReleases.replies = [dmgName: .file(dmg), sigName: .file(try signature(of: dmg))]
+        let stage = try stage()
+        let link = (stage.temp as NSString).deletingLastPathComponent + "/linked-temp"
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: stage.temp)
+        addTeardownBlock {
+            // Only does anything if the image stayed mounted.
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: stage.temp)) ?? [] {
+                try? runTool("/usr/bin/hdiutil", ["detach", stage.temp + "/" + name + "/m", "-force"])
+            }
+        }
+        let failure = await update(stage.place, tempRoot: link).prepare(version, current: current)
+        XCTAssertNil(failure)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: stage.temp), [], "closed, then deleted")
+    }
+
+    func testALinkAtTheCopysNameIsNeverFollowed() async throws {
+        let dmg = try goodImage()
+        FakeReleases.replies = [dmgName: .file(dmg), sigName: .file(try signature(of: dmg))]
+        let stage = try stage()
+        let elsewhere = (stage.temp as NSString).deletingLastPathComponent + "/elsewhere"
+        try FileManager.default.createDirectory(atPath: elsewhere, withIntermediateDirectories: true)
+        try Data([1]).write(to: URL(fileURLWithPath: elsewhere + "/mine"))
+        try FileManager.default.createSymbolicLink(atPath: stage.place.copy, withDestinationPath: elsewhere)
+        let failure = await stage.update.prepare(version, current: current)
+        XCTAssertEqual(failure, .install)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: elsewhere), ["mine"], "untouched")
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: stage.place.copy), elsewhere)
+        XCTAssertEqual(number(stage.place.bundle), "0.5.0", "the app stays")
     }
 
     func testAUsedNameIsCleared() async throws {

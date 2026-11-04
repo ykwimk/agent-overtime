@@ -110,8 +110,10 @@ public struct SelfUpdate: Sendable {
     /// they were.
     public func prepare(_ version: ReleaseVersion, current: ReleaseVersion) async -> UpdateFailure? {
         var template = Array((tempRoot as NSString).appendingPathComponent("AgentOvertime-update-XXXXXX").utf8CString)
-        guard mkdtemp(&template) != nil else { return .install }
-        let temp = String(cString: template)
+        // Resolved: the temporary folder's usual path goes through a link, and the system names mount points without it.
+        guard mkdtemp(&template) != nil, let resolved = realpath(template, nil) else { return .install }
+        defer { free(resolved) }
+        let temp = String(cString: resolved)
         let mountPoint = temp + "/m"
 
         var failure: UpdateFailure?
