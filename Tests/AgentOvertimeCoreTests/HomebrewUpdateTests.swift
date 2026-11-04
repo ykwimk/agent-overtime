@@ -293,9 +293,9 @@ final class HomebrewSourceTests: XCTestCase {
                 starts.append(file + ":" + line.trimmingCharacters(in: .whitespaces))
             }
         }
-        XCTAssertEqual(starts.count, 3, "\(starts)")
+        XCTAssertEqual(starts.count, 4, "\(starts)")
         for start in starts where !start.hasPrefix("MenuContent") {
-            XCTAssertTrue(start.contains("Button(\"Update\")"), start)
+            XCTAssertTrue(start.contains("Button(\"Update\")") || start.contains("Button(\"Try Again\")"), start)
         }
         XCTAssertFalse(try text("App/OfficeView.swift").contains("startUpdate(version) }.keyboardShortcut"))
     }

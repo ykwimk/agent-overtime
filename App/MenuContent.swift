@@ -31,15 +31,7 @@ struct MenuContent: View {
         VStack(alignment: .leading, spacing: 0) {
             sessions.padding(.vertical, 6)
             Divider().padding(.vertical, 4)
-            if model.updates.isInTerminal {
-                Text("Updating in Terminal…").foregroundStyle(.secondary).padding(.horizontal, 15).padding(
-                    .vertical, 3)
-            } else if let version = model.updates.newVersion {
-                MenuRow(title: "New version available — Update") {
-                    model.startUpdate(version)
-                    if model.updates.isInTerminal { show("office") }
-                }
-            }
+            updateRow
             MenuRow(title: "Open Office", shortcut: "⌘O") { show("office") }
             MenuRow(title: "Start Work", shortcut: "⇧⌘R") {
                 model.startWork()
@@ -51,6 +43,27 @@ struct MenuContent: View {
         }
         .padding(.vertical, 6)
         .frame(width: 300)
+    }
+
+    @ViewBuilder private var updateRow: some View {
+        let updates = model.updates
+        if updates.isInTerminal {
+            Text("Updating in Terminal…").foregroundStyle(.secondary).padding(.horizontal, 15).padding(.vertical, 3)
+        } else if updates.isDownloading {
+            Text("Downloading the new version…").foregroundStyle(.secondary).padding(.horizontal, 15).padding(
+                .vertical, 3)
+        } else if updates.shownFailure == .unverified {
+            MenuRow(title: "This version wasn't verified — Open Repository") { model.openRepository() }
+        } else if let version = updates.newVersion {
+            if updates.shownFailure != nil || !model.canUpdateHere {
+                MenuRow(title: "New version available — Open Download Page") { model.openRelease(version) }
+            } else {
+                MenuRow(title: "New version available — Update") {
+                    model.startUpdate(version)
+                    if model.updates.isInTerminal || model.updates.isDownloading { show("office") }
+                }
+            }
+        }
     }
 
     @ViewBuilder private var sessions: some View {

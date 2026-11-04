@@ -130,6 +130,7 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Check for Updates", isOn: $model.checksForUpdates)
+                    .disabled(model.updates.isDownloading)
                 Text(
                     "Asks GitHub for the latest version number when the app opens and once a day. The app makes no other requests on its own. As with any web request, GitHub sees your IP address and this app's version."
                 )
@@ -227,7 +228,11 @@ struct SettingsView: View {
             Text("\(version.number) is available")
             if model.updates.isInTerminal {
                 Text("Updating in Terminal…").foregroundStyle(.secondary)
-            } else {
+            } else if model.updates.isDownloading {
+                Text("Downloading the new version…").foregroundStyle(.secondary)
+            } else if let failure = model.updates.shownFailure {
+                UpdateFailureLine(failure: failure)
+            } else if model.canUpdateHere {
                 HStack {
                     Button("Update") { model.startUpdate(version) }
                     Button("What's New") { model.openRelease(version) }
@@ -236,6 +241,11 @@ struct SettingsView: View {
                     Text("After updating, allow the new version in System Settings, as on first install.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
+            } else {
+                Button("Open Download Page") { model.openRelease(version) }
+                Text("The app can't replace itself here. Download the new version and put it in Applications.")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .font(.callout).foregroundStyle(.secondary)
             }
         }
     }

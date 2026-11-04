@@ -38,6 +38,48 @@ enum Launcher {
     }
 }
 
+/// How Update works for this copy of the app. `page`: it can't replace itself here, so the buttons open the release's
+/// page (opened from Downloads, outside Applications, or in a folder this user can't write).
+enum UpdateRoute {
+    case homebrew(HomebrewRoute)
+    case selfUpdate(SelfUpdateRoute)
+    case page
+}
+
+/// The app's own way of Update, apart from the model so tests never replace, open or quit a real app.
+struct SelfUpdateRoute {
+    var prepare: @Sendable (ReleaseVersion, ReleaseVersion) async -> UpdateFailure?
+    var swap: () -> Bool
+    var removeCopy: () -> Void
+    /// Opens the app now at this path as a new instance; nil when it couldn't.
+    var open: (@escaping @MainActor (NSRunningApplication?) -> Void) -> Void
+    /// Whether the app that was just opened has taken the socket. This one let go of it first, so an answer can only
+    /// come from the new app: past launch and macOS's checks, running this app's start-up code.
+    var isListening: () -> Bool
+    var quit: () -> Void
+    /// How long the new app has to take the socket before the old one comes back.
+    var patience: TimeInterval = 30
+
+    static func live(_ update: SelfUpdate, socketPath: String) -> SelfUpdateRoute {
+        let place = update.place
+        return SelfUpdateRoute(
+            prepare: { await update.prepare($0, current: $1) },
+            swap: place.swap,
+            removeCopy: place.removeCopy,
+            open: { completion in
+                // This process still runs at this path: without a new instance macOS would only bring it forward.
+                let configuration = NSWorkspace.OpenConfiguration()
+                configuration.createsNewApplicationInstance = true
+                NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: place.bundle), configuration: configuration)
+                { app, _ in
+                    Task { @MainActor in completion(app) }
+                }
+            },
+            isListening: { EventClient.isListening(at: socketPath) },
+            quit: { NSApp.terminate(nil) })
+    }
+}
+
 /// Homebrew's part of Update, apart from the model so tests never open Terminal, read the real app or quit.
 struct HomebrewRoute {
     var openTerminal: (@escaping @MainActor (Error?) -> Void) -> Void

@@ -466,16 +466,35 @@ struct OfficeBar: View {
                         Text("Updating in Terminal…").foregroundStyle(.secondary)
                     }
                     .lineLimit(1)
+                } else if model.updates.isDownloading {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.mini)
+                        Text("Downloading the new version…").foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                } else if let failure = model.updates.shownFailure {
+                    UpdateFailureLine(failure: failure)
+                } else if let updated = model.justUpdated {
+                    HStack(spacing: 8) {
+                        Text("Updated to \(updated.number)").foregroundStyle(.secondary)
+                        Button {
+                            model.justUpdated = nil
+                        } label: {
+                            Image(systemName: "xmark").imageScale(.small)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(Text("Close"))
+                    }
+                    .lineLimit(1)
                 } else if let version = model.updates.newVersion {
                     HStack(spacing: 8) {
                         Text("New version available").foregroundStyle(.secondary)
-                        Button("Update") { model.startUpdate(version) }.buttonStyle(.link)
-                            .help(
-                                model.updatesWithHomebrew
-                                    ? Text(
-                                        "Only the app reopens; running sessions keep going. Allow the new version in System Settings afterward, as on first install."
-                                    ) : Text(verbatim: ""))
-                        Button("What's New") { model.openRelease(version) }.buttonStyle(.link)
+                        if model.canUpdateHere {
+                            Button("Update") { model.startUpdate(version) }.buttonStyle(.link).help(updateHelp)
+                            Button("What's New") { model.openRelease(version) }.buttonStyle(.link)
+                        } else {
+                            Button("Open Download Page") { model.openRelease(version) }.buttonStyle(.link)
+                        }
                     }
                     .lineLimit(1)
                 } else if model.asksToConnect {
@@ -493,10 +512,48 @@ struct OfficeBar: View {
         Button("Open Settings") { openWindow(id: "settings") }.buttonStyle(.link)
     }
 
+    private var updateHelp: Text {
+        model.updatesWithHomebrew
+            ? Text(
+                "Only the app reopens; running sessions keep going. Allow the new version in System Settings afterward, as on first install."
+            ) : Text("Only the app reopens; running sessions keep going.")
+    }
+
     private func message<Actions: View>(_ text: Text, color: Color, @ViewBuilder actions: () -> Actions) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             text.foregroundStyle(color).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) { actions() }
+        }
+    }
+}
+
+/// Why Update stopped, in the office bar and Settings. After a release that didn't prove itself there is no way back
+/// to its files from here: only the repository, where its news would be.
+struct UpdateFailureLine: View {
+    @EnvironmentObject private var model: AppModel
+    let failure: UpdateFailure
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            words.foregroundStyle(Style.waiting).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                if failure == .unverified {
+                    Button("Open Repository") { model.openRepository() }
+                } else if let version = model.updates.newVersion {
+                    Button("Try Again") { model.startUpdate(version) }
+                    Button("Open Download Page") { model.openRelease(version) }
+                }
+            }
+            .buttonStyle(.link)
+        }
+    }
+
+    private var words: Text {
+        switch failure {
+        case .network: return Text("Couldn't update. This app is unchanged. Please check your internet connection.")
+        case .install: return Text("Couldn't update. This app is unchanged. The new version couldn't be put in place.")
+        case .unverified:
+            return Text("This version couldn't be verified, so it wasn't installed. Check the repository for news.")
         }
     }
 }
