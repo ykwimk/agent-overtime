@@ -274,7 +274,7 @@ final class UpdateSourceTests: XCTestCase {
             }
         }
         let text = try XCTUnwrap(all[checker])
-        XCTAssertEqual(text.components(separatedBy: "URLSession(configuration").count - 1, 1, "one session")
+        XCTAssertEqual(text.components(separatedBy: "URLSession(configuration").count - 1, 2, "ask and download")
         XCTAssertEqual(text.components(separatedBy: "api.github.com").count - 1, 1, "one address")
     }
 

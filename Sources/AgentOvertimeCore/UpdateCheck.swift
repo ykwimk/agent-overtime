@@ -32,7 +32,8 @@ public struct ReleaseVersion: Comparable, Sendable {
     }
 }
 
-/// The app's only network request: one GET asking GitHub for the latest release, of which only the tag is read.
+/// The app's network use, all here: one GET asking GitHub for the latest release, of which only the tag is read, and,
+/// after a press of Update, the release's two files.
 public enum UpdateCheck {
     public enum Outcome: Equatable, Sendable {
         case newer(ReleaseVersion)
@@ -51,17 +52,25 @@ public enum UpdateCheck {
 
     static let latest = URL(string: "https://api.github.com/repos/\(Release.repository)/releases/latest")!
     static let maxResponse = 1 << 20
+    static let maxDMG: Int64 = 64 << 20
+    static let maxSignature: Int64 = 1 << 10
 
     /// The release's page. A link built from checked numbers, so nothing received ends up in a URL.
     public static func releaseURL(_ version: ReleaseVersion) -> URL {
         URL(string: "https://github.com/\(Release.repository)/releases/tag/\(version.tag)")!
     }
 
-    static func request(current: ReleaseVersion) -> URLRequest {
-        var request = URLRequest(url: latest)
+    /// The release's `.dmg`, or its `.sig`. Built from checked numbers too.
+    static func assetURL(_ version: ReleaseVersion, signature: Bool) -> URL {
+        let file = "AgentOvertime-\(version.number).dmg" + (signature ? ".sig" : "")
+        return URL(string: "https://github.com/\(Release.repository)/releases/download/\(version.tag)/\(file)")!
+    }
+
+    static func request(_ url: URL = latest, current: ReleaseVersion) -> URLRequest {
+        var request = URLRequest(url: url)
         request.httpShouldHandleCookies = false
         request.setValue("\(Paths.appName)/\(current.number)", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue(url == latest ? "application/vnd.github+json" : "*/*", forHTTPHeaderField: "Accept")
         // Fixed: URLSession would otherwise send the user's languages.
         request.setValue("en", forHTTPHeaderField: "Accept-Language")
         return request
@@ -78,6 +87,16 @@ public enum UpdateCheck {
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
+        return configuration
+    }
+
+    /// What SelfUpdate is given, so that the session stays in this file.
+    typealias Settings = @Sendable () -> URLSessionConfiguration
+
+    /// The same, with the five minutes a whole file may take.
+    static var downloadConfiguration: URLSessionConfiguration {
+        let configuration = configuration
+        configuration.timeoutIntervalForResource = 300
         return configuration
     }
 
@@ -107,6 +126,97 @@ public enum UpdateCheck {
         } catch {
             return .failed
         }
+    }
+
+    enum DownloadFailure: Error, Equatable {
+        case connection
+        case status(Int)
+        case tooLong
+        case file
+    }
+
+    /// GitHub sends a release's files on to its own storage: https, those hosts and three hops only.
+    static func allowsRedirect(to url: URL?, after hops: Int) -> Bool {
+        guard hops <= 3, let url, url.scheme == "https", url.port == nil, url.user == nil,
+            let host = url.host?.lowercased()
+        else { return false }
+        return host == "github.com" || host.hasSuffix(".githubusercontent.com")
+    }
+
+    /// Fetches one file to `file`, moved there as soon as it lands.
+    static func download(
+        _ url: URL, to file: URL, limit: Int64, current: ReleaseVersion, configuration: URLSessionConfiguration
+    ) async throws {
+        let download = Download(to: file, limit: limit)
+        let session = URLSession(configuration: configuration, delegate: download, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            download.continuation = continuation
+            session.downloadTask(with: request(url, current: current)).resume()
+        }
+    }
+}
+
+/// One file on its way. Its size is counted from the progress callback, and once more when it lands.
+final class Download: NSObject, URLSessionDownloadDelegate {
+    var continuation: CheckedContinuation<Void, Error>?
+    private let file: URL
+    private let limit: Int64
+    private var failure: UpdateCheck.DownloadFailure?
+    private var landed = false
+    private var hops = 0
+
+    init(to file: URL, limit: Int64) {
+        self.file = file
+        self.limit = limit
+    }
+
+    func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64
+    ) {
+        if max(totalBytesWritten, totalBytesExpectedToWrite) > limit {
+            failure = .tooLong
+            downloadTask.cancel()
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL
+    ) {
+        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            failure = .status(status)
+            return
+        }
+        do {
+            let size = try FileManager.default.attributesOfItem(atPath: location.path)[.size] as? NSNumber
+            guard let size, size.int64Value <= limit else {
+                failure = .tooLong
+                return
+            }
+            try FileManager.default.moveItem(at: location, to: file)
+            landed = true
+        } catch {
+            failure = .file
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if landed, failure == nil {
+            continuation?.resume()
+        } else {
+            continuation?.resume(throwing: failure ?? .connection)
+        }
+        continuation = nil
+    }
+
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        hops += 1
+        completionHandler(UpdateCheck.allowsRedirect(to: request.url, after: hops) ? request : nil)
     }
 }
 
@@ -141,6 +251,8 @@ public struct UpdateState: Equatable {
     private var isAsking = false
     private var terminalSince: Date?
     private var newerOnDisk = false
+    private var failure: UpdateFailure?
+    public private(set) var isDownloading = false
 
     public init(isOn: Bool, lastChecked: Date?, now: Date = Date()) {
         self.isOn = isOn
@@ -165,6 +277,20 @@ public struct UpdateState: Equatable {
     }
 
     public var isInTerminal: Bool { terminalSince != nil }
+    public var shownFailure: UpdateFailure? { isOn ? failure : nil }
+
+    /// A press of Update on the app's own way. False for a second press, and for a number refused this run.
+    public mutating func beginDownload() -> Bool {
+        guard newVersion != nil, !isDownloading, !isInTerminal, failure != .unverified else { return false }
+        isDownloading = true
+        failure = nil
+        return true
+    }
+
+    public mutating func endDownload(_ failure: UpdateFailure?) {
+        isDownloading = false
+        self.failure = failure
+    }
 
     /// A press of Update. False for a second press while one is running.
     public mutating func beginTerminal(at now: Date) -> Bool {
@@ -211,9 +337,11 @@ public struct UpdateState: Equatable {
         isAsking = false
         switch outcome {
         case .newer(let version):
+            if result != .available(version) { failure = nil }
             result = .available(version)
             lastChecked = now
         case .upToDate:
+            failure = nil
             result = .upToDate
             lastChecked = now
         case .failed:

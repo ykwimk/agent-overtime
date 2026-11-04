@@ -30,6 +30,7 @@
 		AC0000000000000000000207 /* OfficePlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000207 /* OfficePlan.swift */; };
 		AC0000000000000000000208 /* UpdateCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000208 /* UpdateCheck.swift */; };
 		AC0000000000000000000209 /* HomebrewUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000209 /* HomebrewUpdate.swift */; };
+		AC000000000000000000020A /* SelfUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000020A /* SelfUpdate.swift */; };
 		AC0000000000000000000502 /* agent-overtime-hook in Embed Helper */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000502 /* agent-overtime-hook */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		AD0000000000000000000201 /* EventSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000201 /* EventSocket.swift */; };
 		AD0000000000000000000203 /* HookEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000203 /* HookEvent.swift */; };
@@ -96,6 +97,7 @@
 		AB0000000000000000000207 /* OfficePlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficePlan.swift; sourceTree = "<group>"; };
 		AB0000000000000000000208 /* UpdateCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateCheck.swift; sourceTree = "<group>"; };
 		AB0000000000000000000209 /* HomebrewUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomebrewUpdate.swift; sourceTree = "<group>"; };
+		AB000000000000000000020A /* SelfUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelfUpdate.swift; sourceTree = "<group>"; };
 		AB0000000000000000000301 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		AB0000000000000000000401 /* CaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureTests.swift; sourceTree = "<group>"; };
 		AB0000000000000000000402 /* WalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkTests.swift; sourceTree = "<group>"; };
@@ -185,6 +187,7 @@
 				AB0000000000000000000207 /* OfficePlan.swift */,
 				AB0000000000000000000208 /* UpdateCheck.swift */,
 				AB0000000000000000000209 /* HomebrewUpdate.swift */,
+				AB000000000000000000020A /* SelfUpdate.swift */,
 			);
 			name = AgentOvertimeCore;
 			path = Sources/AgentOvertimeCore;
@@ -353,6 +356,7 @@
 				AC0000000000000000000207 /* OfficePlan.swift in Sources */,
 				AC0000000000000000000208 /* UpdateCheck.swift in Sources */,
 				AC0000000000000000000209 /* HomebrewUpdate.swift in Sources */,
+				AC000000000000000000020A /* SelfUpdate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
