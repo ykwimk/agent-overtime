@@ -29,9 +29,11 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            versionLine
+            updateRow
+            Divider().padding(.vertical, 4)
             sessions.padding(.vertical, 6)
             Divider().padding(.vertical, 4)
-            updateRow
             MenuRow(title: "Open Office", shortcut: "⌘O") { show("office") }
             MenuRow(title: "Start Work", shortcut: "⇧⌘R") {
                 model.startWork()
@@ -43,6 +45,17 @@ struct MenuContent: View {
         }
         .padding(.vertical, 6)
         .frame(width: 300)
+    }
+
+    /// The checked number of this release, in the same words whatever the language.
+    @ViewBuilder private var versionLine: some View {
+        if let version = ReleaseVersion(tag: Release.tag) {
+            Text(verbatim: "Agent Overtime \(version.number)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 15)
+                .padding(.vertical, 3)
+        }
     }
 
     @ViewBuilder private var updateRow: some View {

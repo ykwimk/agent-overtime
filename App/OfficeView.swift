@@ -496,7 +496,7 @@ struct OfficeBar: View {
                     }
                     .lineLimit(1)
                 } else if let version = model.updates.newVersion {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 12) {
                         Text("New version available").foregroundStyle(.secondary)
                         if model.canUpdateHere {
                             Button("Update") { model.startUpdate(version) }.buttonStyle(.link).help(updateHelp)

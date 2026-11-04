@@ -23,7 +23,7 @@ Works with Claude Code. Not affiliated with Anthropic.
 - Zoom the office like a map: pinch or ⌘-scroll over it, and it settles on the nearest sharp size (50 to 150 %) when you let go; ⌘+, ⌘− and ⌘0 (View menu), or − and + beside Start Work, step through those sizes. The islands stay where they are; zoomed in, the room scrolls both ways. When islands are out of sight, a line in the corner says how many ("1 more team below ↓"); click it to scroll there.
 - Subagents walk in and sit at their session's island. The caller walks over to hand out the work, and a subagent that finishes walks over to report before it leaves. When a session hands work to two or more subagents and waits, they meet in the glass meeting room; a subagent whose caller keeps working puts on headphones and skips meetings.
 - Click a character or its name tag for a side panel: the state on a badge and for how long, what it is doing now, and with Show Details on (the default) the file it works on, its task list or subagents done, the lines it changed, its latest steps and the model; then the subagents. The pencil button next to the name gives a nickname, kept on this Mac.
-- The menu bar icon turns into `! 2` while sessions wait for you. Session data stays on this Mac; the only thing the app asks the internet is whether a new version exists, and you can turn that off.
+- The menu bar icon turns into `! 2` while sessions wait for you, and its window shows the app's version. Session data stays on this Mac; the only thing the app asks the internet is whether a new version exists, and you can turn that off.
 
 ## Start here
 

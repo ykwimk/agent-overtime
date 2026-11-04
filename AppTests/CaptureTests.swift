@@ -1479,6 +1479,12 @@ final class CaptureTests: XCTestCase {
             "update-terminal", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(running))
         try capture(
             "update-terminal-min", size: OfficeView.minSize, OfficeView(fixedNow: now).environmentObject(running))
+        try capture(
+            "update-terminal-1176", size: CGSize(width: 1176, height: 760),
+            OfficeView(fixedNow: now).environmentObject(running))
+        try capture(
+            "update-terminal-panel", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(running, slot: 0, index: 0)).environmentObject(running))
         try capture("update-terminal-menu", MenuContent(fixedNow: now).environmentObject(running))
         try capture("settings-update-terminal", SettingsView().environmentObject(running))
     }
