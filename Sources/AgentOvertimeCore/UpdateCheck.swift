@@ -129,6 +129,8 @@ public struct UpdateState: Equatable {
     }
 
     static let interval: TimeInterval = 24 * 60 * 60
+    /// How long Update stays in the Terminal state with nothing new on disk: it failed, or Terminal was closed.
+    static let terminalWait: TimeInterval = 5 * 60
 
     public private(set) var isOn: Bool
     /// This run's last answer: nil until there is one.
@@ -137,6 +139,8 @@ public struct UpdateState: Equatable {
     public private(set) var lastChecked: Date?
     private var lastTry: Date?
     private var isAsking = false
+    private var terminalSince: Date?
+    private var newerOnDisk = false
 
     public init(isOn: Bool, lastChecked: Date?, now: Date = Date()) {
         self.isOn = isOn
@@ -152,10 +156,42 @@ public struct UpdateState: Equatable {
     /// Off also drops a try still on its way, so turning back on asks again.
     public mutating func turn(on: Bool) {
         isOn = on
-        if !on, isAsking {
+        guard !on else { return }
+        endTerminal()
+        if isAsking {
             isAsking = false
             lastTry = nil
         }
+    }
+
+    public var isInTerminal: Bool { terminalSince != nil }
+
+    /// A press of Update. False for a second press while one is running.
+    public mutating func beginTerminal(at now: Date) -> Bool {
+        guard newVersion != nil, terminalSince == nil else { return false }
+        terminalSince = now
+        newerOnDisk = false
+        return true
+    }
+
+    public mutating func endTerminal() {
+        terminalSince = nil
+        newerOnDisk = false
+    }
+
+    /// On the tick while Terminal runs. True when the app should reopen: a newer app on disk on two ticks in a row,
+    /// so brew has finished putting it there.
+    public mutating func follow(installed: ReleaseVersion?, current: ReleaseVersion, at now: Date) -> Bool {
+        guard let since = terminalSince else { return false }
+        if let installed, installed > current {
+            let settled = newerOnDisk
+            newerOnDisk = true
+            return settled
+        }
+        newerOnDisk = false
+        let gone = now.timeIntervalSince(since)
+        if gone >= Self.terminalWait || gone < 0 { terminalSince = nil }
+        return false
     }
 
     /// True when a request should go out now, which counts as the try. Time that ran backwards counts as due.

@@ -123,6 +123,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var updates: UpdateState
     private let askLatest: @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome
     private var updateTask: Task<Void, Never>?
+    private let homebrew: HomebrewRoute?
+    var updatesWithHomebrew: Bool { homebrew != nil }
 
     var checksForUpdates: Bool {
         get { updates.isOn }
@@ -154,11 +156,13 @@ final class AppModel: ObservableObject {
         supportFolder: String, socketPath: String, defaults: UserDefaults, bundlePath: String = Bundle.main.bundlePath,
         askLatest: @escaping @Sendable (ReleaseVersion) async -> UpdateCheck.Outcome = {
             await UpdateCheck.ask(current: $0)
-        }
+        },
+        homebrew: HomebrewRoute? = nil
     ) {
         self.socketPath = socketPath
         self.defaults = defaults
         self.askLatest = askLatest
+        self.homebrew = homebrew
         configURL = URL(fileURLWithPath: supportFolder).appendingPathComponent("config.json")
         location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
         everConnected = defaults.bool(forKey: Keys.everConnected)
@@ -191,7 +195,13 @@ final class AppModel: ObservableObject {
                 supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults,
                 askLatest: { _ in .failed })
         } else {
-            model = AppModel(supportFolder: Paths.supportFolder(), socketPath: Paths.socket(), defaults: .standard)
+            let bundlePath = Bundle.main.bundlePath
+            let support = Paths.supportFolder()
+            let location = AppLocation.check(bundlePath: bundlePath, home: Paths.home)
+            model = AppModel(
+                supportFolder: support, socketPath: Paths.socket(), defaults: .standard,
+                homebrew: HomebrewUpdate.manages(location: location)
+                    ? .live(bundlePath: bundlePath, scriptFolder: URL(fileURLWithPath: support)) : nil)
         }
         model.listen()
         live = model
@@ -241,9 +251,49 @@ final class AppModel: ObservableObject {
         defaults.set(updates.lastChecked, forKey: Keys.lastUpdateCheck)
     }
 
-    /// Update and What's New: the release's page in the browser.
+    /// What's New, and Update when Homebrew isn't the way: the release's page in the browser.
     func openRelease(_ version: ReleaseVersion) {
         NSWorkspace.shared.open(UpdateCheck.releaseURL(version))
+    }
+
+    /// The Update button. Only a person's press starts this, and only once at a time.
+    func startUpdate(_ version: ReleaseVersion) {
+        guard let homebrew, let current = ReleaseVersion(tag: Release.tag) else {
+            openRelease(version)
+            return
+        }
+        guard !updates.isInTerminal else { return }
+        // Already on disk: brew finished after the wait for it ended.
+        if let installed = homebrew.installedVersion(), installed > current {
+            reopen(homebrew)
+            return
+        }
+        guard updates.beginTerminal(at: Date()) else { return }
+        Self.announce(String(localized: "Updating in Terminal…"))
+        homebrew.openTerminal { [weak self] error in
+            if error != nil { self?.updates.endTerminal() }
+        }
+    }
+
+    /// On the 5 s tick while Terminal runs: brew leaves this process running with the new app on disk.
+    func followUpdate(at now: Date = Date()) {
+        guard updates.isInTerminal, let homebrew, let current = ReleaseVersion(tag: Release.tag) else { return }
+        var followed = updates
+        let isReady = followed.follow(installed: homebrew.installedVersion(), current: current, at: now)
+        if followed != updates { updates = followed }
+        if isReady { reopen(homebrew) }
+    }
+
+    /// The socket goes first: stopping unlinks the path, which after the new app opened would be the new app's. The
+    /// new app may be blocked by macOS; this one quits anyway (the Terminal window says what to do), because with it
+    /// running at that path, allowing the new app could only bring this one forward.
+    private func reopen(_ homebrew: HomebrewRoute) {
+        save()
+        server?.stop()
+        if !homebrew.reopen() {
+            try? server?.start()
+            updates.endTerminal()
+        }
     }
 
     var shouldShowWelcome: Bool { !everConnected && !welcomeDismissed }
@@ -289,6 +339,7 @@ final class AppModel: ObservableObject {
         }
         lookForSessions()
         askForUpdate()
+        followUpdate()
         if case .starting(let since) = startPhase, Date().timeIntervalSince(since) > 30 {
             startPhase = .nobodyCame
         }

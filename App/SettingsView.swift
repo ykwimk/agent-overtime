@@ -225,9 +225,17 @@ struct SettingsView: View {
             }
         case .available(let version):
             Text("\(version.number) is available")
-            HStack {
-                Button("Update") { model.openRelease(version) }
-                Button("What's New") { model.openRelease(version) }
+            if model.updates.isInTerminal {
+                Text("Updating in Terminal…").foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    Button("Update") { model.startUpdate(version) }
+                    Button("What's New") { model.openRelease(version) }
+                }
+                if model.updatesWithHomebrew {
+                    Text("After updating, allow the new version in System Settings, as on first install.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
             }
         }
     }

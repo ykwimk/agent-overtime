@@ -1456,6 +1456,28 @@ final class CaptureTests: XCTestCase {
         }
     }
 
+    /// Update with Homebrew: the note in Settings before it starts, then Terminal running, everywhere it shows.
+    func testCaptureUpdateInTerminal() throws {
+        let now = today(14)
+        let version = try XCTUnwrap(ReleaseVersion(tag: "v0.5.1"))
+        let route = HomebrewRoute(openTerminal: { _ in }, installedVersion: { nil }, reopen: { false })
+        let ready = makeModel(connected: true, homebrew: route)
+        ready.receive(update: .newer(version))
+        try capture("settings-update-homebrew", SettingsView().environmentObject(ready))
+
+        let running = makeModel(connected: true, homebrew: route)
+        for event in FakeScenario.events { running.receive(event, at: now - 200) }
+        running.receive(update: .newer(version))
+        running.startUpdate(version)
+        XCTAssertTrue(running.updates.isInTerminal)
+        try capture(
+            "update-terminal", size: OfficeView.defaultSize, OfficeView(fixedNow: now).environmentObject(running))
+        try capture(
+            "update-terminal-min", size: OfficeView.minSize, OfficeView(fixedNow: now).environmentObject(running))
+        try capture("update-terminal-menu", MenuContent(fixedNow: now).environmentObject(running))
+        try capture("settings-update-terminal", SettingsView().environmentObject(running))
+    }
+
     /// Start Work feedback, the inline "one more?" question, and the not-connected / idle variants.
     func testCaptureStatesAndErrors() throws {
         let later = Date() + 200
@@ -1537,7 +1559,9 @@ final class CaptureTests: XCTestCase {
 
     // MARK: helpers
 
-    private func makeModel(connected: Bool, start: StartCommand? = nil) -> AppModel {
+    private func makeModel(
+        connected: Bool, start: StartCommand? = nil, homebrew: HomebrewRoute? = nil
+    ) -> AppModel {
         let folder = (Paths.userTempFolder as NSString).appendingPathComponent("ao-cap-\(UUID().uuidString.prefix(8))")
         try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
         if let start {
@@ -1546,7 +1570,8 @@ final class CaptureTests: XCTestCase {
         }
         let defaults = UserDefaults(suiteName: "ao-cap-\(UUID().uuidString)")!
         defaults.set(connected, forKey: "everConnected")
-        return AppModel(supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults)
+        return AppModel(
+            supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults, homebrew: homebrew)
     }
 
     /// Light and dark, English and Korean.

@@ -94,3 +94,124 @@ final class UpdateTests: XCTestCase {
         XCTAssertEqual(count, 1, "answered a moment ago: no second question")
     }
 }
+
+/// Update through Homebrew with Terminal, the app on disk and quitting all replaced.
+@MainActor
+final class HomebrewUpdateModelTests: XCTestCase {
+    private final class Fake {
+        var terminals = 0
+        var terminalError: Error?
+        var installed: ReleaseVersion?
+        var reopens = 0
+        var reopenWorks = true
+        var socketThereAtReopen: Bool?
+    }
+
+    private let version = ReleaseVersion(tag: "v99.0.0")!
+    private let start = Date()
+
+    private func model(_ fake: Fake) -> AppModel {
+        let folder = (Paths.userTempFolder as NSString).appendingPathComponent("ao-hb-\(UUID().uuidString.prefix(8))")
+        let socket = folder + "/events.sock"
+        let defaults = UserDefaults(suiteName: "ao-hb-\(UUID().uuidString)")!
+        defaults.set(false, forKey: "findsSessions")
+        defaults.set(false, forKey: "checksForUpdates")
+        let route = HomebrewRoute(
+            openTerminal: { completion in
+                fake.terminals += 1
+                let error = fake.terminalError
+                Task { @MainActor in completion(error) }
+            },
+            installedVersion: { fake.installed },
+            reopen: {
+                fake.reopens += 1
+                fake.socketThereAtReopen = FileManager.default.fileExists(atPath: socket)
+                return fake.reopenWorks
+            })
+        let model = AppModel(supportFolder: folder, socketPath: socket, defaults: defaults, homebrew: route)
+        model.checksForUpdates = true
+        model.receive(update: .newer(version))
+        return model
+    }
+
+    private func settle() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
+    func testPressOpensTerminalOnceAndASecondPressDoesNothing() {
+        let fake = Fake()
+        let model = model(fake)
+        model.startUpdate(version)
+        model.startUpdate(version)
+        XCTAssertEqual(fake.terminals, 1)
+        XCTAssertTrue(model.updates.isInTerminal)
+    }
+
+    func testTerminalThatWontOpenGoesBackToNewVersion() async {
+        let fake = Fake()
+        fake.terminalError = CocoaError(.fileNoSuchFile)
+        let model = model(fake)
+        model.startUpdate(version)
+        await settle()
+        XCTAssertFalse(model.updates.isInTerminal)
+        XCTAssertEqual(model.updates.newVersion, version)
+    }
+
+    func testNoChangeOnDiskGoesBackAfterFiveMinutes() {
+        let fake = Fake()
+        let model = model(fake)
+        let pressed = Date()
+        model.startUpdate(version)
+        model.followUpdate(at: pressed + 60)
+        XCTAssertTrue(model.updates.isInTerminal)
+        model.followUpdate(at: pressed + 400)
+        XCTAssertFalse(model.updates.isInTerminal)
+        XCTAssertEqual(fake.reopens, 0)
+    }
+
+    func testReopensWhenTheNewAppHasSettledAndLetsGoOfTheSocketFirst() {
+        let fake = Fake()
+        let model = model(fake)
+        model.listen()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: model.socketPath))
+        model.startUpdate(version)
+        fake.installed = version
+        model.followUpdate(at: start + 5)
+        XCTAssertEqual(fake.reopens, 0, "brew may still be at it")
+        model.followUpdate(at: start + 10)
+        XCTAssertEqual(fake.reopens, 1)
+        XCTAssertEqual(fake.socketThereAtReopen, false, "gone before the new app opens")
+    }
+
+    func testIfReopeningFailsTheAppKeepsListening() {
+        let fake = Fake()
+        fake.reopenWorks = false
+        let model = model(fake)
+        model.listen()
+        model.startUpdate(version)
+        fake.installed = version
+        model.followUpdate(at: start + 5)
+        model.followUpdate(at: start + 10)
+        XCTAssertEqual(fake.reopens, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: model.socketPath))
+        XCTAssertFalse(model.updates.isInTerminal)
+    }
+
+    func testPressWithTheNewAppAlreadyOnDiskJustReopens() {
+        let fake = Fake()
+        fake.installed = version
+        let model = model(fake)
+        model.startUpdate(version)
+        XCTAssertEqual(fake.reopens, 1)
+        XCTAssertEqual(fake.terminals, 0)
+    }
+
+    func testNewNumberOnDiskWithoutAPressNeverReopens() {
+        let fake = Fake()
+        fake.installed = version
+        let model = model(fake)
+        model.followUpdate(at: start + 5)
+        model.followUpdate(at: start + 10)
+        XCTAssertEqual(fake.reopens, 0)
+    }
+}

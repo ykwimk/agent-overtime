@@ -460,10 +460,21 @@ struct OfficeBar: View {
                 }
             case .idle, .starting:
                 // One line, so the bar keeps its height and the room doesn't scroll for it.
-                if let version = model.updates.newVersion {
+                if model.updates.isInTerminal {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.mini)
+                        Text("Updating in Terminal…").foregroundStyle(.secondary)
+                    }
+                    .lineLimit(1)
+                } else if let version = model.updates.newVersion {
                     HStack(spacing: 8) {
                         Text("New version available").foregroundStyle(.secondary)
-                        Button("Update") { model.openRelease(version) }.buttonStyle(.link)
+                        Button("Update") { model.startUpdate(version) }.buttonStyle(.link)
+                            .help(
+                                model.updatesWithHomebrew
+                                    ? Text(
+                                        "Only the app reopens; running sessions keep going. Allow the new version in System Settings afterward, as on first install."
+                                    ) : Text(verbatim: ""))
                         Button("What's New") { model.openRelease(version) }.buttonStyle(.link)
                     }
                     .lineLimit(1)
