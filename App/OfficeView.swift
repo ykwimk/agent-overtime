@@ -403,6 +403,7 @@ struct ZoomButtons: View {
 struct OfficeBar: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.openWindow) private var openWindow
+    @State private var explainsConnectUpdate = false
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
@@ -477,6 +478,14 @@ struct OfficeBar: View {
                 } else if let updated = model.justUpdated {
                     HStack(spacing: 8) {
                         Text("Updated to \(updated.number)").foregroundStyle(.secondary)
+                        Button("Update Connection Too") {
+                            ConnectUpdateNote.copy(Release.connectUpdateCommands)
+                            explainsConnectUpdate = true
+                        }
+                        .buttonStyle(.link)
+                        .popover(isPresented: $explainsConnectUpdate) {
+                            ConnectUpdateNote().padding(14).frame(width: 340)
+                        }
                         Button {
                             model.justUpdated = nil
                         } label: {

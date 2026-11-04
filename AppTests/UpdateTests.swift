@@ -433,4 +433,20 @@ final class SelfUpdateModelTests: XCTestCase {
     func testAFirstRunShowsNoUpdatedLine() {
         XCTAssertNil(model(Fake()).justUpdated)
     }
+
+    func testNoLastRunButConnectedBeforeWasAnUpdateByHand() {
+        let defaults = UserDefaults(suiteName: "ao-su-\(UUID().uuidString)")!
+        defaults.set(true, forKey: "everConnected")
+        XCTAssertEqual(model(Fake(), defaults: defaults).justUpdated?.tag, Release.tag)
+        XCTAssertNil(model(Fake(), defaults: defaults).justUpdated, "once")
+    }
+
+    func testTheCommandsComeFromThisReleaseAlone() {
+        let lines = Release.connectUpdateCommands.components(separatedBy: "\n")
+        XCTAssertEqual(lines.count, 3)
+        XCTAssertEqual(lines[0], "/plugin marketplace remove agent-overtime")
+        XCTAssertEqual(lines[1], "/plugin marketplace add \(Release.repository)#\(Release.tag)")
+        XCTAssertEqual(lines[2], "/plugin install agent-overtime@agent-overtime")
+        XCTAssertEqual(lines[1...].joined(separator: "\n"), Release.connectCommands)
+    }
 }

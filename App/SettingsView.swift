@@ -1,9 +1,35 @@
 import SwiftUI
 
+/// What to do with the three lines just copied, and the two that bring the plugin back if they stop partway.
+struct ConnectUpdateNote: View {
+    static func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Copied. Paste into Claude Code, then restart the sessions you have open.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text("If it stops partway, the plugin is gone until these two lines run:")
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(.secondary)
+            Text(verbatim: Release.connectCommands)
+                .font(.system(.callout, design: .monospaced))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            Button("Copy These Two Lines") { Self.copy(Release.connectCommands) }
+        }
+        .font(.callout)
+        .lineLimit(nil)
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var editing = false
     @State private var copied = false
+    @State private var copiedUpdate = false
     @State private var confirmRemove = false
 
     private var version: String {
@@ -44,6 +70,11 @@ struct SettingsView: View {
                     Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(
                         .secondary)
                 }
+                Button("Copy Connection Update Commands") {
+                    ConnectUpdateNote.copy(Release.connectUpdateCommands)
+                    copiedUpdate = true
+                }
+                if copiedUpdate { ConnectUpdateNote() }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
                 Toggle("Find Sessions Without the Plugin", isOn: $model.findsSessions)

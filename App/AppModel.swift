@@ -192,7 +192,10 @@ final class AppModel: ObservableObject {
 
         if let running = ReleaseVersion(tag: Release.tag) {
             let last = defaults.string(forKey: Keys.lastRunVersion).flatMap { ReleaseVersion(tag: $0) }
+            // No number yet but connected before: updated by hand from a version that didn't keep one.
+            let connectedBefore = defaults.bool(forKey: Keys.everConnected)
             if let last, last < running { justUpdated = running }
+            if last == nil, connectedBefore { justUpdated = running }
             defaults.set(running.tag, forKey: Keys.lastRunVersion)
         }
 

@@ -1543,6 +1543,7 @@ final class CaptureTests: XCTestCase {
             try capture("update-\(name)-menu", MenuContent(fixedNow: now).environmentObject(model))
             try capture("settings-update-\(name)", SettingsView().environmentObject(model))
         }
+        try capture("update-connect-note", ConnectUpdateNote().padding(14).frame(width: 340))
     }
 
     /// Start Work feedback, the inline "one more?" question, and the not-connected / idle variants.
@@ -1638,6 +1639,7 @@ final class CaptureTests: XCTestCase {
         }
         let defaults = UserDefaults(suiteName: "ao-cap-\(UUID().uuidString)")!
         defaults.set(connected, forKey: "everConnected")
+        defaults.set(Release.tag, forKey: "lastRunVersion")
         return AppModel(
             supportFolder: folder, socketPath: folder + "/events.sock", defaults: defaults, askLatest: askLatest,
             route: route)

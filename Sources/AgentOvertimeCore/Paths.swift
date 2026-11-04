@@ -77,4 +77,10 @@ public enum Release {
     public static var connectCommands: String {
         "/plugin marketplace add \(repository)#\(tag)\n/plugin install agent-overtime@agent-overtime"
     }
+
+    /// Moves the plugin to this release's tag. Stopped after the first line, the plugin is gone until
+    /// `connectCommands` run, so the app shows those beside it.
+    public static var connectUpdateCommands: String {
+        "/plugin marketplace remove agent-overtime\n" + connectCommands
+    }
 }
