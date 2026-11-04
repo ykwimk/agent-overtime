@@ -1425,6 +1425,37 @@ final class CaptureTests: XCTestCase {
                 .environmentObject(configured))
     }
 
+    /// A new version in the office bar and the menu, at every window size; then each state of Settings > Updates.
+    func testCaptureUpdates() throws {
+        let now = today(14)
+        let newer = UpdateCheck.Outcome.newer(try XCTUnwrap(ReleaseVersion(tag: "v0.5.1")))
+        let busy = team([3, 1], at: now)
+        busy.receive(update: newer)
+        let office = { OfficeView(fixedNow: now).environmentObject(busy) }
+        try capture("update-office", size: OfficeView.defaultSize, office())
+        try capture("update-office-1176", size: CGSize(width: 1176, height: OfficeView.defaultSize.height), office())
+        try capture("update-office-min", size: OfficeView.minSize, office())
+        try capture(
+            "update-office-panel", size: OfficeView.defaultSize,
+            OfficeView(fixedNow: now, panel: try panel(busy, slot: 0, index: 0)).environmentObject(busy))
+        try capture("update-menu", MenuContent(fixedNow: now).environmentObject(busy))
+
+        func settings(_ name: String, _ prepare: (AppModel) -> Void) throws {
+            let model = makeModel(connected: true)
+            prepare(model)
+            try capture("settings-update-\(name)", SettingsView().environmentObject(model))
+        }
+        try settings("checking") { _ in }
+        try settings("latest") { $0.receive(update: .upToDate) }
+        try settings("new") { $0.receive(update: newer) }
+        try settings("off") { $0.checksForUpdates = false }
+        try settings("never-answered") { $0.receive(update: .failed) }
+        try settings("offline") {
+            $0.receive(update: .upToDate, at: Date() - 3 * 24 * 60 * 60)
+            $0.receive(update: .failed)
+        }
+    }
+
     /// Start Work feedback, the inline "one more?" question, and the not-connected / idle variants.
     func testCaptureStatesAndErrors() throws {
         let later = Date() + 200

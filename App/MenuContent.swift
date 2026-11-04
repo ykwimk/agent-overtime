@@ -31,6 +31,9 @@ struct MenuContent: View {
         VStack(alignment: .leading, spacing: 0) {
             sessions.padding(.vertical, 6)
             Divider().padding(.vertical, 4)
+            if let version = model.updates.newVersion {
+                MenuRow(title: "New version available — Update") { model.openRelease(version) }
+            }
             MenuRow(title: "Open Office", shortcut: "⌘O") { show("office") }
             MenuRow(title: "Start Work", shortcut: "⇧⌘R") {
                 model.startWork()

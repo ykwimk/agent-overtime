@@ -460,7 +460,14 @@ struct OfficeBar: View {
                 }
             case .idle, .starting:
                 // One line, so the bar keeps its height and the room doesn't scroll for it.
-                if model.asksToConnect {
+                if let version = model.updates.newVersion {
+                    HStack(spacing: 8) {
+                        Text("New version available").foregroundStyle(.secondary)
+                        Button("Update") { model.openRelease(version) }.buttonStyle(.link)
+                        Button("What's New") { model.openRelease(version) }.buttonStyle(.link)
+                    }
+                    .lineLimit(1)
+                } else if model.asksToConnect {
                     HStack(spacing: 8) {
                         Text("Connect to see waits and teammates too").foregroundStyle(.secondary)
                         Button("Connect…") { openWindow(id: "welcome") }.buttonStyle(.link)

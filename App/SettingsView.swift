@@ -129,6 +129,18 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Check for Updates", isOn: $model.checksForUpdates)
+                Text(
+                    "Asks GitHub for the latest version number when the app opens and once a day. The app makes no other requests on its own. As with any web request, GitHub sees your IP address and this app's version."
+                )
+                .fixedSize(horizontal: false, vertical: true)
+                .font(.callout).foregroundStyle(.secondary)
+                if model.updates.isOn { updateStatus }
+            } header: {
+                Text("Updates")
+            }
+
+            Section {
                 LabeledContent {
                     Text(verbatim: version)
                 } label: {
@@ -196,6 +208,27 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("You can set it up again with Start Work at any time.")
+        }
+    }
+
+    @ViewBuilder private var updateStatus: some View {
+        switch model.updates.result {
+        case nil:
+            Text("Checking…").foregroundStyle(.secondary)
+        case .upToDate:
+            Text("You're up to date").foregroundStyle(.secondary)
+        case .failed:
+            if let date = model.updates.lastChecked {
+                Text("Last checked \(Text(date, format: .relative(presentation: .named)))").foregroundStyle(.secondary)
+            } else {
+                Text("Couldn't check yet").foregroundStyle(.secondary)
+            }
+        case .available(let version):
+            Text("\(version.number) is available")
+            HStack {
+                Button("Update") { model.openRelease(version) }
+                Button("What's New") { model.openRelease(version) }
+            }
         }
     }
 }
