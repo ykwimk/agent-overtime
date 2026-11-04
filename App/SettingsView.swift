@@ -11,7 +11,7 @@ struct ConnectUpdateNote: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Copied. Paste into Claude Code, then restart the sessions you have open.")
                 .fixedSize(horizontal: false, vertical: true)
-            Text("If it stops partway, the plugin is gone until these two lines run:")
+            Text("If it stops partway and the connection is lost, paste these two lines:")
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.secondary)
             Text(verbatim: Release.connectCommands)
@@ -66,6 +66,7 @@ struct SettingsView: View {
                     NSPasteboard.general.setString(Release.connectCommands, forType: .string)
                     copied = true
                 }
+                Text("For the first connection on this Mac.").font(.callout).foregroundStyle(.secondary)
                 if copied {
                     Text("Copied. Paste into Claude Code, then send it a message.").font(.callout).foregroundStyle(
                         .secondary)
@@ -74,6 +75,8 @@ struct SettingsView: View {
                     ConnectUpdateNote.copy(Release.connectUpdateCommands)
                     copiedUpdate = true
                 }
+                Text("After updating the app, moves the connection to this version.").font(.callout).foregroundStyle(
+                    .secondary)
                 if copiedUpdate { ConnectUpdateNote() }
                 Text("To disconnect, turn off or remove agent-overtime with /plugin in Claude Code.")
                     .font(.callout).foregroundStyle(.secondary)
@@ -258,7 +261,7 @@ struct SettingsView: View {
         case .available(let version):
             Text("\(version.number) is available")
             if model.updates.isInTerminal {
-                Text("Updating in Terminal…").foregroundStyle(.secondary)
+                Text("Updating in Terminal. You may need to allow it after.").foregroundStyle(.secondary)
             } else if model.updates.isDownloading {
                 Text("Downloading the new version…").foregroundStyle(.secondary)
             } else if let failure = model.updates.shownFailure {
@@ -269,8 +272,10 @@ struct SettingsView: View {
                     Button("What's New") { model.openRelease(version) }
                 }
                 if model.updatesWithHomebrew {
-                    Text("After updating, allow the new version in System Settings, as on first install.")
-                        .font(.callout).foregroundStyle(.secondary)
+                    Text(
+                        "After updating, you may need to allow the new version in System Settings, as on first install."
+                    )
+                    .font(.callout).foregroundStyle(.secondary)
                 }
             } else {
                 Button("Open Download Page") { model.openRelease(version) }

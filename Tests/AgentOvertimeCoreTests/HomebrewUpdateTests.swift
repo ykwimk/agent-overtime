@@ -155,7 +155,7 @@ final class HomebrewUpdateTests: XCTestCase {
     func testSameNumberSaysHomebrewDoesNotHaveItYet() throws {
         let (output, _) = try run(korean: true, brew: "exit 0")
         XCTAssertTrue(output.contains("Homebrew 에 아직 안 올라왔어요"), output)
-        XCTAssertFalse(output.contains("새 판을 넣었어요"), output)
+        XCTAssertFalse(output.contains("새 버전을 설치했어요"), output)
         XCTAssertFalse(output.contains("그래도 열기"), output)
     }
 

@@ -52,9 +52,9 @@ public enum HomebrewUpdate {
         """
 
     private static let koreanWords = """
-        not_found="Homebrew 를 찾지 못했어요. Releases 페이지에서 새 판을 받아 주세요"
+        not_found="Homebrew 를 찾지 못했어요. Releases 페이지에서 새 버전을 받아 주세요"
         not_yet="Homebrew 에 아직 안 올라왔어요. 조금 뒤 다시 해 주세요"
-        updated="새 판을 넣었어요. 앱이 몇 초 뒤 다시 켜져요. 켜지지 않으면 응용 프로그램 폴더에서 열어 주세요"
+        updated="새 버전을 설치했어요. 앱이 몇 초 뒤 다시 켜져요. 켜지지 않으면 응용 프로그램 폴더에서 열어 주세요"
         blocked="macOS 가 막으면: 시스템 설정 > 개인정보 보호 및 보안 > 그래도 열기"
         no_sessions="허용하기 전에는 세션이 사무실에 안 보여요"
         failed="올리지 못했어요. 지금 앱은 그대로예요. 위 내용을 확인해 주세요"

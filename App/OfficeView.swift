@@ -464,7 +464,7 @@ struct OfficeBar: View {
                 if model.updates.isInTerminal {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.mini)
-                        Text("Updating in Terminal…").foregroundStyle(.secondary)
+                        Text("Updating in Terminal. You may need to allow it after.").foregroundStyle(.secondary)
                     }
                     .lineLimit(1)
                 } else if model.updates.isDownloading {
@@ -524,7 +524,7 @@ struct OfficeBar: View {
     private var updateHelp: Text {
         model.updatesWithHomebrew
             ? Text(
-                "Only the app reopens; running sessions keep going. Allow the new version in System Settings afterward, as on first install."
+                "Only the app reopens; running sessions keep going. You may need to allow the new version in System Settings afterward, as on first install."
             ) : Text("Only the app reopens; running sessions keep going.")
     }
 
@@ -547,7 +547,7 @@ struct UpdateFailureLine: View {
             words.foregroundStyle(Style.waiting).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 12) {
                 if failure == .unverified {
-                    Button("Open Repository") { model.openRepository() }
+                    Button("See News in the Repository") { model.openRepository() }
                 } else if let version = model.updates.newVersion {
                     Button("Try Again") { model.startUpdate(version) }
                     Button("Open Download Page") { model.openRelease(version) }
@@ -560,9 +560,9 @@ struct UpdateFailureLine: View {
     private var words: Text {
         switch failure {
         case .network: return Text("Couldn't update. This app is unchanged. Please check your internet connection.")
-        case .install: return Text("Couldn't update. This app is unchanged. The new version couldn't be put in place.")
+        case .install: return Text("Couldn't update. This app is unchanged. The new version couldn't be installed.")
         case .unverified:
-            return Text("This version couldn't be verified, so it wasn't installed. Check the repository for news.")
+            return Text("This version couldn't be verified, so it wasn't installed. This app is unchanged.")
         }
     }
 }

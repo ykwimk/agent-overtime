@@ -372,7 +372,7 @@ final class AppModel: ObservableObject {
             return
         }
         guard updates.beginTerminal(at: Date()) else { return }
-        Self.announce(String(localized: "Updating in Terminal…"))
+        Self.announce(String(localized: "Updating in Terminal. You may need to allow it after."))
         homebrew.openTerminal { [weak self] error in
             if error != nil { self?.updates.endTerminal() }
         }
@@ -586,10 +586,10 @@ extension UpdateFailure {
             return String(localized: "Couldn't update. This app is unchanged. Please check your internet connection.")
         case .install:
             return String(
-                localized: "Couldn't update. This app is unchanged. The new version couldn't be put in place.")
+                localized: "Couldn't update. This app is unchanged. The new version couldn't be installed.")
         case .unverified:
             return String(
-                localized: "This version couldn't be verified, so it wasn't installed. Check the repository for news.")
+                localized: "This version couldn't be verified, so it wasn't installed. This app is unchanged.")
         }
     }
 }

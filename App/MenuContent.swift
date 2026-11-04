@@ -48,12 +48,14 @@ struct MenuContent: View {
     @ViewBuilder private var updateRow: some View {
         let updates = model.updates
         if updates.isInTerminal {
-            Text("Updating in Terminal…").foregroundStyle(.secondary).padding(.horizontal, 15).padding(.vertical, 3)
+            Text("Updating in Terminal. You may need to allow it after.").foregroundStyle(.secondary).padding(
+                .horizontal, 15
+            ).padding(.vertical, 3)
         } else if updates.isDownloading {
             Text("Downloading the new version…").foregroundStyle(.secondary).padding(.horizontal, 15).padding(
                 .vertical, 3)
         } else if updates.shownFailure == .unverified {
-            MenuRow(title: "This version wasn't verified — Open Repository") { model.openRepository() }
+            MenuRow(title: "This version wasn't verified — See Repository News") { model.openRepository() }
         } else if let version = updates.newVersion {
             if updates.shownFailure != nil || !model.canUpdateHere {
                 MenuRow(title: "New version available — Open Download Page") { model.openRelease(version) }
